@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS shop_delivery_settings CASCADE;
+DROP TABLE IF EXISTS shops CASCADE;

@@ -1,0 +1,27 @@
+services:
+  postgres:
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - upload_data:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes: []
+    ports:
+      - "80:80"
+
+  adminer:
+    profiles:
+      - debug
+
+volumes:
+  upload_data:

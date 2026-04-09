@@ -1,0 +1,20 @@
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backend
+backend/tmp/
+backend/uploads/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
