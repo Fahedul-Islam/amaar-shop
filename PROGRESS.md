@@ -5,7 +5,7 @@
 - [x] **1. Project Skeleton & Docker Infrastructure**
 - [x] **2. Database Design & Migrations**
 - [x] **3. API Contract**
-- [ ] **4. Auth Foundation**
+- [x] **4. Auth Foundation**
 - [ ] **5. Shop Creation, Settings & Delivery Configuration**
 - [ ] **6. Product Management**
 - [ ] **7. Public Storefront**

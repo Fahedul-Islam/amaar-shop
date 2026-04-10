@@ -11,8 +11,12 @@ import (
 	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
+	handler "github.com/fhedul/amaarshop/backend/internal/handler/http"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/platform/logger"
+	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
+	"github.com/fhedul/amaarshop/backend/internal/service"
 )
 
 func main() {
@@ -38,16 +42,56 @@ func main() {
 	}
 	log.Info("migrations applied")
 
+	// Repositories
+	userRepo := postgres.NewUserRepo(db)
+
+	// Services
+	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+
+	// Seed admin user if configured
+	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
+		if err := authSvc.SeedAdmin(context.Background(), cfg.AdminEmail, cfg.AdminPass); err != nil {
+			log.Error("failed to seed admin user", "error", err)
+		} else {
+			log.Info("admin user seeded", "email", cfg.AdminEmail)
+		}
+	}
+
+	// Middleware
+	mw := middleware.NewManager()
+	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5 for auth endpoints
+
+	// Handlers
+	authHandler := handler.NewAuthHandler(authSvc, cfg.JWTSecret)
+
 	mux := http.NewServeMux()
 
+	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
+	// Ready check (verifies database connectivity)
+	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"status": "not_ready", "reason": "database unreachable"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	})
+
+	// Auth routes
+	authHandler.RegisterRoutes(mux, mw, rl)
+
+	// Wrap mux with global middleware
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      mux,
+		Handler:      mw.Handler(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

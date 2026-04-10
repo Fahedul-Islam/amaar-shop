@@ -1,0 +1,80 @@
+// Package httputil provides shared HTTP response helpers used by handlers and middleware.
+package httputil
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"github.com/fhedul/amaarshop/backend/internal/domain"
+)
+
+// errorResponse is the standard JSON error envelope.
+type errorResponse struct {
+	Error errorBody `json:"error"`
+}
+
+type errorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// domainErrorMap maps domain sentinel errors to HTTP status codes and error codes.
+var domainErrorMap = []struct {
+	err    error
+	status int
+	code   string
+}{
+	{domain.ErrUserNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrEmailAlreadyExists, http.StatusConflict, "email_already_exists"},
+	{domain.ErrInvalidCredentials, http.StatusUnauthorized, "unauthorized"},
+}
+
+// WriteError maps a domain error to the appropriate HTTP error response.
+// If the error is not a known domain error, it returns 500 Internal Server Error.
+func WriteError(w http.ResponseWriter, err error) {
+	for _, mapping := range domainErrorMap {
+		if errors.Is(err, mapping.err) {
+			writeJSON(w, mapping.status, errorResponse{
+				Error: errorBody{Code: mapping.code, Message: mapping.err.Error()},
+			})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusInternalServerError, errorResponse{
+		Error: errorBody{Code: "internal_error", Message: "an unexpected error occurred"},
+	})
+}
+
+// WriteValidationError writes a 400 validation error response with a custom message.
+func WriteValidationError(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusBadRequest, errorResponse{
+		Error: errorBody{Code: "validation_error", Message: message},
+	})
+}
+
+// WriteForbidden writes a 403 forbidden error response.
+func WriteForbidden(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusForbidden, errorResponse{
+		Error: errorBody{Code: "forbidden", Message: message},
+	})
+}
+
+// WriteUnauthorized writes a 401 unauthorized error response.
+func WriteUnauthorized(w http.ResponseWriter) {
+	writeJSON(w, http.StatusUnauthorized, errorResponse{
+		Error: errorBody{Code: "unauthorized", Message: "missing or invalid access token"},
+	})
+}
+
+// WriteJSON writes a JSON success response wrapping data in {"data": ...}.
+func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
+	writeJSON(w, status, map[string]interface{}{"data": data})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}

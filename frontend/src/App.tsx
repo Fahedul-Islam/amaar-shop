@@ -1,8 +1,20 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import LanguageToggle from './components/LanguageToggle';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import LanguageToggle from '@/components/LanguageToggle';
+import Login from '@/pages/Login';
+import Signup from '@/pages/Signup';
+import Dashboard from '@/pages/Dashboard';
 
-export default function App() {
+function Landing() {
   const { t } = useTranslation();
+  const { user, loading } = useAuth();
+
+  // If already logged in, redirect to dashboard
+  if (!loading && user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
@@ -24,5 +36,25 @@ export default function App() {
         </a>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/dashboard/*"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }

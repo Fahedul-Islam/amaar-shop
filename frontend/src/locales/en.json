@@ -6,5 +6,24 @@
   "bengali": "বাংলা",
   "get_started": "Get Started",
   "login": "Login",
-  "signup": "Sign Up"
+  "signup": "Sign Up",
+  "logout": "Logout",
+  "email": "Email",
+  "password": "Password",
+  "confirm_password": "Confirm Password",
+  "logging_in": "Logging in...",
+  "signing_up": "Signing up...",
+  "no_account": "Don't have an account?",
+  "have_account": "Already have an account?",
+  "dashboard": "Dashboard",
+  "dashboard_placeholder": "Welcome to your dashboard. Set up your shop to get started.",
+  "errors": {
+    "unauthorized": "Invalid email or password",
+    "email_already_exists": "This email is already registered",
+    "validation_error": "Please check your input",
+    "rate_limited": "Too many attempts. Please try again later.",
+    "password_too_short": "Password must be at least 8 characters",
+    "password_mismatch": "Passwords do not match",
+    "unknown": "Something went wrong. Please try again."
+  }
 }
