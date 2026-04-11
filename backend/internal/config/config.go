@@ -8,11 +8,18 @@ import (
 
 type Config struct {
 	Port        int
+	Env         string
 	DatabaseURL string
 	JWTSecret   string
 	UploadDir   string
 	AdminEmail  string
 	AdminPass   string
+}
+
+// IsProduction reports whether the app is running in a production environment.
+// Used to gate Secure cookies, which browsers reject over plain HTTP in dev.
+func (c *Config) IsProduction() bool {
+	return c.Env == "production"
 }
 
 func Load() (*Config, error) {
@@ -40,8 +47,14 @@ func Load() (*Config, error) {
 		uploadDir = "./uploads"
 	}
 
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+
 	return &Config{
 		Port:        port,
+		Env:         env,
 		DatabaseURL: dbURL,
 		JWTSecret:   jwtSecret,
 		UploadDir:   uploadDir,

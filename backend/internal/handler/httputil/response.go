@@ -25,9 +25,19 @@ var domainErrorMap = []struct {
 	status int
 	code   string
 }{
+	// Auth
 	{domain.ErrUserNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrEmailAlreadyExists, http.StatusConflict, "email_already_exists"},
 	{domain.ErrInvalidCredentials, http.StatusUnauthorized, "unauthorized"},
+	// Shops
+	{domain.ErrShopNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrSlugTaken, http.StatusConflict, "slug_taken"},
+	{domain.ErrShopAlreadyExists, http.StatusConflict, "shop_already_exists"},
+	{domain.ErrNotShopOwner, http.StatusForbidden, "forbidden"},
+	// Delivery settings
+	{domain.ErrInvalidDeliveryCharge, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidThreshold, http.StatusBadRequest, "validation_error"},
+	{domain.ErrDeliveryAreasRequired, http.StatusBadRequest, "validation_error"},
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.

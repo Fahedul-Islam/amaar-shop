@@ -15,6 +15,12 @@ type User struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// TokenPair holds the access and refresh tokens returned after authentication.
+type TokenPair struct {
+	AccessToken  string
+	RefreshToken string
+}
+
 var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrEmailAlreadyExists = errors.New("email already exists")

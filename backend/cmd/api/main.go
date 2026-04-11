@@ -1,8 +1,10 @@
+// Command api is the Amaar Shop backend server.
+// main only handles process bootstrap and graceful shutdown — all
+// dependency wiring lives in the internal/app package.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,115 +12,68 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fhedul/amaarshop/backend/internal/app"
 	"github.com/fhedul/amaarshop/backend/internal/config"
-	handler "github.com/fhedul/amaarshop/backend/internal/handler/http"
-	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
-	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/platform/logger"
-	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
-	"github.com/fhedul/amaarshop/backend/internal/service"
 )
 
+const shutdownTimeout = 30 * time.Second
+
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	log := logger.New()
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Error("failed to load config", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("load config: %w", err)
 	}
 
-	db, err := database.Connect(cfg.DatabaseURL)
+	application, err := app.New(context.Background(), cfg, log)
 	if err != nil {
-		log.Error("failed to connect to database", "error", err)
-		os.Exit(1)
+		return err
 	}
-	defer db.Close()
-	log.Info("database connected")
+	defer application.Close()
 
-	if err := database.Migrate(cfg.DatabaseURL); err != nil {
-		log.Error("migration failed", "error", err)
-		os.Exit(1)
-	}
-	log.Info("migrations applied")
-
-	// Repositories
-	userRepo := postgres.NewUserRepo(db)
-
-	// Services
-	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
-
-	// Seed admin user if configured
-	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
-		if err := authSvc.SeedAdmin(context.Background(), cfg.AdminEmail, cfg.AdminPass); err != nil {
-			log.Error("failed to seed admin user", "error", err)
-		} else {
-			log.Info("admin user seeded", "email", cfg.AdminEmail)
-		}
-	}
-
-	// Middleware
-	mw := middleware.NewManager()
-	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5 for auth endpoints
-
-	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, cfg.JWTSecret)
-
-	mux := http.NewServeMux()
-
-	// Health check
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-
-	// Ready check (verifies database connectivity)
-	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		if err := db.PingContext(ctx); err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"status": "not_ready", "reason": "database unreachable"})
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
-	})
-
-	// Auth routes
-	authHandler.RegisterRoutes(mux, mw, rl)
-
-	// Wrap mux with global middleware
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      mw.Handler(mux),
+		Handler:      application.Handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
-
+	// Start server in background; main goroutine waits for shutdown signal.
+	serverErr := make(chan error, 1)
 	go func() {
 		log.Info("server starting", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("server error", "error", err)
-			os.Exit(1)
+			serverErr <- err
 		}
 	}()
 
-	<-done
-	log.Info("shutting down server")
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	select {
+	case err := <-serverErr:
+		return fmt.Errorf("server error: %w", err)
+	case <-done:
+		log.Info("shutting down server")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Error("server shutdown error", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("server shutdown: %w", err)
 	}
 
 	log.Info("server stopped")
+	return nil
 }

@@ -1,0 +1,101 @@
+// Package app is the composition root: it wires repositories, services,
+// storage, middleware and HTTP handlers into a single ready-to-serve http.Handler.
+// Keeping DI here (instead of main.go) means main only has to worry about
+// process bootstrap and lifecycle.
+package app
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+
+	"github.com/fhedul/amaarshop/backend/internal/config"
+	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
+	"github.com/fhedul/amaarshop/backend/internal/platform/database"
+	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
+	"github.com/fhedul/amaarshop/backend/internal/service"
+	localstorage "github.com/fhedul/amaarshop/backend/internal/storage/local"
+
+	"net/http"
+)
+
+// App holds the assembled application: the HTTP handler ready to serve,
+// and the database handle for lifecycle management.
+type App struct {
+	Handler http.Handler
+	DB      *sql.DB
+}
+
+// New builds the full dependency graph from config and returns a ready App.
+// Any construction error is wrapped with enough context to pinpoint the failed stage.
+func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
+	// --- Platform ---
+	db, err := database.Connect(cfg.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect database: %w", err)
+	}
+	log.Info("database connected")
+
+	if err := database.Migrate(cfg.DatabaseURL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+	log.Info("migrations applied")
+
+	fileStore, err := localstorage.New(cfg.UploadDir)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("init file storage: %w", err)
+	}
+
+	// --- Repositories (implement domain repository interfaces) ---
+	userRepo := postgres.NewUserRepo(db)
+	shopRepo := postgres.NewShopRepo(db)
+	deliveryRepo := postgres.NewDeliverySettingsRepo(db)
+
+	// --- Services (depend only on repo + storage interfaces) ---
+	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	shopSvc := service.NewShopService(shopRepo, deliveryRepo, fileStore)
+
+	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
+	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
+		if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPass); err != nil {
+			log.Error("failed to seed admin user", "error", err)
+		} else {
+			log.Info("admin user seeded", "email", cfg.AdminEmail)
+		}
+	}
+
+	// --- Middleware ---
+	mw := middleware.NewManager()
+	mw.Use(middleware.Logger(log))
+	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5
+
+	// --- Handlers (depend only on service interfaces) ---
+	authHandler := auth.NewHandler(authSvc, cfg)
+	shopHandler := shop.NewHandler(shopSvc, cfg)
+
+	// --- Router ---
+	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
+		DB:          db,
+		UploadDir:   cfg.UploadDir,
+		AuthHandler: authHandler,
+		ShopHandler: shopHandler,
+		Middleware:  mw,
+		RateLimiter: rl,
+	})
+
+	return &App{Handler: handler, DB: db}, nil
+}
+
+// Close releases resources held by the app (currently the DB handle).
+func (a *App) Close() error {
+	if a.DB != nil {
+		return a.DB.Close()
+	}
+	return nil
+}

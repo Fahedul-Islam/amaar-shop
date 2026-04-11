@@ -19,14 +19,8 @@ func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthServ
 	return &AuthService{users: users, jwtSecret: jwtSecret}
 }
 
-// TokenPair holds the access and refresh tokens returned after authentication.
-type TokenPair struct {
-	AccessToken  string
-	RefreshToken string
-}
-
 // Signup registers a new user and returns tokens for immediate login.
-func (s *AuthService) Signup(ctx context.Context, email, password string) (*domain.User, *TokenPair, error) {
+func (s *AuthService) Signup(ctx context.Context, email, password string) (*domain.User, *domain.TokenPair, error) {
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		return nil, nil, fmt.Errorf("hashing password: %w", err)
@@ -49,7 +43,7 @@ func (s *AuthService) Signup(ctx context.Context, email, password string) (*doma
 }
 
 // Login authenticates a user by email and password, returning tokens on success.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*domain.User, *TokenPair, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (*domain.User, *domain.TokenPair, error) {
 	user, err := s.users.FindByEmail(ctx, email)
 	if err != nil {
 		if err == domain.ErrUserNotFound {
@@ -118,7 +112,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 	return s.users.Create(ctx, admin)
 }
 
-func (s *AuthService) generateTokens(userID string) (*TokenPair, error) {
+func (s *AuthService) generateTokens(userID string) (*domain.TokenPair, error) {
 	access, err := auth.GenerateAccessToken(userID, s.jwtSecret)
 	if err != nil {
 		return nil, fmt.Errorf("generating access token: %w", err)
@@ -129,5 +123,5 @@ func (s *AuthService) generateTokens(userID string) (*TokenPair, error) {
 		return nil, fmt.Errorf("generating refresh token: %w", err)
 	}
 
-	return &TokenPair{AccessToken: access, RefreshToken: refresh}, nil
+	return &domain.TokenPair{AccessToken: access, RefreshToken: refresh}, nil
 }

@@ -17,6 +17,59 @@
   "have_account": "Already have an account?",
   "dashboard": "Dashboard",
   "dashboard_placeholder": "Welcome to your dashboard. Set up your shop to get started.",
+  "dashboard_home_hint": "More features like products, orders, and analytics are coming soon.",
+  "shop": {
+    "settings": "Settings",
+    "delivery_settings": "Delivery"
+  },
+  "setup": {
+    "title": "Set Up Your Shop",
+    "subtitle": "Complete these steps to launch your storefront.",
+    "step1_title": "Shop Name & URL",
+    "step2_title": "Logo & Branding",
+    "step3_title": "Delivery Settings",
+    "step3_hint": "Configure how you handle deliveries and payments.",
+    "shop_name": "Shop Name",
+    "shop_name_placeholder": "e.g. Rina's Fashion",
+    "slug": "Shop URL",
+    "description": "Description",
+    "description_placeholder": "Tell customers what you sell...",
+    "contact_phone": "Contact Phone",
+    "logo": "Shop Logo",
+    "banner": "Banner Image",
+    "cod_enabled": "Cash on Delivery",
+    "delivery_charge": "Delivery Charge",
+    "free_delivery_threshold": "Free Delivery Above",
+    "advance_payment": "Advance Payment Required",
+    "advance_instructions": "Payment Instructions",
+    "advance_instructions_placeholder": "e.g. Send ৳200 advance to bKash 01712345678",
+    "delivery_areas": "Delivery Areas",
+    "area_placeholder": "Type an area and press Enter",
+    "add": "Add",
+    "optional": "Optional",
+    "next": "Next",
+    "skip": "Skip for Now",
+    "finish": "Finish Setup",
+    "creating": "Creating...",
+    "uploading": "Uploading...",
+    "saving": "Saving...",
+    "checking_slug": "Checking...",
+    "slug_available": "Available!",
+    "slug_taken": "This URL is already taken",
+    "name_required": "Shop name is required",
+    "slug_invalid": "Please enter a valid and available shop URL"
+  },
+  "settings": {
+    "branding_title": "Shop Settings",
+    "slug_readonly": "Shop URL cannot be changed after creation",
+    "save": "Save Changes",
+    "saved": "Settings saved successfully!"
+  },
+  "delivery": {
+    "cod_hint": "Allow customers to pay when their order is delivered",
+    "threshold_hint": "Orders above this amount get free delivery",
+    "advance_hint": "Require advance payment (bKash/Nagad) before shipping"
+  },
   "errors": {
     "unauthorized": "Invalid email or password",
     "email_already_exists": "This email is already registered",
@@ -24,6 +77,9 @@
     "rate_limited": "Too many attempts. Please try again later.",
     "password_too_short": "Password must be at least 8 characters",
     "password_mismatch": "Passwords do not match",
+    "slug_taken": "This shop URL is already taken",
+    "shop_already_exists": "You already have a shop",
+    "not_found": "Not found",
     "unknown": "Something went wrong. Please try again."
   }
 }
