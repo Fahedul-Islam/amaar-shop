@@ -7,6 +7,9 @@ import DashboardHome from '@/pages/DashboardHome';
 import ShopSetup from '@/pages/ShopSetup';
 import ShopSettings from '@/pages/ShopSettings';
 import DeliverySettingsPage from '@/pages/DeliverySettings';
+import Products from '@/pages/Products';
+import ProductForm from '@/pages/ProductForm';
+import Categories from '@/pages/Categories';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -68,8 +71,10 @@ export default function Dashboard() {
       </header>
 
       <nav className="bg-white border-b">
-        <div className="max-w-5xl mx-auto px-4 flex gap-6 text-sm">
+        <div className="max-w-5xl mx-auto px-4 flex gap-6 text-sm overflow-x-auto">
           <DashboardNavLink to="/dashboard" end>{t('dashboard')}</DashboardNavLink>
+          <DashboardNavLink to="/dashboard/products">{t('shop.products')}</DashboardNavLink>
+          <DashboardNavLink to="/dashboard/categories">{t('shop.categories')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/settings">{t('shop.settings')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/settings/delivery">{t('shop.delivery_settings')}</DashboardNavLink>
         </div>
@@ -78,6 +83,10 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <Routes>
           <Route index element={<DashboardHome />} />
+          <Route path="products" element={<Products />} />
+          <Route path="products/new" element={<ProductForm />} />
+          <Route path="products/:id" element={<ProductForm />} />
+          <Route path="categories" element={<Categories />} />
           <Route path="settings" element={<ShopSettings />} />
           <Route path="settings/delivery" element={<DeliverySettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -11,18 +11,22 @@ import (
 	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 )
 
 // RouterDeps holds everything the router needs to register all routes.
 type RouterDeps struct {
-	DB          *sql.DB
-	UploadDir   string
-	AuthHandler *auth.Handler
-	ShopHandler *shop.Handler
-	Middleware  *middleware.Manager
-	RateLimiter *middleware.RateLimiter
+	DB              *sql.DB
+	UploadDir       string
+	AuthHandler     *auth.Handler
+	ShopHandler     *shop.Handler
+	CategoryHandler *category.Handler
+	ProductHandler  *product.Handler
+	Middleware      *middleware.Manager
+	RateLimiter     *middleware.RateLimiter
 }
 
 // NewRouter builds the complete mux: health probes, static /uploads/,
@@ -35,6 +39,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	deps.AuthHandler.RegisterRoutes(mux, deps.Middleware, deps.RateLimiter)
 	deps.ShopHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.CategoryHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.ProductHandler.RegisterRoutes(mux, deps.Middleware)
 
 	return deps.Middleware.Handler(mux)
 }

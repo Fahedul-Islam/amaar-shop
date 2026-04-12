@@ -13,7 +13,9 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
@@ -56,10 +58,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	userRepo := postgres.NewUserRepo(db)
 	shopRepo := postgres.NewShopRepo(db)
 	deliveryRepo := postgres.NewDeliverySettingsRepo(db)
+	categoryRepo := postgres.NewCategoryRepo(db)
+	productRepo := postgres.NewProductRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, fileStore)
+	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
+	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, fileStore)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -78,15 +84,19 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	// --- Handlers (depend only on service interfaces) ---
 	authHandler := auth.NewHandler(authSvc, cfg)
 	shopHandler := shop.NewHandler(shopSvc, cfg)
+	categoryHandler := category.NewHandler(categorySvc, cfg)
+	productHandler := product.NewHandler(productSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
-		DB:          db,
-		UploadDir:   cfg.UploadDir,
-		AuthHandler: authHandler,
-		ShopHandler: shopHandler,
-		Middleware:  mw,
-		RateLimiter: rl,
+		DB:              db,
+		UploadDir:       cfg.UploadDir,
+		AuthHandler:     authHandler,
+		ShopHandler:     shopHandler,
+		CategoryHandler: categoryHandler,
+		ProductHandler:  productHandler,
+		Middleware:      mw,
+		RateLimiter:     rl,
 	})
 
 	return &App{Handler: handler, DB: db}, nil

@@ -39,7 +39,7 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function rawFetch(path: string, options: RequestInit): Promise<Response> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> || {}),
   };
@@ -68,9 +68,22 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     const body = await res.json().catch(() => ({ error: { code: 'unknown', message: 'Request failed' } }));
     throw new ApiRequestError(res.status, body.error);
   }
+  return res;
+}
 
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await rawFetch(path, options);
   if (res.status === 204) return undefined as T;
-
   const body = await res.json();
   return body.data as T;
+}
+
+// apiFetchEnvelope returns the entire response envelope so callers can access
+// the sibling `pagination` field alongside `data`.
+export async function apiFetchEnvelope<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const res = await rawFetch(path, options);
+  return (await res.json()) as T;
 }

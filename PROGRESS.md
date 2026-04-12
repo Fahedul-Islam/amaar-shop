@@ -6,8 +6,8 @@
 - [x] **2. Database Design & Migrations**
 - [x] **3. API Contract**
 - [x] **4. Auth Foundation**
-- [ ] **5. Shop Creation, Settings & Delivery Configuration**
-- [ ] **6. Product Management**
+- [x] **5. Shop Creation, Settings & Delivery Configuration**
+- [x] **6. Product Management** (backend)
 - [ ] **7. Public Storefront**
 - [ ] **8. Order Creation & Management**
 - [ ] **9. Dashboard Overview & Analytics**

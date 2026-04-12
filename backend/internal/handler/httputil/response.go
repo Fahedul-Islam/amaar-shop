@@ -38,6 +38,17 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidDeliveryCharge, http.StatusBadRequest, "validation_error"},
 	{domain.ErrInvalidThreshold, http.StatusBadRequest, "validation_error"},
 	{domain.ErrDeliveryAreasRequired, http.StatusBadRequest, "validation_error"},
+	// Categories
+	{domain.ErrCategoryNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrCategoryNotInShop, http.StatusUnprocessableEntity, "category_not_in_shop"},
+	{domain.ErrCategoryNameTaken, http.StatusConflict, "category_name_taken"},
+	// Products
+	{domain.ErrProductNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrInsufficientStock, http.StatusConflict, "insufficient_stock"},
+	{domain.ErrTooManyImages, http.StatusUnprocessableEntity, "too_many_images"},
+	{domain.ErrInvalidPrice, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidStock, http.StatusBadRequest, "validation_error"},
+	{domain.ErrProductNameRequired, http.StatusBadRequest, "validation_error"},
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.
@@ -81,6 +92,20 @@ func WriteUnauthorized(w http.ResponseWriter) {
 // WriteJSON writes a JSON success response wrapping data in {"data": ...}.
 func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 	writeJSON(w, status, map[string]interface{}{"data": data})
+}
+
+// WritePaginated writes a {"data": ..., "pagination": ...} envelope used by
+// list endpoints per docs/API.md.
+func WritePaginated(w http.ResponseWriter, status int, data, pagination interface{}) {
+	writeJSON(w, status, map[string]interface{}{
+		"data":       data,
+		"pagination": pagination,
+	})
+}
+
+// WriteNoContent writes a 204 No Content response.
+func WriteNoContent(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
