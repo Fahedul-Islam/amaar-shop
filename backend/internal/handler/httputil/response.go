@@ -49,6 +49,11 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidPrice, http.StatusBadRequest, "validation_error"},
 	{domain.ErrInvalidStock, http.StatusBadRequest, "validation_error"},
 	{domain.ErrProductNameRequired, http.StatusBadRequest, "validation_error"},
+	// Orders
+	{domain.ErrCheckoutDisabled, http.StatusUnprocessableEntity, "checkout_disabled"},
+	{domain.ErrInvalidStatusTransition, http.StatusUnprocessableEntity, "invalid_status_transition"},
+	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrInvalidDeliveryArea, http.StatusBadRequest, "validation_error"},
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.

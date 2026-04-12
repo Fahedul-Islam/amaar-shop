@@ -1,0 +1,46 @@
+package domain
+
+import (
+	"errors"
+	"time"
+)
+
+// Order represents a customer order placed on a shop's storefront.
+type Order struct {
+	ID                     string      `json:"id"`
+	ShopID                 string      `json:"shop_id"`
+	CustomerName           string      `json:"customer_name"`
+	CustomerPhone          string      `json:"customer_phone"`
+	DeliveryAddress        string      `json:"delivery_address"`
+	DeliveryArea           string      `json:"delivery_area"`
+	Note                   string      `json:"note"`
+	SubtotalBDT            string      `json:"subtotal_bdt"`
+	DeliveryChargeBDT      string      `json:"delivery_charge_bdt"`
+	TotalBDT               string      `json:"total_bdt"`
+	Status                 string      `json:"status"`
+	AdvancePaymentRequired bool        `json:"advance_payment_required"`
+	AdvancePaymentReceived bool        `json:"advance_payment_received"`
+	CancelledReason        *string     `json:"cancelled_reason"`
+	Items                  []OrderItem `json:"items"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+}
+
+// OrderItem is a single line item within an order. Prices are snapshotted
+// at order creation time so future product edits don't alter past orders.
+type OrderItem struct {
+	ID                   string `json:"id"`
+	OrderID              string `json:"order_id,omitempty"`
+	ProductID            string `json:"product_id"`
+	ProductNameSnapshot  string `json:"product_name_snapshot"`
+	UnitPriceSnapshotBDT string `json:"unit_price_snapshot_bdt"`
+	Quantity             int    `json:"quantity"`
+	LineTotalBDT         string `json:"line_total_bdt"`
+}
+
+var (
+	ErrCheckoutDisabled        = errors.New("shop is not currently taking orders")
+	ErrInvalidStatusTransition = errors.New("invalid order status transition")
+	ErrOrderNotFound           = errors.New("order not found")
+	ErrInvalidDeliveryArea     = errors.New("delivery area is not served by this shop")
+)

@@ -15,6 +15,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
@@ -60,12 +61,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	deliveryRepo := postgres.NewDeliverySettingsRepo(db)
 	categoryRepo := postgres.NewCategoryRepo(db)
 	productRepo := postgres.NewProductRepo(db)
+	orderRepo := postgres.NewOrderRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, fileStore)
+	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -86,6 +89,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	shopHandler := shop.NewHandler(shopSvc, cfg)
 	categoryHandler := category.NewHandler(categorySvc, cfg)
 	productHandler := product.NewHandler(productSvc, cfg)
+	orderHandler := order.NewHandler(orderSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -95,6 +99,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		ShopHandler:     shopHandler,
 		CategoryHandler: categoryHandler,
 		ProductHandler:  productHandler,
+		OrderHandler:    orderHandler,
 		Middleware:      mw,
 		RateLimiter:     rl,
 	})

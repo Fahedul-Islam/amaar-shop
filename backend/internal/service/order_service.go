@@ -1,0 +1,141 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/fhedul/amaarshop/backend/internal/domain"
+	"github.com/fhedul/amaarshop/backend/internal/repository"
+)
+
+// PlaceOrderInput carries the validated customer submission from the handler.
+type PlaceOrderInput struct {
+	CustomerName    string
+	CustomerPhone   string
+	DeliveryAddress string
+	DeliveryArea    string
+	Note            string
+	Items           []OrderItemInput
+}
+
+type OrderItemInput struct {
+	ProductID string
+	Quantity  int
+}
+
+// OrderService orchestrates order placement: price look-up, delivery charge
+// calculation, COD/advance-payment checks, and transactional stock decrement.
+type OrderService struct {
+	shops    repository.ShopRepository
+	delivery repository.DeliverySettingsRepository
+	products repository.ProductRepository
+	orders   repository.OrderRepository
+}
+
+func NewOrderService(
+	shops repository.ShopRepository,
+	delivery repository.DeliverySettingsRepository,
+	products repository.ProductRepository,
+	orders repository.OrderRepository,
+) *OrderService {
+	return &OrderService{
+		shops:    shops,
+		delivery: delivery,
+		products: products,
+		orders:   orders,
+	}
+}
+
+// PlaceOrder creates a new order on the shop identified by slug.
+// It recalculates all prices server-side and never trusts client totals.
+func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrderInput) (*domain.Order, error) {
+	// Resolve the shop (404 if suspended or missing).
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	if shop.IsSuspended {
+		return nil, domain.ErrShopNotFound
+	}
+
+	// Load delivery settings to check COD and compute delivery charge.
+	ds, err := s.delivery.Get(ctx, shop.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ds.CODEnabled {
+		return nil, domain.ErrCheckoutDisabled
+	}
+
+	// Validate delivery area.
+	areaValid := false
+	for _, a := range ds.DeliveryAreas {
+		if a == in.DeliveryArea {
+			areaValid = true
+			break
+		}
+	}
+	if !areaValid {
+		return nil, domain.ErrInvalidDeliveryArea
+	}
+
+	// Build order items by looking up each product's current price and snapshotting it.
+	var subtotal float64
+	items := make([]domain.OrderItem, 0, len(in.Items))
+	for _, item := range in.Items {
+		p, err := s.products.FindByID(ctx, item.ProductID, shop.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !p.IsActive || p.IsArchived {
+			return nil, domain.ErrProductNotFound
+		}
+		if p.Stock < item.Quantity {
+			return nil, domain.ErrInsufficientStock
+		}
+
+		unitPrice, _ := strconv.ParseFloat(p.PriceBDT, 64)
+		lineTotal := unitPrice * float64(item.Quantity)
+		subtotal += lineTotal
+
+		items = append(items, domain.OrderItem{
+			ProductID:            p.ID,
+			ProductNameSnapshot:  p.Name,
+			UnitPriceSnapshotBDT: p.PriceBDT,
+			Quantity:             item.Quantity,
+			LineTotalBDT:         fmt.Sprintf("%.2f", lineTotal),
+		})
+	}
+
+	// Compute delivery charge: free if threshold is set and subtotal exceeds it.
+	deliveryCharge, _ := strconv.ParseFloat(ds.DeliveryCharge, 64)
+	if ds.FreeDeliveryThreshold != nil {
+		threshold, _ := strconv.ParseFloat(*ds.FreeDeliveryThreshold, 64)
+		if threshold > 0 && subtotal >= threshold {
+			deliveryCharge = 0
+		}
+	}
+
+	total := subtotal + deliveryCharge
+
+	order := &domain.Order{
+		ShopID:                 shop.ID,
+		CustomerName:           in.CustomerName,
+		CustomerPhone:          in.CustomerPhone,
+		DeliveryAddress:        in.DeliveryAddress,
+		DeliveryArea:           in.DeliveryArea,
+		Note:                   in.Note,
+		SubtotalBDT:            fmt.Sprintf("%.2f", subtotal),
+		DeliveryChargeBDT:      fmt.Sprintf("%.2f", deliveryCharge),
+		TotalBDT:               fmt.Sprintf("%.2f", total),
+		AdvancePaymentRequired: ds.AdvancePaymentRequired,
+		Items:                  items,
+	}
+
+	if err := s.orders.PlaceOrder(ctx, order); err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}

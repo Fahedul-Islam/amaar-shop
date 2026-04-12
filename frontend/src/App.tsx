@@ -6,6 +6,10 @@ import LanguageToggle from '@/components/LanguageToggle';
 import Login from '@/pages/Login';
 import Signup from '@/pages/Signup';
 import Dashboard from '@/pages/Dashboard';
+import StorefrontLayout from '@/pages/storefront/StorefrontLayout';
+import ShopLanding from '@/pages/storefront/ShopLanding';
+import ProductDetail from '@/pages/storefront/ProductDetail';
+import Checkout from '@/pages/storefront/Checkout';
 
 function Landing() {
   const { t } = useTranslation();
@@ -54,6 +58,12 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        {/* Public storefront */}
+        <Route path="/s/:slug" element={<StorefrontLayout />}>
+          <Route index element={<ShopLanding />} />
+          <Route path="p/:productId" element={<ProductDetail />} />
+          <Route path="checkout" element={<Checkout />} />
+        </Route>
       </Routes>
     </AuthProvider>
   );
