@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -22,6 +23,13 @@ type PlaceOrderInput struct {
 type OrderItemInput struct {
 	ProductID string
 	Quantity  int
+}
+
+// validTransitions defines which status transitions a seller can perform.
+var validTransitions = map[string][]string{
+	"pending":   {"confirmed", "cancelled"},
+	"confirmed": {"shipped", "cancelled"},
+	"shipped":   {"delivered", "returned"},
 }
 
 // OrderService orchestrates order placement: price look-up, delivery charge
@@ -138,4 +146,80 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	}
 
 	return order, nil
+}
+
+// GetShopOrders returns all orders for the shop owned by ownerUserID.
+func (s *OrderService) GetShopOrders(ctx context.Context, ownerID, page, size string) ([]*domain.Order, error) {
+	limit, offset := paginationDefaults(page, size)
+	return s.orders.OrderListByShopOwner(ctx, ownerID, limit, offset)
+}
+
+func (s *OrderService) GetShopOrderByID(ctx context.Context, ownerID, orderID string) (*domain.Order, error) {
+	return s.orders.OrderByIDForShopOwner(ctx, ownerID, orderID)
+}
+
+// UpdateOrderStatus validates the transition and persists the new status.
+// A cancellation reason is required when the target status is "cancelled".
+func (s *OrderService) UpdateOrderStatus(ctx context.Context, ownerID, orderID, newStatus string, cancellationReason *string) (*domain.Order, error) {
+	newStatus = strings.TrimSpace(strings.ToLower(newStatus))
+
+	// Require cancellation reason when cancelling.
+	if newStatus == "cancelled" {
+		if cancellationReason == nil || strings.TrimSpace(*cancellationReason) == "" {
+			return nil, domain.ErrCancellationReasonRequired
+		}
+	}
+
+	// Fetch current order to validate transition.
+	current, err := s.orders.OrderByIDForShopOwner(ctx, ownerID, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isValidTransition(current.Status, newStatus) {
+		return nil, domain.ErrInvalidStatusTransition
+	}
+
+	return s.orders.UpdateOrderStatusForShopOwner(ctx, ownerID, orderID, newStatus, cancellationReason)
+}
+
+// BuyerCancelOrder lets the buyer cancel their own pending order.
+// Verified by matching customerPhone. A cancellation reason is required.
+func (s *OrderService) BuyerCancelOrder(ctx context.Context, slug, orderID, customerPhone, cancellationReason string) (*domain.Order, error) {
+	if strings.TrimSpace(cancellationReason) == "" {
+		return nil, domain.ErrCancellationReasonRequired
+	}
+
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.orders.CancelOrderByBuyer(ctx, shop.ID, orderID, customerPhone, cancellationReason)
+}
+
+func isValidTransition(from, to string) bool {
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
+}
+
+// paginationDefaults parses page/size strings into limit and offset with sane defaults.
+func paginationDefaults(page, size string) (int, int) {
+	p, err := strconv.Atoi(page)
+	if err != nil || p < 1 {
+		p = 1
+	}
+	s, err := strconv.Atoi(size)
+	if err != nil || s < 1 {
+		s = 10
+	}
+	return s, (p - 1) * s
 }

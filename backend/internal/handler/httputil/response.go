@@ -54,6 +54,7 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidStatusTransition, http.StatusUnprocessableEntity, "invalid_status_transition"},
 	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrInvalidDeliveryArea, http.StatusBadRequest, "validation_error"},
+	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.
@@ -117,4 +118,25 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+func GetIDParam(r *http.Request, name string) string {
+	return r.PathValue(name)
+}
+
+
+func DecodeJSONBody(r *http.Request, dst interface{}) error {
+    if r.Body == nil {
+        return errors.New("request body is required")
+    }
+    defer r.Body.Close()
+
+    decoder := json.NewDecoder(r.Body)
+    decoder.DisallowUnknownFields()
+
+    if err := decoder.Decode(dst); err != nil {
+        return err
+    }
+
+    return nil
 }

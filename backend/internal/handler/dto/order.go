@@ -37,7 +37,20 @@ type OrderDTO struct {
 	Status                 string         `json:"status"`
 	AdvancePaymentRequired bool           `json:"advance_payment_required"`
 	AdvancePaymentReceived bool           `json:"advance_payment_received"`
+	CancelledReason        *string        `json:"cancelled_reason"`
 	Items                  []OrderItemDTO `json:"items"`
 	CreatedAt              string         `json:"created_at"`
 	UpdatedAt              string         `json:"updated_at"`
+}
+
+// UpdateOrderStatusRequest is the body for POST /api/shops/me/orders/{id}/status.
+type UpdateOrderStatusRequest struct {
+	Status             string `json:"status"`
+	CancellationReason string `json:"cancellation_reason"`
+}
+
+// BuyerCancelRequest is the body for POST /api/shops/by-slug/{slug}/orders/{id}/cancel.
+type BuyerCancelRequest struct {
+	CustomerPhone      string `json:"customer_phone"`
+	CancellationReason string `json:"cancellation_reason"`
 }

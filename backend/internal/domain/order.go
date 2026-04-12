@@ -39,8 +39,9 @@ type OrderItem struct {
 }
 
 var (
-	ErrCheckoutDisabled        = errors.New("shop is not currently taking orders")
-	ErrInvalidStatusTransition = errors.New("invalid order status transition")
-	ErrOrderNotFound           = errors.New("order not found")
-	ErrInvalidDeliveryArea     = errors.New("delivery area is not served by this shop")
+	ErrCheckoutDisabled           = errors.New("shop is not currently taking orders")
+	ErrInvalidStatusTransition    = errors.New("invalid order status transition")
+	ErrOrderNotFound              = errors.New("order not found")
+	ErrInvalidDeliveryArea        = errors.New("delivery area is not served by this shop")
+	ErrCancellationReasonRequired = errors.New("cancellation reason is required")
 )

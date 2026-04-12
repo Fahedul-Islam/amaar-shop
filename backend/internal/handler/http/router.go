@@ -43,7 +43,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.ShopHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.CategoryHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.ProductHandler.RegisterRoutes(mux, deps.Middleware)
-	deps.OrderHandler.RegisterRoutes(mux)
+	deps.OrderHandler.RegisterRoutes(mux, deps.Middleware)
 
 	return deps.Middleware.Handler(mux)
 }

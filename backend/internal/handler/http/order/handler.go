@@ -44,6 +44,7 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 		Status:                 o.Status,
 		AdvancePaymentRequired: o.AdvancePaymentRequired,
 		AdvancePaymentReceived: o.AdvancePaymentReceived,
+		CancelledReason:        o.CancelledReason,
 		Items:                  items,
 		CreatedAt:              o.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:              o.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
