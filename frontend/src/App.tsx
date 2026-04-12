@@ -10,6 +10,8 @@ import StorefrontLayout from '@/pages/storefront/StorefrontLayout';
 import ShopLanding from '@/pages/storefront/ShopLanding';
 import ProductDetail from '@/pages/storefront/ProductDetail';
 import Checkout from '@/pages/storefront/Checkout';
+import OrderConfirmed from '@/pages/storefront/OrderConfirmed';
+import OrderLookup from '@/pages/storefront/OrderLookup';
 
 function Landing() {
   const { t } = useTranslation();
@@ -63,6 +65,8 @@ export default function App() {
           <Route index element={<ShopLanding />} />
           <Route path="p/:productId" element={<ProductDetail />} />
           <Route path="checkout" element={<Checkout />} />
+          <Route path="order-confirmed/:orderID" element={<OrderConfirmed />} />
+          <Route path="order-lookup" element={<OrderLookup />} />
         </Route>
       </Routes>
     </AuthProvider>

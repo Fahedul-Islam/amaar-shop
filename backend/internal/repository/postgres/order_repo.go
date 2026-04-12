@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -19,7 +21,7 @@ func NewOrderRepo(db *sql.DB) repository.OrderRepository {
 
 // orderColumns is the shared SELECT list for order queries.
 const orderColumns = `o.id, o.shop_id, o.customer_name, o.customer_phone, o.delivery_address,
-	o.delivery_area, o.note, o.subtotal_bdt, o.delivery_charge_bdt,
+	o.delivery_area, COALESCE(o.note, ''), o.subtotal_bdt, o.delivery_charge_bdt,
 	o.total_bdt, o.status, o.advance_payment_required,
 	o.advance_payment_received, o.cancelled_reason, o.created_at, o.updated_at`
 
@@ -99,16 +101,30 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 	return tx.Commit()
 }
 
-func (r *orderRepo) OrderListByShopOwner(ctx context.Context, ownerUserID string, limit, offset int) ([]*domain.Order, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+orderColumns+`
+func (r *orderRepo) OrderListByShopOwner(ctx context.Context, ownerUserID string, status, phone string, limit, offset int) ([]*domain.Order, error) {
+	query := `SELECT ` + orderColumns + `
 		 FROM orders o
 		 JOIN shops s ON s.id = o.shop_id
-		 WHERE s.owner_user_id = $1
-		 ORDER BY o.created_at DESC
-		 LIMIT $2 OFFSET $3`,
-		ownerUserID, limit, offset,
-	)
+		 WHERE s.owner_user_id = $1`
+	args := []any{ownerUserID}
+	idx := 2
+
+	if status != "" {
+		query += fmt.Sprintf(` AND o.status = $%d`, idx)
+		args = append(args, status)
+		idx++
+	}
+	if phone != "" {
+		query += fmt.Sprintf(` AND o.customer_phone = $%d`, idx)
+		args = append(args, phone)
+		idx++
+	}
+
+	query += ` ORDER BY o.created_at DESC`
+	query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, idx, idx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query orders: %w", err)
 	}
@@ -144,7 +160,14 @@ func (r *orderRepo) OrderByIDForShopOwner(ctx context.Context, ownerUserID, orde
 	return o, nil
 }
 
+// UpdateOrderStatusForShopOwner updates order status. When cancelling,
+// stock is restored in the same transaction.
 func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUserID, orderID, status string, cancelledReason *string) (*domain.Order, error) {
+	log.Println(status)
+	if status == "cancelled" {
+		return r.cancelWithStockRestore(ctx, ownerUserID, orderID, cancelledReason)
+	}
+
 	row := r.db.QueryRowContext(ctx,
 		`UPDATE orders
 		 SET status = $1, cancelled_reason = $2
@@ -153,7 +176,7 @@ func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUser
 		   AND shops.owner_user_id = $3
 		   AND orders.id = $4
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, orders.note,
+		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -177,20 +200,136 @@ func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUser
 	return o, nil
 }
 
+// cancelWithStockRestore cancels an order and restores stock in one transaction.
+func (r *orderRepo) cancelWithStockRestore(ctx context.Context, ownerUserID, orderID string, cancelledReason *string) (*domain.Order, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update order status to cancelled.
+	row := tx.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET status = 'cancelled', cancelled_reason = $1
+		 FROM shops
+		 WHERE shops.id = orders.shop_id
+		   AND shops.owner_user_id = $2
+		   AND orders.id = $3
+		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
+		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
+		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
+		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		cancelledReason, ownerUserID, orderID,
+	)
+
+	o := &domain.Order{}
+	err = row.Scan(
+		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
+		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
+		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("cancel order: %w", err)
+	}
+
+	// Restore stock for each item.
+	_, err = tx.ExecContext(ctx,
+		`UPDATE products
+		 SET stock = products.stock + oi.quantity
+		 FROM order_items oi
+		 WHERE oi.order_id = $1
+		   AND products.id = oi.product_id`,
+		orderID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("restore stock: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return o, nil
+}
+
+// CancelOrderByBuyer cancels a pending order and restores stock.
 func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, customerPhone, cancelledReason string) (*domain.Order, error) {
-	row := r.db.QueryRowContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx,
 		`UPDATE orders
 		 SET status = 'cancelled', cancelled_reason = $1
 		 WHERE shop_id = $2
-		   AND id = $3
+		   AND id::text LIKE lower($3) || '%'
 		   AND customer_phone = $4
 		   AND status = 'pending'
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, orders.note,
+		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
 		cancelledReason, shopID, orderID, customerPhone,
+	)
+
+	o := &domain.Order{}
+	err = row.Scan(
+		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
+		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
+		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("cancel order by buyer: %w", err)
+	}
+
+	// Restore stock for each item.
+	_, err = tx.ExecContext(ctx,
+		`UPDATE products
+		 SET stock = products.stock + oi.quantity
+		 FROM order_items oi
+		 WHERE oi.order_id = $1
+		   AND products.id = oi.product_id`,
+		orderID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("restore stock: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return o, nil
+}
+
+// MarkAdvanceReceived sets advance_payment_received = true.
+func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error) {
+	row := r.db.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET advance_payment_received = true
+		 FROM shops
+		 WHERE shops.id = orders.shop_id
+		   AND shops.owner_user_id = $1
+		   AND orders.id = $2
+		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
+		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
+		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
+		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		ownerUserID, orderID,
 	)
 
 	o := &domain.Order{}
@@ -205,7 +344,78 @@ func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, cus
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
 		}
-		return nil, fmt.Errorf("cancel order by buyer: %w", err)
+		return nil, fmt.Errorf("mark advance received: %w", err)
 	}
 	return o, nil
+}
+
+// FindByIDAndPhone returns an order for customer lookup (by shop + order ID + phone).
+// Accepts both full UUIDs and short prefixes (e.g. first 8 hex chars shown to customers).
+func (r *orderRepo) FindByIDAndPhone(ctx context.Context, shopID, orderID, customerPhone string) (*domain.Order, error) {
+	log.Printf("Finding order by shopID=%s, orderID=%s, customerPhone=%s", shopID, orderID, customerPhone)
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+orderColumns+`
+		 FROM orders o
+		 WHERE o.shop_id = $1
+		   AND o.id::text LIKE lower($2) || '%'
+		   AND o.customer_phone = $3`,
+		shopID,
+		orderID,
+		customerPhone,
+	)
+	o, err := scanOrder(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("find order by id and phone: %w", err)
+	}
+	return o, nil
+}
+
+// LoadItems fetches order_items for the given orders and attaches them.
+func (r *orderRepo) LoadItems(ctx context.Context, orders ...*domain.Order) error {
+	if len(orders) == 0 {
+		return nil
+	}
+
+	// Build IN clause.
+	ids := make([]string, len(orders))
+	args := make([]any, len(orders))
+	for i, o := range orders {
+		ids[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = o.ID
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, order_id, product_id, product_name_snapshot,
+		        unit_price_snapshot_bdt, quantity, line_total_bdt
+		 FROM order_items
+		 WHERE order_id IN (`+strings.Join(ids, ",")+`)
+		 ORDER BY created_at`,
+		args...,
+	)
+	if err != nil {
+		return fmt.Errorf("load order items: %w", err)
+	}
+	defer rows.Close()
+
+	byOrder := make(map[string][]domain.OrderItem)
+	for rows.Next() {
+		var it domain.OrderItem
+		if err := rows.Scan(&it.ID, &it.OrderID, &it.ProductID,
+			&it.ProductNameSnapshot, &it.UnitPriceSnapshotBDT,
+			&it.Quantity, &it.LineTotalBDT); err != nil {
+			return fmt.Errorf("scan order item: %w", err)
+		}
+		byOrder[it.OrderID] = append(byOrder[it.OrderID], it)
+	}
+
+	for _, o := range orders {
+		o.Items = byOrder[o.ID]
+		if o.Items == nil {
+			o.Items = []domain.OrderItem{}
+		}
+	}
+	return nil
 }

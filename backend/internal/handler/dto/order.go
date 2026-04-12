@@ -54,3 +54,8 @@ type BuyerCancelRequest struct {
 	CustomerPhone      string `json:"customer_phone"`
 	CancellationReason string `json:"cancellation_reason"`
 }
+
+// CustomerLookupRequest is the body for POST /api/shops/by-slug/{slug}/orders/{id}/lookup.
+type CustomerLookupRequest struct {
+	CustomerPhone string `json:"customer_phone"`
+}

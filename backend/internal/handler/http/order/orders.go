@@ -13,8 +13,10 @@ func (h *Handler) ListOfOrders(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 	page := r.URL.Query().Get("page")
 	size := r.URL.Query().Get("page_size")
+	status := r.URL.Query().Get("status")
+	phone := r.URL.Query().Get("phone")
 
-	orders, err := h.svc.GetShopOrders(r.Context(), ownerID, page, size)
+	orders, err := h.svc.GetShopOrders(r.Context(), ownerID, page, size, status, phone)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -95,6 +97,46 @@ func (h *Handler) BuyerCancelOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.svc.BuyerCancelOrder(r.Context(), slug, orderID, req.CustomerPhone, req.CancellationReason)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, toOrderDTO(order))
+}
+
+// MarkAdvanceReceived handles POST /api/shops/me/orders/{id}/advance-received.
+func (h *Handler) MarkAdvanceReceived(w http.ResponseWriter, r *http.Request) {
+	ownerID := middleware.GetUserID(r.Context())
+	orderID := httputil.GetIDParam(r, "id")
+
+	order, err := h.svc.MarkAdvanceReceived(r.Context(), ownerID, orderID)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, toOrderDTO(order))
+}
+
+// CustomerLookupOrder handles POST /api/shops/by-slug/{slug}/orders/{id}/lookup.
+func (h *Handler) CustomerLookupOrder(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	orderID := httputil.GetIDParam(r, "id")
+
+	var req dto.CustomerLookupRequest
+	if err := httputil.DecodeJSONBody(r, &req); err != nil {
+		httputil.WriteValidationError(w, "invalid JSON body")
+		return
+	}
+
+	req.CustomerPhone = strings.TrimSpace(req.CustomerPhone)
+	if req.CustomerPhone == "" {
+		httputil.WriteValidationError(w, "customer_phone is required")
+		return
+	}
+
+	order, err := h.svc.LookupForCustomer(r.Context(), slug, orderID, req.CustomerPhone)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return

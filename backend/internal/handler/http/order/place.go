@@ -39,11 +39,16 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "customer_phone is required")
 		return
 	}
-	// Normalize phone: strip spaces and dashes.
+	// Normalize phone: strip spaces, dashes, and +880/880 prefix → 01XXXXXXXXX.
 	phone := strings.ReplaceAll(strings.ReplaceAll(req.CustomerPhone, " ", ""), "-", "")
 	if !bdPhoneRe.MatchString(phone) {
 		httputil.WriteValidationError(w, "customer_phone must be a valid BD phone number")
 		return
+	}
+	if strings.HasPrefix(phone, "+880") {
+		phone = "0" + phone[4:]
+	} else if strings.HasPrefix(phone, "880") {
+		phone = "0" + phone[3:]
 	}
 	if req.DeliveryAddress == "" {
 		httputil.WriteValidationError(w, "delivery_address is required")

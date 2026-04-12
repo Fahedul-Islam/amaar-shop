@@ -45,3 +45,12 @@ var (
 	ErrInvalidDeliveryArea        = errors.New("delivery area is not served by this shop")
 	ErrCancellationReasonRequired = errors.New("cancellation reason is required")
 )
+
+var (
+	Cancelled="cancelled"
+	Confirmed="confirmed"
+	Delivered="delivered"
+	Pending="pending"
+	Returned="returned"
+	Shipped="shipped"
+)

@@ -10,6 +10,8 @@ import DeliverySettingsPage from '@/pages/DeliverySettings';
 import Products from '@/pages/Products';
 import ProductForm from '@/pages/ProductForm';
 import Categories from '@/pages/Categories';
+import Orders from '@/pages/Orders';
+import OrderDetail from '@/pages/OrderDetail';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -73,6 +75,7 @@ export default function Dashboard() {
       <nav className="bg-white border-b">
         <div className="max-w-5xl mx-auto px-4 flex gap-6 text-sm overflow-x-auto">
           <DashboardNavLink to="/dashboard" end>{t('dashboard')}</DashboardNavLink>
+          <DashboardNavLink to="/dashboard/orders">Orders</DashboardNavLink>
           <DashboardNavLink to="/dashboard/products">{t('shop.products')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/categories">{t('shop.categories')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/settings">{t('shop.settings')}</DashboardNavLink>
@@ -83,6 +86,8 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <Routes>
           <Route index element={<DashboardHome />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="orders/:id" element={<OrderDetail />} />
           <Route path="products" element={<Products />} />
           <Route path="products/new" element={<ProductForm />} />
           <Route path="products/:id" element={<ProductForm />} />

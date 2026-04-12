@@ -49,6 +49,7 @@ export interface Order {
   status: string;
   advance_payment_required: boolean;
   advance_payment_received: boolean;
+  cancelled_reason: string | null;
   items: OrderItem[];
   created_at: string;
   updated_at: string;
@@ -138,4 +139,14 @@ export function placeOrder(slug: string, input: PlaceOrderInput) {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export function lookupOrder(slug: string, orderID: string, customerPhone: string) {
+  return publicFetch<Order>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/lookup`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ customer_phone: customerPhone }),
+    },
+  );
 }

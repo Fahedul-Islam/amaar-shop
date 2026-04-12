@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getDeliverySettings, placeOrder } from '@/lib/storefrontApi';
 import type { PublicDeliverySettings } from '@/lib/shopApi';
 import { useStorefront } from './StorefrontLayout';
 
 export default function Checkout() {
   const { shop, slug, cart } = useStorefront();
+  const navigate = useNavigate();
 
   const [ds, setDs] = useState<PublicDeliverySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [orderPlaced, setOrderPlaced] = useState(false);
-  const [orderId, setOrderId] = useState('');
   const [error, setError] = useState('');
 
   // Form state.
@@ -61,34 +60,12 @@ export default function Checkout() {
   }
 
   // Empty cart.
-  if (cart.items.length === 0 && !orderPlaced) {
+  if (cart.items.length === 0) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <h2 className="text-xl font-bold text-gray-800 mb-2">Your cart is empty</h2>
         <Link to={`/s/${slug}`} className="text-primary-600 hover:underline text-sm">
           Continue shopping
-        </Link>
-      </div>
-    );
-  }
-
-  // Order placed — success screen.
-  if (orderPlaced) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Order placed!</h2>
-        <p className="text-gray-600 mb-1">Your order <span className="font-mono text-sm">{orderId.slice(0, 8)}</span> has been received.</p>
-        <p className="text-gray-500 text-sm mb-6">We will contact you at your provided phone number.</p>
-        <Link
-          to={`/s/${slug}`}
-          className="inline-block bg-primary-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-colors"
-        >
-          Continue Shopping
         </Link>
       </div>
     );
@@ -132,9 +109,11 @@ export default function Checkout() {
           quantity: it.quantity,
         })),
       });
-      setOrderPlaced(true);
-      setOrderId(order.id);
+      // Store order data in sessionStorage for the confirmation page.
+      sessionStorage.setItem(`amaarshop_order_${order.id}`, JSON.stringify(order));
+      sessionStorage.setItem(`amaarshop_order_phone_${order.id}`, phone.trim());
       cart.clearCart();
+      navigate(`/s/${slug}/order-confirmed/${order.id}`);
     } catch (err: any) {
       setError(err?.message || 'Something went wrong. Please try again.');
     } finally {

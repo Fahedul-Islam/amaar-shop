@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"strconv"
 	"strings"
@@ -130,7 +131,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	order := &domain.Order{
 		ShopID:                 shop.ID,
 		CustomerName:           in.CustomerName,
-		CustomerPhone:          in.CustomerPhone,
+		CustomerPhone:          normalizePhone(in.CustomerPhone),
 		DeliveryAddress:        in.DeliveryAddress,
 		DeliveryArea:           in.DeliveryArea,
 		Note:                   in.Note,
@@ -148,14 +149,30 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	return order, nil
 }
 
-// GetShopOrders returns all orders for the shop owned by ownerUserID.
-func (s *OrderService) GetShopOrders(ctx context.Context, ownerID, page, size string) ([]*domain.Order, error) {
+// GetShopOrders returns orders for the shop owned by ownerUserID with optional filters.
+func (s *OrderService) GetShopOrders(ctx context.Context, ownerID, page, size, status, phone string) ([]*domain.Order, error) {
 	limit, offset := paginationDefaults(page, size)
-	return s.orders.OrderListByShopOwner(ctx, ownerID, limit, offset)
+	status = strings.TrimSpace(strings.ToLower(status))
+	phone = normalizePhone(phone)
+	orders, err := s.orders.OrderListByShopOwner(ctx, ownerID, status, phone, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, orders...); err != nil {
+		return nil, err
+	}
+	return orders, nil
 }
 
 func (s *OrderService) GetShopOrderByID(ctx context.Context, ownerID, orderID string) (*domain.Order, error) {
-	return s.orders.OrderByIDForShopOwner(ctx, ownerID, orderID)
+	order, err := s.orders.OrderByIDForShopOwner(ctx, ownerID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 // UpdateOrderStatus validates the transition and persists the new status.
@@ -180,7 +197,14 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, ownerID, orderID, 
 		return nil, domain.ErrInvalidStatusTransition
 	}
 
-	return s.orders.UpdateOrderStatusForShopOwner(ctx, ownerID, orderID, newStatus, cancellationReason)
+	order, err := s.orders.UpdateOrderStatusForShopOwner(ctx, ownerID, orderID, newStatus, cancellationReason)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 // BuyerCancelOrder lets the buyer cancel their own pending order.
@@ -195,7 +219,50 @@ func (s *OrderService) BuyerCancelOrder(ctx context.Context, slug, orderID, cust
 		return nil, err
 	}
 
-	return s.orders.CancelOrderByBuyer(ctx, shop.ID, orderID, customerPhone, cancellationReason)
+	customerPhone = normalizePhone(customerPhone)
+	order, err := s.orders.CancelOrderByBuyer(ctx, shop.ID, orderID, customerPhone, cancellationReason)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+// MarkAdvanceReceived marks an order's advance payment as received.
+func (s *OrderService) MarkAdvanceReceived(ctx context.Context, ownerID, orderID string) (*domain.Order, error) {
+	order, err := s.orders.MarkAdvanceReceived(ctx, ownerID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+// LookupForCustomer returns an order for customer-facing lookup.
+// Uses constant-time phone comparison to prevent timing attacks.
+func (s *OrderService) LookupForCustomer(ctx context.Context, slug, orderID, customerPhone string) (*domain.Order, error) {
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	phone := normalizePhone(customerPhone)
+	order, err := s.orders.FindByIDAndPhone(ctx, shop.ID, orderID, phone)
+	if err != nil {
+		return nil, err
+	}
+	// Constant-time comparison of the phone to prevent timing side-channel.
+	if subtle.ConstantTimeCompare([]byte(order.CustomerPhone), []byte(phone)) != 1 {
+		return nil, domain.ErrOrderNotFound
+	}
+
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 func isValidTransition(from, to string) bool {
@@ -222,4 +289,17 @@ func paginationDefaults(page, size string) (int, int) {
 		s = 10
 	}
 	return s, (p - 1) * s
+}
+
+// normalizePhone strips spaces, dashes, and leading +880/880 to get a consistent 01XXXXXXXXX form.
+func normalizePhone(phone string) string {
+	phone = strings.TrimSpace(phone)
+	phone = strings.ReplaceAll(phone, " ", "")
+	phone = strings.ReplaceAll(phone, "-", "")
+	if strings.HasPrefix(phone, "+880") {
+		phone = "0" + phone[4:]
+	} else if strings.HasPrefix(phone, "880") {
+		phone = "0" + phone[3:]
+	}
+	return phone
 }
