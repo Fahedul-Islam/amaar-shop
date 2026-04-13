@@ -12,6 +12,7 @@ import ProductForm from '@/pages/ProductForm';
 import Categories from '@/pages/Categories';
 import Orders from '@/pages/Orders';
 import OrderDetail from '@/pages/OrderDetail';
+import Analytics from '@/pages/Analytics';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -78,6 +79,7 @@ export default function Dashboard() {
           <DashboardNavLink to="/dashboard/orders">Orders</DashboardNavLink>
           <DashboardNavLink to="/dashboard/products">{t('shop.products')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/categories">{t('shop.categories')}</DashboardNavLink>
+          <DashboardNavLink to="/dashboard/analytics">{t('analytics.title')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/settings">{t('shop.settings')}</DashboardNavLink>
           <DashboardNavLink to="/dashboard/settings/delivery">{t('shop.delivery_settings')}</DashboardNavLink>
         </div>
@@ -86,6 +88,7 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <Routes>
           <Route index element={<DashboardHome />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="orders" element={<Orders />} />
           <Route path="orders/:id" element={<OrderDetail />} />
           <Route path="products" element={<Products />} />

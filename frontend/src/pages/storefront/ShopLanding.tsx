@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getProducts, getCategories } from '@/lib/storefrontApi';
 import type { PublicProduct, PublicCategory } from '@/lib/storefrontApi';
+import { getPopularProducts } from '@/lib/analyticsApi';
+import type { PopularProduct } from '@/lib/analyticsApi';
 import { useStorefront } from './StorefrontLayout';
 
 export default function ShopLanding() {
@@ -9,6 +11,7 @@ export default function ShopLanding() {
 
   const [products, setProducts] = useState<PublicProduct[]>([]);
   const [categories, setCategories] = useState<PublicCategory[]>([]);
+  const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -35,6 +38,7 @@ export default function ShopLanding() {
 
   useEffect(() => {
     getCategories(slug).then(setCategories).catch(() => {});
+    getPopularProducts(slug).then(setPopularProducts).catch(() => {});
   }, [slug]);
 
   useEffect(() => {
@@ -75,6 +79,32 @@ export default function ShopLanding() {
           <p className="text-sm text-gray-600 mt-1">{shop.description}</p>
         )}
       </div>
+
+      {/* Popular / Trending Products */}
+      {popularProducts.length > 0 && (
+        <div className="max-w-5xl mx-auto px-4 pb-4">
+          <div className="bg-gradient-to-r from-primary-50 to-indigo-50 rounded-lg p-4">
+            <h2 className="text-sm font-semibold text-primary-800 mb-3 flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" />
+              </svg>
+              Trending Products
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
+              {popularProducts.slice(0, 5).map((pp) => (
+                <Link
+                  key={pp.product_id}
+                  to={`/s/${slug}/p/${pp.product_id}`}
+                  className="flex-shrink-0 bg-white rounded-lg px-3 py-2 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <p className="text-sm font-medium text-gray-800 whitespace-nowrap">{pp.product_name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{pp.total_quantity} sold</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="max-w-5xl mx-auto px-4 pb-3">
