@@ -45,6 +45,31 @@ func (f ProductFilter) Offset() int {
 	return (f.Page - 1) * f.PageSize
 }
 
+// MarketplaceProduct is a product with its shop info attached, used for
+// cross-shop listings on the marketplace homepage.
+type MarketplaceProduct struct {
+	Product
+	ShopName    string `json:"shop_name"`
+	ShopSlug    string `json:"shop_slug"`
+	ShopLogoURL string `json:"shop_logo_url"`
+}
+
+// MarketplaceProductFilter captures filters for the marketplace-wide product listing.
+type MarketplaceProductFilter struct {
+	Query        string
+	CategoryName string
+	Page         int
+	PageSize     int
+}
+
+// Offset returns the SQL OFFSET for the current page.
+func (f MarketplaceProductFilter) Offset() int {
+	if f.Page <= 0 {
+		return 0
+	}
+	return (f.Page - 1) * f.PageSize
+}
+
 var (
 	ErrProductNotFound   = errors.New("product not found")
 	ErrInsufficientStock = errors.New("insufficient stock")
