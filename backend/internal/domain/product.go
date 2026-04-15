@@ -11,18 +11,22 @@ const MaxProductImages = 5
 // Product is a sellable item in a shop's catalog. Images are loaded alongside
 // the product by the repository so handlers don't need a second round-trip.
 type Product struct {
-	ID          string         `json:"id"`
-	ShopID      string         `json:"shop_id"`
-	CategoryID  *string        `json:"category_id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	PriceBDT    string         `json:"price_bdt"`
-	Stock       int            `json:"stock"`
-	IsActive    bool           `json:"is_active"`
-	IsArchived  bool           `json:"is_archived"`
-	Images      []ProductImage `json:"images"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID                    string         `json:"id"`
+	ShopID                string         `json:"shop_id"`
+	CategoryID            *string        `json:"category_id"`
+	Name                  string         `json:"name"`
+	Description           string         `json:"description"`
+	PriceBDT              string         `json:"price_bdt"`
+	Stock                 int            `json:"stock"`
+	IsActive              bool           `json:"is_active"`
+	IsArchived            bool           `json:"is_archived"`
+	DiscountType          *string        `json:"discount_type"`
+	DiscountValue         *string        `json:"discount_value"`
+	DeliveryChargeDhaka   *string        `json:"delivery_charge_dhaka"`
+	DeliveryChargeOutside *string        `json:"delivery_charge_outside"`
+	Images                []ProductImage `json:"images"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
 // ProductFilter captures the optional filters and pagination that seller and

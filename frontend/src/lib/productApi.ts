@@ -27,6 +27,10 @@ export interface Product {
   stock: number;
   is_active: boolean;
   is_archived: boolean;
+  discount_type: string | null;
+  discount_value: string | null;
+  delivery_charge_dhaka: string | null;
+  delivery_charge_outside: string | null;
   images: ProductImage[];
   created_at: string;
   updated_at: string;
@@ -104,6 +108,10 @@ export interface CreateProductInput {
   stock: number;
   category_id?: string | null;
   is_active?: boolean;
+  discount_type?: string | null;
+  discount_value?: string | null;
+  delivery_charge_dhaka?: string | null;
+  delivery_charge_outside?: string | null;
 }
 
 export function createProduct(input: CreateProductInput) {
@@ -120,6 +128,10 @@ export interface UpdateProductInput {
   stock?: number;
   category_id?: string | null;
   is_active?: boolean;
+  discount_type?: string | null;
+  discount_value?: string | null;
+  delivery_charge_dhaka?: string | null;
+  delivery_charge_outside?: string | null;
 }
 
 export function updateProduct(id: string, input: UpdateProductInput) {

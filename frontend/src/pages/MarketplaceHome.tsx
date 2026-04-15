@@ -261,9 +261,23 @@ function ProductsSection() {
 
 // ─── Product Card ───
 
+function calcDiscountedPrice(price: string, discountType: string | null, discountValue: string | null): number | null {
+  if (!discountType || !discountValue) return null;
+  const p = parseFloat(price);
+  const v = parseFloat(discountValue);
+  if (isNaN(p) || isNaN(v) || v <= 0) return null;
+  if (discountType === 'percentage') return Math.round(p - (p * v) / 100);
+  if (discountType === 'flat') {
+    const result = p - v;
+    return result > 0 ? Math.round(result) : null;
+  }
+  return null;
+}
+
 function ProductCard({ product }: { product: MarketplaceProduct }) {
   const thumb = product.images?.[0]?.url;
   const outOfStock = product.stock <= 0;
+  const discounted = calcDiscountedPrice(product.price_bdt, product.discount_type, product.discount_value);
 
   return (
     <Link
@@ -293,14 +307,28 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
             </span>
           </div>
         )}
+        {discounted !== null && (
+          <span className="absolute top-1.5 left-1.5 bg-green-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+            {product.discount_type === 'percentage'
+              ? `-${product.discount_value}%`
+              : `-৳${product.discount_value}`}
+          </span>
+        )}
       </div>
 
       {/* Info */}
       <div className="p-2.5">
         <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
-        <p className="text-sm font-bold text-primary-700 mt-0.5">
-          {'\u09F3'}{product.price_bdt}
-        </p>
+        {discounted !== null ? (
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="text-sm font-bold text-primary-700">{'\u09F3'}{discounted}</span>
+            <span className="text-xs text-gray-400 line-through">{'\u09F3'}{product.price_bdt}</span>
+          </div>
+        ) : (
+          <p className="text-sm font-bold text-primary-700 mt-0.5">
+            {'\u09F3'}{product.price_bdt}
+          </p>
+        )}
         {/* Shop badge */}
         <div className="flex items-center gap-1.5 mt-1.5">
           {product.shop_logo_url ? (

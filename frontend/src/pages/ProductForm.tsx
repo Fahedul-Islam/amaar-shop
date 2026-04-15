@@ -34,6 +34,10 @@ export default function ProductForm() {
   const [stock, setStock] = useState('0');
   const [categoryID, setCategoryID] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [discountType, setDiscountType] = useState<string>('');
+  const [discountValue, setDiscountValue] = useState('');
+  const [deliveryChargeDhaka, setDeliveryChargeDhaka] = useState('');
+  const [deliveryChargeOutside, setDeliveryChargeOutside] = useState('');
   const [images, setImages] = useState<ProductImage[]>([]);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -47,6 +51,10 @@ export default function ProductForm() {
     setStock(String(p.stock));
     setCategoryID(p.category_id ?? '');
     setIsActive(p.is_active);
+    setDiscountType(p.discount_type ?? '');
+    setDiscountValue(p.discount_value ?? '');
+    setDeliveryChargeDhaka(p.delivery_charge_dhaka ?? '');
+    setDeliveryChargeOutside(p.delivery_charge_outside ?? '');
     setImages(p.images);
   }, [productQuery.data]);
 
@@ -59,6 +67,10 @@ export default function ProductForm() {
         stock: Number(stock) || 0,
         category_id: categoryID || null,
         is_active: isActive,
+        discount_type: discountType || null,
+        discount_value: discountValue || null,
+        delivery_charge_dhaka: deliveryChargeDhaka || null,
+        delivery_charge_outside: deliveryChargeOutside || null,
       };
       if (isEdit && id) {
         return updateProduct(id, payload);
@@ -214,6 +226,73 @@ export default function ProductForm() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Discount */}
+        <div className="border-t pt-4 mt-2">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Discount</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Discount Type</label>
+              <select
+                value={discountType}
+                onChange={(e) => {
+                  setDiscountType(e.target.value);
+                  if (!e.target.value) setDiscountValue('');
+                }}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">No discount</option>
+                <option value="flat">Flat (&#2547;)</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+            </div>
+            {discountType && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Discount Value {discountType === 'percentage' ? '(%)' : '(৳)'}
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 50'}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Delivery Charges */}
+        <div className="border-t pt-4 mt-2">
+          <h3 className="text-sm font-semibold text-gray-800 mb-1">Delivery Charges</h3>
+          <p className="text-xs text-gray-400 mb-3">Leave empty to use shop-level delivery settings.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Inside Dhaka (&#2547;)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={deliveryChargeDhaka}
+                onChange={(e) => setDeliveryChargeDhaka(e.target.value)}
+                placeholder="e.g. 100"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Outside Dhaka (&#2547;)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={deliveryChargeOutside}
+                onChange={(e) => setDeliveryChargeOutside(e.target.value)}
+                placeholder="e.g. 150"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm text-gray-700">

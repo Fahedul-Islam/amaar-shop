@@ -58,6 +58,8 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 	query := fmt.Sprintf(
 		`SELECT p.id, p.shop_id, p.category_id, p.name, COALESCE(p.description, ''),
 		        p.price_bdt::text, p.stock, p.is_active, p.is_archived,
+		        p.discount_type, p.discount_value::text,
+		        p.delivery_charge_dhaka::text, p.delivery_charge_outside::text,
 		        p.created_at, p.updated_at,
 		        s.name, s.slug, COALESCE(s.logo_url, '')
 		 %s
@@ -77,11 +79,12 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 	ids := make([]string, 0)
 	for rows.Next() {
 		mp := &domain.MarketplaceProduct{}
-		var categoryID sql.NullString
-		var description sql.NullString
+		var categoryID, description, discountType, discountValue, deliveryDhaka, deliveryOutside sql.NullString
 		if err := rows.Scan(
 			&mp.ID, &mp.ShopID, &categoryID, &mp.Name, &description, &mp.PriceBDT,
-			&mp.Stock, &mp.IsActive, &mp.IsArchived, &mp.CreatedAt, &mp.UpdatedAt,
+			&mp.Stock, &mp.IsActive, &mp.IsArchived,
+			&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
+			&mp.CreatedAt, &mp.UpdatedAt,
 			&mp.ShopName, &mp.ShopSlug, &mp.ShopLogoURL,
 		); err != nil {
 			return nil, 0, fmt.Errorf("marketplace scan: %w", err)
@@ -90,6 +93,18 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 			mp.CategoryID = &categoryID.String
 		}
 		mp.Description = description.String
+		if discountType.Valid {
+			mp.DiscountType = &discountType.String
+		}
+		if discountValue.Valid {
+			mp.DiscountValue = &discountValue.String
+		}
+		if deliveryDhaka.Valid {
+			mp.DeliveryChargeDhaka = &deliveryDhaka.String
+		}
+		if deliveryOutside.Valid {
+			mp.DeliveryChargeOutside = &deliveryOutside.String
+		}
 		mp.Images = []domain.ProductImage{}
 		products = append(products, mp)
 		ids = append(ids, mp.ID)

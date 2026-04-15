@@ -70,12 +70,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := service.CreateProductInput{
-		Name:        req.Name,
-		Description: req.Description,
-		PriceBDT:    req.PriceBDT,
-		Stock:       req.Stock,
-		CategoryID:  req.CategoryID,
-		IsActive:    isActive,
+		Name:                  req.Name,
+		Description:           req.Description,
+		PriceBDT:              req.PriceBDT,
+		Stock:                 req.Stock,
+		CategoryID:            req.CategoryID,
+		IsActive:              isActive,
+		DiscountType:          req.DiscountType,
+		DiscountValue:         req.DiscountValue,
+		DeliveryChargeDhaka:   req.DeliveryChargeDhaka,
+		DeliveryChargeOutside: req.DeliveryChargeOutside,
 	}
 
 	p, err := h.svc.CreateProduct(r.Context(), userID, in)
@@ -172,6 +176,52 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			} else {
 				in.CategoryID = &s
 			}
+		}
+	}
+	// Discount fields: sending null clears discount.
+	if v, ok := raw["discount_type"]; ok {
+		if string(v) == "null" {
+			in.ClearDiscount = true
+		} else {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				httputil.WriteValidationError(w, "discount_type must be a string or null")
+				return
+			}
+			in.DiscountType = &s
+		}
+	}
+	if v, ok := raw["discount_value"]; ok {
+		if string(v) != "null" {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				httputil.WriteValidationError(w, "discount_value must be a string or null")
+				return
+			}
+			in.DiscountValue = &s
+		}
+	}
+	// Delivery charge fields: sending null clears charges.
+	if v, ok := raw["delivery_charge_dhaka"]; ok {
+		if string(v) == "null" {
+			in.ClearDeliveryCharges = true
+		} else {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				httputil.WriteValidationError(w, "delivery_charge_dhaka must be a string or null")
+				return
+			}
+			in.DeliveryChargeDhaka = &s
+		}
+	}
+	if v, ok := raw["delivery_charge_outside"]; ok {
+		if string(v) != "null" {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				httputil.WriteValidationError(w, "delivery_charge_outside must be a string or null")
+				return
+			}
+			in.DeliveryChargeOutside = &s
 		}
 	}
 

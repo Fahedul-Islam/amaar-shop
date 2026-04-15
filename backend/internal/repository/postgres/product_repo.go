@@ -24,10 +24,13 @@ func NewProductRepo(db database.DBTX) repository.ProductRepository {
 func (r *productRepo) Create(ctx context.Context, p *domain.Product) error {
 	err := r.db.QueryRowContext(ctx,
 		`INSERT INTO products
-		   (shop_id, category_id, name, description, price_bdt, stock, is_active)
-		 VALUES ($1, $2, $3, NULLIF($4, ''), $5::numeric, $6, $7)
+		   (shop_id, category_id, name, description, price_bdt, stock, is_active,
+		    discount_type, discount_value, delivery_charge_dhaka, delivery_charge_outside)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), $5::numeric, $6, $7,
+		         $8, $9::numeric, $10::numeric, $11::numeric)
 		 RETURNING id, is_archived, created_at, updated_at`,
 		p.ShopID, p.CategoryID, p.Name, p.Description, p.PriceBDT, p.Stock, p.IsActive,
+		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside,
 	).Scan(&p.ID, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return err
@@ -44,10 +47,16 @@ func (r *productRepo) Update(ctx context.Context, p *domain.Product) error {
 		     description = NULLIF($3, ''),
 		     price_bdt = $4::numeric,
 		     stock = $5,
-		     is_active = $6
-		 WHERE id = $7 AND shop_id = $8
+		     is_active = $6,
+		     discount_type = $7,
+		     discount_value = $8::numeric,
+		     delivery_charge_dhaka = $9::numeric,
+		     delivery_charge_outside = $10::numeric
+		 WHERE id = $11 AND shop_id = $12
 		 RETURNING updated_at`,
-		p.CategoryID, p.Name, p.Description, p.PriceBDT, p.Stock, p.IsActive, p.ID, p.ShopID,
+		p.CategoryID, p.Name, p.Description, p.PriceBDT, p.Stock, p.IsActive,
+		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside,
+		p.ID, p.ShopID,
 	).Scan(&p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ErrProductNotFound
@@ -93,17 +102,20 @@ func (r *productRepo) Delete(ctx context.Context, id, shopID string) error {
 
 func (r *productRepo) FindByID(ctx context.Context, id, shopID string) (*domain.Product, error) {
 	p := &domain.Product{}
-	var categoryID sql.NullString
-	var description sql.NullString
+	var categoryID, description, discountType, discountValue, deliveryDhaka, deliveryOutside sql.NullString
 	err := r.db.QueryRowContext(ctx,
 		`SELECT id, shop_id, category_id, name, COALESCE(description, ''), price_bdt::text,
-		        stock, is_active, is_archived, created_at, updated_at
+		        stock, is_active, is_archived,
+		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text,
+		        created_at, updated_at
 		 FROM products
 		 WHERE id = $1 AND shop_id = $2`,
 		id, shopID,
 	).Scan(
 		&p.ID, &p.ShopID, &categoryID, &p.Name, &description, &p.PriceBDT,
-		&p.Stock, &p.IsActive, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt,
+		&p.Stock, &p.IsActive, &p.IsArchived,
+		&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
+		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrProductNotFound
@@ -115,6 +127,18 @@ func (r *productRepo) FindByID(ctx context.Context, id, shopID string) (*domain.
 		p.CategoryID = &categoryID.String
 	}
 	p.Description = description.String
+	if discountType.Valid {
+		p.DiscountType = &discountType.String
+	}
+	if discountValue.Valid {
+		p.DiscountValue = &discountValue.String
+	}
+	if deliveryDhaka.Valid {
+		p.DeliveryChargeDhaka = &deliveryDhaka.String
+	}
+	if deliveryOutside.Valid {
+		p.DeliveryChargeOutside = &deliveryOutside.String
+	}
 
 	images, err := r.ListImages(ctx, p.ID, shopID)
 	if err != nil {
@@ -164,7 +188,9 @@ func (r *productRepo) ListByShop(ctx context.Context, shopID string, filter doma
 	listArgs := append(append([]interface{}{}, args...), filter.PageSize, filter.Offset())
 	query := fmt.Sprintf(
 		`SELECT id, shop_id, category_id, name, COALESCE(description, ''), price_bdt::text,
-		        stock, is_active, is_archived, created_at, updated_at
+		        stock, is_active, is_archived,
+		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text,
+		        created_at, updated_at
 		 FROM products
 		 WHERE %s
 		 ORDER BY created_at DESC
@@ -182,11 +208,12 @@ func (r *productRepo) ListByShop(ctx context.Context, shopID string, filter doma
 	ids := make([]string, 0)
 	for rows.Next() {
 		p := &domain.Product{}
-		var categoryID sql.NullString
-		var description sql.NullString
+		var categoryID, description, discountType, discountValue, deliveryDhaka, deliveryOutside sql.NullString
 		if err := rows.Scan(
 			&p.ID, &p.ShopID, &categoryID, &p.Name, &description, &p.PriceBDT,
-			&p.Stock, &p.IsActive, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt,
+			&p.Stock, &p.IsActive, &p.IsArchived,
+			&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
+			&p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -194,6 +221,18 @@ func (r *productRepo) ListByShop(ctx context.Context, shopID string, filter doma
 			p.CategoryID = &categoryID.String
 		}
 		p.Description = description.String
+		if discountType.Valid {
+			p.DiscountType = &discountType.String
+		}
+		if discountValue.Valid {
+			p.DiscountValue = &discountValue.String
+		}
+		if deliveryDhaka.Valid {
+			p.DeliveryChargeDhaka = &deliveryDhaka.String
+		}
+		if deliveryOutside.Valid {
+			p.DeliveryChargeOutside = &deliveryOutside.String
+		}
 		p.Images = []domain.ProductImage{}
 		products = append(products, p)
 		ids = append(ids, p.ID)

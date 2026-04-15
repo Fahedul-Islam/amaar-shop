@@ -36,30 +36,38 @@ func toImageDTOs(imgs []domain.ProductImage) []dto.ProductImageDTO {
 
 func toProductDTO(p *domain.Product) dto.ProductDTO {
 	return dto.ProductDTO{
-		ID:          p.ID,
-		ShopID:      p.ShopID,
-		CategoryID:  p.CategoryID,
-		Name:        p.Name,
-		Description: p.Description,
-		PriceBDT:    p.PriceBDT,
-		Stock:       p.Stock,
-		IsActive:    p.IsActive,
-		IsArchived:  p.IsArchived,
-		Images:      toImageDTOs(p.Images),
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
+		ID:                    p.ID,
+		ShopID:                p.ShopID,
+		CategoryID:            p.CategoryID,
+		Name:                  p.Name,
+		Description:           p.Description,
+		PriceBDT:              p.PriceBDT,
+		Stock:                 p.Stock,
+		IsActive:              p.IsActive,
+		IsArchived:            p.IsArchived,
+		DiscountType:          p.DiscountType,
+		DiscountValue:         p.DiscountValue,
+		DeliveryChargeDhaka:   p.DeliveryChargeDhaka,
+		DeliveryChargeOutside: p.DeliveryChargeOutside,
+		Images:                toImageDTOs(p.Images),
+		CreatedAt:             p.CreatedAt,
+		UpdatedAt:             p.UpdatedAt,
 	}
 }
 
 func toPublicProductDTO(p *domain.Product) dto.PublicProductDTO {
 	return dto.PublicProductDTO{
-		ID:          p.ID,
-		Name:        p.Name,
-		Description: p.Description,
-		PriceBDT:    p.PriceBDT,
-		Stock:       p.Stock,
-		CategoryID:  p.CategoryID,
-		Images:      toImageDTOs(p.Images),
+		ID:                    p.ID,
+		Name:                  p.Name,
+		Description:           p.Description,
+		PriceBDT:              p.PriceBDT,
+		Stock:                 p.Stock,
+		CategoryID:            p.CategoryID,
+		DiscountType:          p.DiscountType,
+		DiscountValue:         p.DiscountValue,
+		DeliveryChargeDhaka:   p.DeliveryChargeDhaka,
+		DeliveryChargeOutside: p.DeliveryChargeOutside,
+		Images:                toImageDTOs(p.Images),
 	}
 }
 

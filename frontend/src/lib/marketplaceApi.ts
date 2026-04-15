@@ -13,6 +13,10 @@ export interface MarketplaceProduct {
   price_bdt: string;
   stock: number;
   category_id: string | null;
+  discount_type: string | null;
+  discount_value: string | null;
+  delivery_charge_dhaka: string | null;
+  delivery_charge_outside: string | null;
   images: ProductImage[];
   shop_name: string;
   shop_slug: string;

@@ -28,12 +28,16 @@ type PublicCategoryDTO struct {
 
 // CreateProductRequest is the JSON body for POST /api/shops/me/products.
 type CreateProductRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	PriceBDT    string  `json:"price_bdt"`
-	Stock       int     `json:"stock"`
-	CategoryID  *string `json:"category_id"`
-	IsActive    *bool   `json:"is_active"`
+	Name                  string  `json:"name"`
+	Description           string  `json:"description"`
+	PriceBDT              string  `json:"price_bdt"`
+	Stock                 int     `json:"stock"`
+	CategoryID            *string `json:"category_id"`
+	IsActive              *bool   `json:"is_active"`
+	DiscountType          *string `json:"discount_type"`
+	DiscountValue         *string `json:"discount_value"`
+	DeliveryChargeDhaka   *string `json:"delivery_charge_dhaka"`
+	DeliveryChargeOutside *string `json:"delivery_charge_outside"`
 }
 
 // UpdateProductRequest mirrors CreateProductRequest but every field is optional.
@@ -62,28 +66,36 @@ type ProductImageDTO struct {
 }
 
 type ProductDTO struct {
-	ID          string            `json:"id"`
-	ShopID      string            `json:"shop_id"`
-	CategoryID  *string           `json:"category_id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	PriceBDT    string            `json:"price_bdt"`
-	Stock       int               `json:"stock"`
-	IsActive    bool              `json:"is_active"`
-	IsArchived  bool              `json:"is_archived"`
-	Images      []ProductImageDTO `json:"images"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	ID                    string            `json:"id"`
+	ShopID                string            `json:"shop_id"`
+	CategoryID            *string           `json:"category_id"`
+	Name                  string            `json:"name"`
+	Description           string            `json:"description"`
+	PriceBDT              string            `json:"price_bdt"`
+	Stock                 int               `json:"stock"`
+	IsActive              bool              `json:"is_active"`
+	IsArchived            bool              `json:"is_archived"`
+	DiscountType          *string           `json:"discount_type"`
+	DiscountValue         *string           `json:"discount_value"`
+	DeliveryChargeDhaka   *string           `json:"delivery_charge_dhaka"`
+	DeliveryChargeOutside *string           `json:"delivery_charge_outside"`
+	Images                []ProductImageDTO `json:"images"`
+	CreatedAt             time.Time         `json:"created_at"`
+	UpdatedAt             time.Time         `json:"updated_at"`
 }
 
 type PublicProductDTO struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	PriceBDT    string            `json:"price_bdt"`
-	Stock       int               `json:"stock"`
-	CategoryID  *string           `json:"category_id"`
-	Images      []ProductImageDTO `json:"images"`
+	ID                    string            `json:"id"`
+	Name                  string            `json:"name"`
+	Description           string            `json:"description"`
+	PriceBDT              string            `json:"price_bdt"`
+	Stock                 int               `json:"stock"`
+	CategoryID            *string           `json:"category_id"`
+	DiscountType          *string           `json:"discount_type"`
+	DiscountValue         *string           `json:"discount_value"`
+	DeliveryChargeDhaka   *string           `json:"delivery_charge_dhaka"`
+	DeliveryChargeOutside *string           `json:"delivery_charge_outside"`
+	Images                []ProductImageDTO `json:"images"`
 }
 
 // ArchiveResponse is the trimmed shape for POST /products/{id}/archive.

@@ -117,16 +117,20 @@ func toMarketplaceProductDTO(mp *domain.MarketplaceProduct) dto.MarketplaceProdu
 		})
 	}
 	return dto.MarketplaceProductDTO{
-		ID:          mp.ID,
-		Name:        mp.Name,
-		Description: mp.Description,
-		PriceBDT:    mp.PriceBDT,
-		Stock:       mp.Stock,
-		CategoryID:  mp.CategoryID,
-		Images:      imgs,
-		ShopName:    mp.ShopName,
-		ShopSlug:    mp.ShopSlug,
-		ShopLogoURL: mp.ShopLogoURL,
+		ID:                    mp.ID,
+		Name:                  mp.Name,
+		Description:           mp.Description,
+		PriceBDT:              mp.PriceBDT,
+		Stock:                 mp.Stock,
+		CategoryID:            mp.CategoryID,
+		DiscountType:          mp.DiscountType,
+		DiscountValue:         mp.DiscountValue,
+		DeliveryChargeDhaka:   mp.DeliveryChargeDhaka,
+		DeliveryChargeOutside: mp.DeliveryChargeOutside,
+		Images:                imgs,
+		ShopName:              mp.ShopName,
+		ShopSlug:              mp.ShopSlug,
+		ShopLogoURL:           mp.ShopLogoURL,
 	}
 }
 

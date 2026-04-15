@@ -14,24 +14,34 @@ import (
 // Validation happens in the service; the handler trims and parses but doesn't
 // enforce domain rules.
 type CreateProductInput struct {
-	Name        string
-	Description string
-	PriceBDT    string
-	Stock       int
-	CategoryID  *string
-	IsActive    bool
+	Name                  string
+	Description           string
+	PriceBDT              string
+	Stock                 int
+	CategoryID            *string
+	IsActive              bool
+	DiscountType          *string
+	DiscountValue         *string
+	DeliveryChargeDhaka   *string
+	DeliveryChargeOutside *string
 }
 
 // UpdateProductInput uses pointer fields so nil means "leave unchanged".
 // ClearCategory=true detaches the product from its category regardless of CategoryID.
 type UpdateProductInput struct {
-	Name          *string
-	Description   *string
-	PriceBDT      *string
-	Stock         *int
-	CategoryID    *string
-	ClearCategory bool
-	IsActive      *bool
+	Name                  *string
+	Description           *string
+	PriceBDT              *string
+	Stock                 *int
+	CategoryID            *string
+	ClearCategory         bool
+	IsActive              *bool
+	DiscountType          *string
+	DiscountValue         *string
+	ClearDiscount         bool
+	DeliveryChargeDhaka   *string
+	DeliveryChargeOutside *string
+	ClearDeliveryCharges  bool
 }
 
 // ProductService enforces ownership, category-in-shop, stock/price validation,
@@ -125,13 +135,17 @@ func (s *ProductService) CreateProduct(ctx context.Context, ownerUserID string, 
 	}
 
 	p := &domain.Product{
-		ShopID:      shop.ID,
-		CategoryID:  catID,
-		Name:        in.Name,
-		Description: in.Description,
-		PriceBDT:    in.PriceBDT,
-		Stock:       in.Stock,
-		IsActive:    in.IsActive,
+		ShopID:                shop.ID,
+		CategoryID:            catID,
+		Name:                  in.Name,
+		Description:           in.Description,
+		PriceBDT:              in.PriceBDT,
+		Stock:                 in.Stock,
+		IsActive:              in.IsActive,
+		DiscountType:          in.DiscountType,
+		DiscountValue:         in.DiscountValue,
+		DeliveryChargeDhaka:   in.DeliveryChargeDhaka,
+		DeliveryChargeOutside: in.DeliveryChargeOutside,
 	}
 	if err := s.products.Create(ctx, p); err != nil {
 		return nil, err
@@ -171,6 +185,29 @@ func (s *ProductService) UpdateProduct(ctx context.Context, ownerUserID, product
 			return nil, err
 		}
 		p.CategoryID = in.CategoryID
+	}
+
+	if in.ClearDiscount {
+		p.DiscountType = nil
+		p.DiscountValue = nil
+	} else {
+		if in.DiscountType != nil {
+			p.DiscountType = in.DiscountType
+		}
+		if in.DiscountValue != nil {
+			p.DiscountValue = in.DiscountValue
+		}
+	}
+	if in.ClearDeliveryCharges {
+		p.DeliveryChargeDhaka = nil
+		p.DeliveryChargeOutside = nil
+	} else {
+		if in.DeliveryChargeDhaka != nil {
+			p.DeliveryChargeDhaka = in.DeliveryChargeDhaka
+		}
+		if in.DeliveryChargeOutside != nil {
+			p.DeliveryChargeOutside = in.DeliveryChargeOutside
+		}
 	}
 
 	if err := validateProductFields(p.Name, p.PriceBDT, p.Stock); err != nil {
