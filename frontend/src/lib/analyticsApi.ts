@@ -1,6 +1,4 @@
-import { apiFetch } from './api';
-
-// --- Seller analytics (authenticated) ---
+import { apiFetch, publicFetch, ApiRequestError } from './api';
 
 export interface TodayStats {
   total_orders: number;
@@ -22,19 +20,12 @@ export interface TopProduct {
   total_revenue_bdt: string;
 }
 
-export function getTodayStats() {
-  return apiFetch<TodayStats>('/api/shops/me/stats/today');
-}
+export const getTodayStats = () => apiFetch<TodayStats>('/api/shops/me/stats/today');
 
-export function getRangeStats(from: string, to: string) {
-  return apiFetch<DayStat[]>(`/api/shops/me/stats/range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-}
+export const getRangeStats = (from: string, to: string) =>
+  apiFetch<DayStat[]>(`/api/shops/me/stats/range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
-export function getTopProducts() {
-  return apiFetch<TopProduct[]>('/api/shops/me/stats/top-products');
-}
-
-// --- Public storefront analytics (no auth) ---
+export const getTopProducts = () => apiFetch<TopProduct[]>('/api/shops/me/stats/top-products');
 
 export interface PopularProduct {
   product_id: string;
@@ -43,10 +34,12 @@ export interface PopularProduct {
 }
 
 export async function getPopularProducts(slug: string): Promise<PopularProduct[]> {
-  const res = await fetch(`/api/shops/by-slug/${encodeURIComponent(slug)}/popular-products`, {
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!res.ok) return [];
-  const body = await res.json();
-  return (body.data ?? []) as PopularProduct[];
+  try {
+    return await publicFetch<PopularProduct[]>(
+      `/api/shops/by-slug/${encodeURIComponent(slug)}/popular-products`,
+    );
+  } catch (err) {
+    if (err instanceof ApiRequestError) return [];
+    throw err;
+  }
 }

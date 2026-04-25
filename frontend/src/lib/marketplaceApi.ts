@@ -1,10 +1,6 @@
-// Public marketplace API — no auth required.
-// These endpoints fetch data across all shops for the marketplace homepage.
-
+import { publicFetch, publicFetchEnvelope } from './api';
 import type { ProductImage, Pagination } from './productApi';
 import type { Order } from './storefrontApi';
-
-// --- Types ---
 
 export interface MarketplaceProduct {
   id: string;
@@ -43,37 +39,6 @@ export interface PaginatedMarketplaceShops {
   pagination: Pagination;
 }
 
-// --- Helpers ---
-
-async function publicFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
-  };
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  const res = await fetch(path, { ...options, headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: 'unknown', message: 'Request failed' } }));
-    throw body.error;
-  }
-  if (res.status === 204) return undefined as T;
-  const body = await res.json();
-  return body.data as T;
-}
-
-async function publicFetchEnvelope<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' } });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: 'unknown', message: 'Request failed' } }));
-    throw body.error;
-  }
-  return (await res.json()) as T;
-}
-
-// --- Products ---
-
 export function getMarketplaceProducts(
   params: { q?: string; category?: string; page?: number; page_size?: number } = {},
 ) {
@@ -82,34 +47,23 @@ export function getMarketplaceProducts(
   if (params.category) qs.set('category', params.category);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
-  const query = qs.toString();
-  return publicFetchEnvelope<PaginatedMarketplaceProducts>(`/api/marketplace/products${query ? `?${query}` : ''}`);
+  const q = qs.toString();
+  return publicFetchEnvelope<PaginatedMarketplaceProducts>(`/api/marketplace/products${q ? `?${q}` : ''}`);
 }
 
-// --- Shops ---
-
-export function getMarketplaceShops(
-  params: { q?: string; page?: number; page_size?: number } = {},
-) {
+export function getMarketplaceShops(params: { q?: string; page?: number; page_size?: number } = {}) {
   const qs = new URLSearchParams();
   if (params.q) qs.set('q', params.q);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
-  const query = qs.toString();
-  return publicFetchEnvelope<PaginatedMarketplaceShops>(`/api/marketplace/shops${query ? `?${query}` : ''}`);
+  const q = qs.toString();
+  return publicFetchEnvelope<PaginatedMarketplaceShops>(`/api/marketplace/shops${q ? `?${q}` : ''}`);
 }
 
-// --- Categories ---
+export const getMarketplaceCategories = () => publicFetch<string[]>('/api/marketplace/categories');
 
-export function getMarketplaceCategories() {
-  return publicFetch<string[]>('/api/marketplace/categories');
-}
-
-// --- Order Lookup ---
-
-export function lookupOrdersByPhone(phone: string) {
-  return publicFetch<Order[]>('/api/marketplace/orders/lookup', {
+export const lookupOrdersByPhone = (phone: string) =>
+  publicFetch<Order[]>('/api/marketplace/orders/lookup', {
     method: 'POST',
     body: JSON.stringify({ phone }),
   });
-}

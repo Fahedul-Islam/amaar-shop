@@ -17,7 +17,9 @@ services:
     restart: unless-stopped
     volumes: []
     ports:
-      - "80:80"
+      - "80:3000"
+    environment:
+      - BACKEND_URL=http://backend:8080
 
   adminer:
     profiles:

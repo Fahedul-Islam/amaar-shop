@@ -1,5 +1,6 @@
-import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+'use client';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch, setAccessToken } from '@/lib/api';
 
 interface User {
@@ -19,21 +20,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-interface AuthResponse {
-  access_token: string;
-  user: User;
-}
-
-interface TokenResponse {
-  access_token: string;
-}
+interface AuthResponse { access_token: string; user: User }
+interface TokenResponse { access_token: string }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const router = useRouter();
 
-  // Try to restore session from refresh cookie on mount
   useEffect(() => {
     async function tryRefresh() {
       try {
@@ -51,36 +45,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tryRefresh();
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await apiFetch<AuthResponse>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    setAccessToken(data.access_token);
-    setUser(data.user);
-    navigate('/dashboard');
-  }, [navigate]);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const data = await apiFetch<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      setAccessToken(data.access_token);
+      setUser(data.user);
+      router.push('/dashboard');
+    },
+    [router],
+  );
 
-  const signup = useCallback(async (email: string, password: string) => {
-    const data = await apiFetch<AuthResponse>('/api/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    setAccessToken(data.access_token);
-    setUser(data.user);
-    navigate('/dashboard');
-  }, [navigate]);
+  const signup = useCallback(
+    async (email: string, password: string) => {
+      const data = await apiFetch<AuthResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      setAccessToken(data.access_token);
+      setUser(data.user);
+      router.push('/dashboard');
+    },
+    [router],
+  );
 
   const logout = useCallback(async () => {
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch {
-      // Clear local state even if server call fails
+      // clear local state even if server call fails
     }
     setAccessToken(null);
     setUser(null);
-    navigate('/login');
-  }, [navigate]);
+    router.push('/login');
+  }, [router]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signup, logout }}>

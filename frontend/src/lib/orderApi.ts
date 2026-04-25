@@ -1,10 +1,7 @@
 import { apiFetch } from './api';
 import type { Order } from './storefrontApi';
 
-export type { Order } from './storefrontApi';
-export type { OrderItem } from './storefrontApi';
-
-// --- Seller endpoints (authenticated) ---
+export type { Order, OrderItem } from './storefrontApi';
 
 export interface OrderListParams {
   page?: number;
@@ -19,24 +16,18 @@ export function listOrders(params: OrderListParams = {}) {
   if (params.page_size) qs.set('page_size', String(params.page_size));
   if (params.status) qs.set('status', params.status);
   if (params.phone) qs.set('phone', params.phone);
-  const query = qs.toString();
-  const path = `/api/shops/me/orders${query ? `?${query}` : ''}`;
-  return apiFetch<Order[]>(path);
+  const q = qs.toString();
+  return apiFetch<Order[]>(`/api/shops/me/orders${q ? `?${q}` : ''}`);
 }
 
-export function getOrder(id: string) {
-  return apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}`);
-}
+export const getOrder = (id: string) =>
+  apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}`);
 
-export function updateOrderStatus(id: string, status: string, cancellation_reason?: string) {
-  return apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/status`, {
+export const updateOrderStatus = (id: string, status: string, cancellation_reason?: string) =>
+  apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/status`, {
     method: 'POST',
     body: JSON.stringify({ status, cancellation_reason }),
   });
-}
 
-export function markAdvanceReceived(id: string) {
-  return apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/advance-received`, {
-    method: 'POST',
-  });
-}
+export const markAdvanceReceived = (id: string) =>
+  apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/advance-received`, { method: 'POST' });

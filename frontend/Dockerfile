@@ -9,12 +9,20 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# ---- Serve stage ----
-FROM nginx:alpine
+# ---- Run stage ----
+FROM node:20-alpine
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-EXPOSE 80
+ENV NODE_ENV=production
+ENV PORT=3000
 
-CMD ["nginx", "-g", "daemon off;"]
+COPY --from=builder /app/package.json /app/package-lock.json* ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.mjs ./
+COPY --from=builder /app/node_modules ./node_modules
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

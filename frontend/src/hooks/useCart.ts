@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+'use client';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface CartItem {
   productId: string;
@@ -9,11 +10,10 @@ export interface CartItem {
   stock: number;
 }
 
-function storageKey(slug: string) {
-  return `amaarshop_cart_${slug}`;
-}
+const storageKey = (slug: string) => `amaarshop_cart_${slug}`;
 
 function loadCart(slug: string): CartItem[] {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(storageKey(slug));
     return raw ? JSON.parse(raw) : [];
@@ -23,11 +23,16 @@ function loadCart(slug: string): CartItem[] {
 }
 
 function saveCart(slug: string, items: CartItem[]) {
+  if (typeof window === 'undefined') return;
   localStorage.setItem(storageKey(slug), JSON.stringify(items));
 }
 
 export function useCart(slug: string) {
-  const [items, setItems] = useState<CartItem[]>(() => loadCart(slug));
+  const [items, setItems] = useState<CartItem[]>([]);
+
+  useEffect(() => {
+    setItems(loadCart(slug));
+  }, [slug]);
 
   const persist = useCallback(
     (next: CartItem[]) => {
@@ -56,38 +61,22 @@ export function useCart(slug: string) {
       const current = loadCart(slug);
       const idx = current.findIndex((c) => c.productId === productId);
       if (idx < 0) return;
-      if (quantity <= 0) {
-        current.splice(idx, 1);
-      } else {
-        current[idx].quantity = Math.min(quantity, current[idx].stock);
-      }
+      if (quantity <= 0) current.splice(idx, 1);
+      else current[idx].quantity = Math.min(quantity, current[idx].stock);
       persist(current);
     },
     [slug, persist],
   );
 
   const removeItem = useCallback(
-    (productId: string) => {
-      const current = loadCart(slug).filter((c) => c.productId !== productId);
-      persist(current);
-    },
+    (productId: string) => persist(loadCart(slug).filter((c) => c.productId !== productId)),
     [slug, persist],
   );
 
-  const clearCart = useCallback(() => {
-    persist([]);
-  }, [persist]);
+  const clearCart = useCallback(() => persist([]), [persist]);
 
   const subtotal = items.reduce((sum, it) => sum + parseFloat(it.price) * it.quantity, 0);
   const totalQuantity = items.reduce((sum, it) => sum + it.quantity, 0);
 
-  return {
-    items,
-    addItem,
-    updateQuantity,
-    removeItem,
-    clearCart,
-    subtotal,
-    totalQuantity,
-  };
+  return { items, addItem, updateQuantity, removeItem, clearCart, subtotal, totalQuantity };
 }

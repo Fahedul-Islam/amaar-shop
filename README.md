@@ -5,7 +5,7 @@ A lightweight Shopify-style platform for small Bangladeshi businesses who curren
 ## Stack
 
 - **Backend:** Go (chi router, sqlx, JWT, PostgreSQL 16)
-- **Frontend:** React + Vite + TypeScript (Tailwind, TanStack Query, react-i18next, Recharts)
+- **Frontend:** Next.js 14 (App Router) + TypeScript (Tailwind, TanStack Query)
 - **Infrastructure:** Docker Compose
 
 ## Quick Start
@@ -25,7 +25,7 @@ Services:
 
 | Service   | URL                    |
 |-----------|------------------------|
-| Frontend  | http://localhost:5173  |
+| Frontend  | http://localhost:3000  |
 | Backend   | http://localhost:8080  |
 | Adminer   | http://localhost:8081  |
 | Health    | http://localhost:8080/health |
@@ -63,10 +63,10 @@ backend/
 
 frontend/
 ├── src/
+│   ├── app/                 # Next.js App Router pages (storefront, dashboard, marketplace)
 │   ├── components/          # Shared UI components
-│   ├── pages/               # Route pages
 │   ├── hooks/               # Custom React hooks
-│   ├── lib/                 # i18n, API client, utilities
+│   ├── lib/                 # API client, i18n, formatters
 │   └── locales/             # en.json, bn.json
 └── public/
 ```

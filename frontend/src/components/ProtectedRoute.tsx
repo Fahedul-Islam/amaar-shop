@@ -1,21 +1,22 @@
-import { Navigate } from 'react-router-dom';
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
-// ProtectedRoute redirects unauthenticated users to /login.
-// Shows nothing while the auth state is still loading to avoid flicker.
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const router = useRouter();
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
+  }, [user, loading, router]);
+
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
       </div>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

@@ -1,10 +1,6 @@
-// Public storefront API — no auth required.
-// These endpoints fetch by shop slug and are used by the customer-facing pages.
-
+import { publicFetch, publicFetchEnvelope } from './api';
 import type { PublicShop, PublicDeliverySettings } from './shopApi';
 import type { ProductImage, Pagination } from './productApi';
-
-// --- Types ---
 
 export interface PublicProduct {
   id: string;
@@ -68,53 +64,14 @@ export interface PlaceOrderInput {
   items: { product_id: string; quantity: number }[];
 }
 
-// --- Helpers ---
+export const getShop = (slug: string) =>
+  publicFetch<PublicShop>(`/api/shops/by-slug/${encodeURIComponent(slug)}`);
 
-// Public endpoints don't need auth tokens so we use plain fetch.
-async function publicFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
-  };
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
+export const getDeliverySettings = (slug: string) =>
+  publicFetch<PublicDeliverySettings>(`/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`);
 
-  const res = await fetch(path, { ...options, headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: 'unknown', message: 'Request failed' } }));
-    throw body.error;
-  }
-  if (res.status === 204) return undefined as T;
-  const body = await res.json();
-  return body.data as T;
-}
-
-async function publicFetchEnvelope<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' } });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: 'unknown', message: 'Request failed' } }));
-    throw body.error;
-  }
-  return (await res.json()) as T;
-}
-
-// --- Shop ---
-
-export function getShop(slug: string) {
-  return publicFetch<PublicShop>(`/api/shops/by-slug/${encodeURIComponent(slug)}`);
-}
-
-export function getDeliverySettings(slug: string) {
-  return publicFetch<PublicDeliverySettings>(`/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`);
-}
-
-// --- Categories ---
-
-export function getCategories(slug: string) {
-  return publicFetch<PublicCategory[]>(`/api/shops/by-slug/${encodeURIComponent(slug)}/categories`);
-}
-
-// --- Products ---
+export const getCategories = (slug: string) =>
+  publicFetch<PublicCategory[]>(`/api/shops/by-slug/${encodeURIComponent(slug)}/categories`);
 
 export function getProducts(
   slug: string,
@@ -125,32 +82,42 @@ export function getProducts(
   if (params.category_id) qs.set('category_id', params.category_id);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
-  const query = qs.toString();
-  const path = `/api/shops/by-slug/${encodeURIComponent(slug)}/products${query ? `?${query}` : ''}`;
-  return publicFetchEnvelope<PaginatedPublicProducts>(path);
-}
-
-export function getProduct(slug: string, productId: string) {
-  return publicFetch<PublicProduct>(
-    `/api/shops/by-slug/${encodeURIComponent(slug)}/products/${encodeURIComponent(productId)}`,
+  const q = qs.toString();
+  return publicFetchEnvelope<PaginatedPublicProducts>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/products${q ? `?${q}` : ''}`,
   );
 }
 
-// --- Orders ---
+export const getProduct = (slug: string, productId: string) =>
+  publicFetch<PublicProduct>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/products/${encodeURIComponent(productId)}`,
+  );
 
-export function placeOrder(slug: string, input: PlaceOrderInput) {
-  return publicFetch<Order>(`/api/shops/by-slug/${encodeURIComponent(slug)}/orders`, {
+export const placeOrder = (slug: string, input: PlaceOrderInput) =>
+  publicFetch<Order>(`/api/shops/by-slug/${encodeURIComponent(slug)}/orders`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
-}
 
-export function lookupOrder(slug: string, orderID: string, customerPhone: string) {
-  return publicFetch<Order>(
+export const lookupOrder = (slug: string, orderID: string, customerPhone: string) =>
+  publicFetch<Order>(
     `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/lookup`,
+    { method: 'POST', body: JSON.stringify({ customer_phone: customerPhone }) },
+  );
+
+export const buyerCancelOrder = (
+  slug: string,
+  orderID: string,
+  customerPhone: string,
+  cancellationReason: string,
+) =>
+  publicFetch<Order>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/cancel`,
     {
       method: 'POST',
-      body: JSON.stringify({ customer_phone: customerPhone }),
+      body: JSON.stringify({
+        customer_phone: customerPhone,
+        cancellation_reason: cancellationReason,
+      }),
     },
   );
-}

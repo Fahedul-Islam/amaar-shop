@@ -42,12 +42,15 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
-      - "5173:5173"
+      - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/.next
     environment:
-      - VITE_API_URL=http://localhost:8080
+      - BACKEND_URL=http://backend:8080
+    depends_on:
+      - backend
 
   migrate:
     image: migrate/migrate:v4.17.0

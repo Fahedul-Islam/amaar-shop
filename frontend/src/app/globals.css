@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --teal-50:#F0FDFA; --teal-100:#CCFBF1; --teal-200:#99F6E4; --teal-300:#5EEAD4;
+  --teal-400:#2DD4BF; --teal-500:#14B8A6; --teal-600:#0D9488; --teal-700:#0F766E;
+  --teal-800:#115E59; --teal-900:#134E4A;
+  --coral-50:#FEF2F2; --coral-100:#FEE4E2; --coral-400:#FDA29B;
+  --coral-500:#F97066; --coral-600:#D92D20;
+  --stone-50:#FAFAF9; --stone-100:#F5F5F4; --stone-200:#E7E5E4; --stone-300:#D6D3D1;
+  --stone-400:#A8A29E; --stone-500:#78716C; --stone-600:#57534E; --stone-700:#44403C;
+  --stone-800:#292524; --stone-900:#1C1917;
+  --green-50:#F0FDF4; --green-100:#DCFCE7; --green-600:#16A34A; --green-700:#15803D;
+  --red-50:#FEF2F2; --red-100:#FEE2E2; --red-500:#EF4444; --red-600:#DC2626; --red-700:#B91C1C;
+  --amber-100:#FEF3C7; --amber-500:#F59E0B; --amber-700:#B45309;
+  --blue-100:#DBEAFE; --blue-700:#1D4ED8;
+  --purple-100:#EDE9FE; --purple-700:#6D28D9;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body {
+  background: var(--stone-50);
+  color: var(--stone-900);
+  font-family: var(--font-inter), var(--font-bengali), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+@media (min-width: 768px) {
+  html, body { font-size: 16px; }
+}
+
+[lang="bn"] {
+  font-family: var(--font-bengali), var(--font-inter), sans-serif;
+  line-height: 1.4;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--stone-900);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  margin: 0;
+}
+
+button { font-family: inherit; }
+
+*:focus-visible {
+  outline: 2px solid var(--teal-500);
+  outline-offset: 2px;
+}
+
+/* Scrollbar hint for category pill rows */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

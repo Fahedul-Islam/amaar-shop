@@ -1,7 +1,5 @@
 import { apiFetch, apiFetchEnvelope } from './api';
 
-// --- Types ---
-
 export interface Category {
   id: string;
   shop_id: string;
@@ -57,31 +55,16 @@ export interface ProductListFilter {
   page_size?: number;
 }
 
-// --- Categories ---
+export const listCategories = () => apiFetch<Category[]>('/api/shops/me/categories');
 
-export function listCategories() {
-  return apiFetch<Category[]>('/api/shops/me/categories');
-}
+export const createCategory = (name: string) =>
+  apiFetch<Category>('/api/shops/me/categories', { method: 'POST', body: JSON.stringify({ name }) });
 
-export function createCategory(name: string) {
-  return apiFetch<Category>('/api/shops/me/categories', {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
-}
+export const updateCategory = (id: string, name: string) =>
+  apiFetch<Category>(`/api/shops/me/categories/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
 
-export function updateCategory(id: string, name: string) {
-  return apiFetch<Category>(`/api/shops/me/categories/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
-}
-
-export function deleteCategory(id: string) {
-  return apiFetch<void>(`/api/shops/me/categories/${id}`, { method: 'DELETE' });
-}
-
-// --- Products ---
+export const deleteCategory = (id: string) =>
+  apiFetch<void>(`/api/shops/me/categories/${id}`, { method: 'DELETE' });
 
 export function listProducts(filter: ProductListFilter = {}) {
   const params = new URLSearchParams();
@@ -91,15 +74,11 @@ export function listProducts(filter: ProductListFilter = {}) {
   if (filter.is_archived !== undefined) params.set('is_archived', String(filter.is_archived));
   if (filter.page) params.set('page', String(filter.page));
   if (filter.page_size) params.set('page_size', String(filter.page_size));
-
   const qs = params.toString();
-  const path = qs ? `/api/shops/me/products?${qs}` : '/api/shops/me/products';
-  return apiFetchEnvelope<PaginatedProducts>(path);
+  return apiFetchEnvelope<PaginatedProducts>(`/api/shops/me/products${qs ? `?${qs}` : ''}`);
 }
 
-export function getProduct(id: string) {
-  return apiFetch<Product>(`/api/shops/me/products/${id}`);
-}
+export const getProduct = (id: string) => apiFetch<Product>(`/api/shops/me/products/${id}`);
 
 export interface CreateProductInput {
   name: string;
@@ -114,67 +93,31 @@ export interface CreateProductInput {
   delivery_charge_outside?: string | null;
 }
 
-export function createProduct(input: CreateProductInput) {
-  return apiFetch<Product>('/api/shops/me/products', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
+export const createProduct = (input: CreateProductInput) =>
+  apiFetch<Product>('/api/shops/me/products', { method: 'POST', body: JSON.stringify(input) });
 
-export interface UpdateProductInput {
-  name?: string;
-  description?: string;
-  price_bdt?: string;
-  stock?: number;
-  category_id?: string | null;
-  is_active?: boolean;
-  discount_type?: string | null;
-  discount_value?: string | null;
-  delivery_charge_dhaka?: string | null;
-  delivery_charge_outside?: string | null;
-}
+export type UpdateProductInput = Partial<CreateProductInput>;
 
-export function updateProduct(id: string, input: UpdateProductInput) {
-  return apiFetch<Product>(`/api/shops/me/products/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  });
-}
+export const updateProduct = (id: string, input: UpdateProductInput) =>
+  apiFetch<Product>(`/api/shops/me/products/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
 
-export function deleteProduct(id: string) {
-  return apiFetch<void>(`/api/shops/me/products/${id}`, { method: 'DELETE' });
-}
+export const deleteProduct = (id: string) =>
+  apiFetch<void>(`/api/shops/me/products/${id}`, { method: 'DELETE' });
 
-export function archiveProduct(id: string) {
-  return apiFetch<{ id: string; is_archived: boolean }>(
-    `/api/shops/me/products/${id}/archive`,
-    { method: 'POST' },
-  );
-}
-
-// --- Product images ---
+export const archiveProduct = (id: string) =>
+  apiFetch<{ id: string; is_archived: boolean }>(`/api/shops/me/products/${id}/archive`, { method: 'POST' });
 
 export function uploadProductImage(productID: string, file: File) {
   const form = new FormData();
   form.append('file', file);
-  return apiFetch<ProductImage>(`/api/shops/me/products/${productID}/images`, {
-    method: 'POST',
-    body: form,
-  });
+  return apiFetch<ProductImage>(`/api/shops/me/products/${productID}/images`, { method: 'POST', body: form });
 }
 
-export function deleteProductImage(productID: string, imageID: string) {
-  return apiFetch<void>(`/api/shops/me/products/${productID}/images/${imageID}`, {
-    method: 'DELETE',
-  });
-}
+export const deleteProductImage = (productID: string, imageID: string) =>
+  apiFetch<void>(`/api/shops/me/products/${productID}/images/${imageID}`, { method: 'DELETE' });
 
-export function reorderProductImages(productID: string, imageIDs: string[]) {
-  return apiFetch<ProductImage[]>(
-    `/api/shops/me/products/${productID}/images/reorder`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ image_ids: imageIDs }),
-    },
-  );
-}
+export const reorderProductImages = (productID: string, imageIDs: string[]) =>
+  apiFetch<ProductImage[]>(`/api/shops/me/products/${productID}/images/reorder`, {
+    method: 'PATCH',
+    body: JSON.stringify({ image_ids: imageIDs }),
+  });
