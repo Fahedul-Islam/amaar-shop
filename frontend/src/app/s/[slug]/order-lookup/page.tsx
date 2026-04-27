@@ -81,7 +81,7 @@ export default function StorefrontOrderLookup() {
         <>
           <div className="mt-5 flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-[22px] font-bold tracking-tight">#{order.id.slice(0, 8)}</h2>
+              <h2 className="text-[22px] font-bold tracking-tight">{order.id.slice(0, 8)}</h2>
               <p className="text-stone-500 text-[13px] mt-0.5">
                 {locale === 'bn' ? 'প্লেস হয়েছে' : 'Placed'} {formatDateTime(order.created_at, locale)} · {shop.name}
               </p>

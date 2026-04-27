@@ -59,7 +59,7 @@ export default function OrdersPage() {
                   <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <Td>
                       <Link href={`/dashboard/orders/${o.id}`} className="font-mono text-stone-700 hover:text-teal-600">
-                        #{o.id.slice(0, 8)}
+                        {o.id.slice(0, 8)}
                       </Link>
                     </Td>
                     <Td>

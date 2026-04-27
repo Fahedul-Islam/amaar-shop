@@ -50,7 +50,7 @@ function OrderConfirmedInner() {
       <Card className="p-5 text-left mb-5" hover={false}>
         <div className="flex justify-between mb-2.5">
           <span className="text-stone-500 text-sm">{locale === 'bn' ? 'অর্ডার রেফারেন্স' : 'Order reference'}</span>
-          <span className="font-mono font-medium">#{params.orderID.slice(0, 8)}</span>
+          <span className="font-mono font-medium">{params.orderID.slice(0, 8)}</span>
         </div>
         {order && (
           <>

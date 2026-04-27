@@ -66,7 +66,7 @@ export default function OrderDetailPage() {
         <IcArrowLeft size={14} /> Back to orders
       </Link>
       <div className="flex items-center gap-3 mb-1">
-        <h1 className="text-2xl font-bold tracking-tight font-mono">#{order.id.slice(0, 8)}</h1>
+        <h1 className="text-2xl font-bold tracking-tight font-mono">{order.id.slice(0, 8)}</h1>
         <Badge tone={statusTone(order.status)}>{order.status}</Badge>
       </div>
       <p className="text-stone-500 mb-5">Placed {formatDateTime(order.created_at, locale)} · {order.customer_name}</p>

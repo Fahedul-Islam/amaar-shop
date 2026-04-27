@@ -13,7 +13,7 @@ import (
 
 // bdPhoneRe matches common Bangladeshi phone formats:
 // 01XXXXXXXXX, +8801XXXXXXXXX, 8801XXXXXXXXX
-var bdPhoneRe = regexp.MustCompile(`^(?:\+?880)?1[3-9]\d{8}$`)
+var bdPhoneRe = regexp.MustCompile(`^(?:\+?880|0)1[3-9]\d{8}$`)
 
 // PlaceOrder handles POST /api/shops/by-slug/{slug}/orders.
 func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
