@@ -258,6 +258,66 @@ func (r *orderRepo) cancelWithStockRestore(ctx context.Context, ownerUserID, ord
 	return o, nil
 }
 
+// RestoreCancelledOrder reverses a cancellation: sets status back to pending,
+// clears cancelled_reason, and re-decrements product stock in one transaction.
+// The CHECK (stock >= 0) constraint surfaces ErrInsufficientStock if the
+// products were sold to other orders in the meantime.
+func (r *orderRepo) RestoreCancelledOrder(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET status = 'pending', cancelled_reason = NULL
+		 FROM shops
+		 WHERE shops.id = orders.shop_id
+		   AND shops.owner_user_id = $1
+		   AND orders.id = $2
+		   AND orders.status = 'cancelled'
+		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
+		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
+		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
+		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		ownerUserID, orderID,
+	)
+
+	o := &domain.Order{}
+	err = row.Scan(
+		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
+		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
+		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("restore cancelled order: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`UPDATE products
+		 SET stock = products.stock - oi.quantity
+		 FROM order_items oi
+		 WHERE oi.order_id = $1
+		   AND products.id = oi.product_id`,
+		orderID,
+	)
+	if err != nil {
+		return nil, domain.ErrInsufficientStock
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return o, nil
+}
+
 // CancelOrderByBuyer cancels a pending order and restores stock.
 func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, customerPhone, cancelledReason string) (*domain.Order, error) {
 	tx, err := r.db.BeginTx(ctx, nil)

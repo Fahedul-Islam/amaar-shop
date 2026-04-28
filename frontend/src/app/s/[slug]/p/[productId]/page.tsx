@@ -7,6 +7,7 @@ import { useStorefront } from '../../StorefrontShell';
 import { Button } from '@/components/ui/Button';
 import { Price } from '@/components/ui/Price';
 import { ProductImage, hueFromString } from '@/components/ui/ProductImage';
+import { ReviewList } from '@/components/storefront/ReviewList';
 import { IcArrowLeft, IcCart, IcCheck, IcPackage, IcTruck } from '@/components/icons/Icons';
 import { getProduct } from '@/lib/storefrontApi';
 import { applyDiscount, formatBDT } from '@/lib/format';
@@ -162,6 +163,13 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mt-12 pt-8 border-t border-stone-200">
+        <ReviewList
+          productId={product.id}
+          title={locale === 'bn' ? 'এই পণ্যের রিভিউ' : 'Product reviews'}
+        />
       </div>
     </section>
   );

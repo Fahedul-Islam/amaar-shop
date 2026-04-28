@@ -27,10 +27,15 @@ type OrderItemInput struct {
 }
 
 // validTransitions defines which status transitions a seller can perform.
+// Reverse edges (e.g. confirmed→pending) act as one-step undo for accidental clicks.
+// cancelled→pending is special: it re-decrements stock via RestoreCancelledOrder.
 var validTransitions = map[string][]string{
 	"pending":   {"confirmed", "cancelled"},
-	"confirmed": {"shipped", "cancelled"},
-	"shipped":   {"delivered", "returned"},
+	"confirmed": {"shipped", "cancelled", "pending"},
+	"shipped":   {"delivered", "returned", "confirmed"},
+	"delivered": {"shipped"},
+	"returned":  {"shipped"},
+	"cancelled": {"pending"},
 }
 
 // OrderService orchestrates order placement: price look-up, delivery charge
@@ -197,7 +202,13 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, ownerID, orderID, 
 		return nil, domain.ErrInvalidStatusTransition
 	}
 
-	order, err := s.orders.UpdateOrderStatusForShopOwner(ctx, ownerID, orderID, newStatus, cancellationReason)
+	// Undo of a cancellation requires re-decrementing stock and clearing the reason.
+	var order *domain.Order
+	if current.Status == "cancelled" && newStatus == "pending" {
+		order, err = s.orders.RestoreCancelledOrder(ctx, ownerID, orderID)
+	} else {
+		order, err = s.orders.UpdateOrderStatusForShopOwner(ctx, ownerID, orderID, newStatus, cancellationReason)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -55,6 +55,13 @@ var domainErrorMap = []struct {
 	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrInvalidDeliveryArea, http.StatusBadRequest, "validation_error"},
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
+	// Reviews
+	{domain.ErrReviewNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrReviewAlreadyExists, http.StatusConflict, "review_already_exists"},
+	{domain.ErrOrderNotDelivered, http.StatusUnprocessableEntity, "order_not_delivered"},
+	{domain.ErrInvalidRating, http.StatusBadRequest, "validation_error"},
+	{domain.ErrReplyAlreadyExists, http.StatusConflict, "reply_already_exists"},
+	{domain.ErrEmptyReply, http.StatusBadRequest, "validation_error"},
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.

@@ -24,8 +24,12 @@ func (s *MarketplaceService) ListProducts(ctx context.Context, filter domain.Mar
 	return s.marketplace.ListProducts(ctx, filter)
 }
 
-func (s *MarketplaceService) ListShops(ctx context.Context, query string, limit, offset int) ([]*domain.Shop, int, error) {
-	return s.marketplace.ListShops(ctx, query, limit, offset)
+func (s *MarketplaceService) ListShops(ctx context.Context, query string, page, size int) ([]*domain.Shop, int, error) {
+	offset := 0
+	if page > 1 {
+		offset = (page - 1) * size
+	}
+	return s.marketplace.ListShops(ctx, query, size, offset)
 }
 
 func (s *MarketplaceService) ListCategories(ctx context.Context) ([]string, error) {
@@ -33,6 +37,7 @@ func (s *MarketplaceService) ListCategories(ctx context.Context) ([]string, erro
 }
 
 func (s *MarketplaceService) LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.Order, error) {
+	phone = normalizePhone(phone)
 	orders, err := s.marketplace.LookupOrdersByPhone(ctx, phone)
 	if err != nil {
 		return nil, err

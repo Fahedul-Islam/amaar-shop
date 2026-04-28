@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
+	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // --- Mock repositories ---
@@ -114,11 +115,36 @@ func (m *mockFileStorage) Save(_ io.Reader, prefix, filename string) (string, er
 	return url, nil
 }
 
+type mockReviewRepo struct{}
+
+func (m *mockReviewRepo) Create(_ context.Context, _ *domain.Review) error { return nil }
+func (m *mockReviewRepo) FindByID(_ context.Context, _ string) (*domain.Review, error) {
+	return nil, domain.ErrReviewNotFound
+}
+func (m *mockReviewRepo) ListByShop(_ context.Context, _ string, _, _ int) ([]*domain.Review, int, error) {
+	return nil, 0, nil
+}
+func (m *mockReviewRepo) ListByProduct(_ context.Context, _ string, _, _ int) ([]*domain.Review, int, error) {
+	return nil, 0, nil
+}
+func (m *mockReviewRepo) ShopRating(_ context.Context, _ string) (domain.ShopRating, error) {
+	return domain.ShopRating{}, nil
+}
+func (m *mockReviewRepo) ProductRating(_ context.Context, _ string) (domain.ProductRating, error) {
+	return domain.ProductRating{}, nil
+}
+func (m *mockReviewRepo) SetOwnerReply(_ context.Context, _, _, _ string) (*domain.Review, error) {
+	return nil, domain.ErrReviewNotFound
+}
+func (m *mockReviewRepo) FindOrderItemForReview(_ context.Context, _ string) (repository.OrderItemReviewContext, error) {
+	return repository.OrderItemReviewContext{}, nil
+}
+
 func newTestShopService() (*ShopService, *mockShopRepo, *mockDeliveryRepo) {
 	shopRepo := newMockShopRepo()
 	deliveryRepo := newMockDeliveryRepo()
 	files := newMockFileStorage()
-	svc := NewShopService(shopRepo, deliveryRepo, files)
+	svc := NewShopService(shopRepo, deliveryRepo, &mockReviewRepo{}, files)
 	return svc, shopRepo, deliveryRepo
 }
 

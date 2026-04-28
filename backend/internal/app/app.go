@@ -19,6 +19,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
@@ -66,15 +67,17 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	orderRepo := postgres.NewOrderRepo(db)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
 	marketplaceRepo := postgres.NewMarketplaceRepo(db)
+	reviewRepo := postgres.NewReviewRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
-	shopSvc := service.NewShopService(shopRepo, deliveryRepo, fileStore)
+	shopSvc := service.NewShopService(shopRepo, deliveryRepo, reviewRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, fileStore)
 	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
+	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -98,6 +101,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	orderHandler := order.NewHandler(orderSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
+	reviewHandler := review.NewHandler(reviewSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -110,6 +114,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		OrderHandler:     orderHandler,
 		AnalyticsHandler:   analyticsHandler,
 		MarketplaceHandler: marketplaceHandler,
+		ReviewHandler:      reviewHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})

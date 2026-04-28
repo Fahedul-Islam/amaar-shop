@@ -28,11 +28,37 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 	}
 	args := []interface{}{}
 	argN := 1
+	orderBy := "p.created_at DESC"
 
 	if filter.Query != "" {
-		conditions = append(conditions, fmt.Sprintf("p.name %% $%d", argN))
-		args = append(args, filter.Query)
-		argN++
+		ilike := "%" + filter.Query + "%"
+		// Layer 1 – FTS via generated search_vector (exact + stemmed, uses GIN index).
+		// Layer 2 – per-token word_similarity: splits the query on spaces and checks whether
+		//   ANY token fuzzy-matches a segment of the name (threshold 0.4). This handles
+		//   multi-word queries like "riyad jarsey" where the combined score drops to 0.37
+		//   (misses) but the "jarsey" token alone scores 0.43 (hits). $argN reused across FTS,
+		//   unnest, and ORDER BY — lib/pq supports multi-use of the same positional param.
+		// Layer 3 – ILIKE for short terms (<3 chars) where trigrams don't score.
+		conditions = append(conditions, fmt.Sprintf(
+			`(p.search_vector @@ plainto_tsquery('simple', $%[1]d)
+			  OR EXISTS (
+			    SELECT 1 FROM unnest(string_to_array(trim($%[1]d), ' ')) AS q_word
+			    WHERE length(q_word) >= 2 AND word_similarity(q_word, p.name) > 0.4
+			  )
+			  OR p.name ILIKE $%[2]d)`,
+			argN, argN+1,
+		))
+		args = append(args, filter.Query, ilike)
+		// FTS rank wins first; best per-token word_similarity breaks ties; newest last resort.
+		orderBy = fmt.Sprintf(
+			`ts_rank(p.search_vector, plainto_tsquery('simple', $%[1]d)) DESC,
+			 (SELECT COALESCE(MAX(word_similarity(q_word, p.name)), 0)
+			  FROM unnest(string_to_array(trim($%[1]d), ' ')) AS q_word
+			  WHERE length(q_word) >= 2) DESC,
+			 p.created_at DESC`,
+			argN,
+		)
+		argN += 2
 	}
 	if filter.CategoryName != "" {
 		conditions = append(conditions, fmt.Sprintf("LOWER(c.name) = LOWER($%d)", argN))
@@ -64,9 +90,9 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 		        s.name, s.slug, COALESCE(s.logo_url, '')
 		 %s
 		 WHERE %s
-		 ORDER BY p.created_at DESC
+		 ORDER BY %s
 		 LIMIT $%d OFFSET $%d`,
-		joinClause, where, argN, argN+1,
+		joinClause, where, orderBy, argN, argN+1,
 	)
 
 	rows, err := r.db.QueryContext(ctx, query, listArgs...)
@@ -156,35 +182,59 @@ func (r *marketplaceRepo) attachImages(ctx context.Context, products []*domain.M
 
 // ListShops returns non-suspended shops, optionally filtered by name similarity.
 func (r *marketplaceRepo) ListShops(ctx context.Context, query string, limit, offset int) ([]*domain.Shop, int, error) {
-	conditions := []string{"is_suspended = false"}
+	conditions := []string{"s.is_suspended = false"}
 	args := []interface{}{}
 	argN := 1
+	orderBy := "s.created_at DESC"
 
 	if query != "" {
-		conditions = append(conditions, fmt.Sprintf("name %% $%d", argN))
-		args = append(args, query)
-		argN++
+		ilike := "%" + query + "%"
+		conditions = append(conditions, fmt.Sprintf(
+			`(s.search_vector @@ plainto_tsquery('simple', $%[1]d)
+			  OR EXISTS (
+			    SELECT 1 FROM unnest(string_to_array(trim($%[1]d), ' ')) AS q_word
+			    WHERE length(q_word) >= 2 AND word_similarity(q_word, s.name) > 0.4
+			  )
+			  OR s.name ILIKE $%[2]d)`,
+			argN, argN+1,
+		))
+		args = append(args, query, ilike)
+		orderBy = fmt.Sprintf(
+			`ts_rank(s.search_vector, plainto_tsquery('simple', $%[1]d)) DESC,
+			 (SELECT COALESCE(MAX(word_similarity(q_word, s.name)), 0)
+			  FROM unnest(string_to_array(trim($%[1]d), ' ')) AS q_word
+			  WHERE length(q_word) >= 2) DESC,
+			 s.created_at DESC`,
+			argN,
+		)
+		argN += 2
 	}
 
 	where := strings.Join(conditions, " AND ")
 
 	var total int
 	if err := r.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM shops WHERE "+where, args...,
+		"SELECT COUNT(*) FROM shops s WHERE "+where, args...,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("marketplace shops count: %w", err)
 	}
 
 	listArgs := append(append([]interface{}{}, args...), limit, offset)
 	q := fmt.Sprintf(
-		`SELECT id, owner_user_id, slug, name, COALESCE(description,''),
-		        COALESCE(logo_url,''), COALESCE(banner_url,''),
-		        COALESCE(contact_phone,''), is_suspended, created_at, updated_at
-		 FROM shops
+		`SELECT s.id, s.owner_user_id, s.slug, s.name, COALESCE(s.description,''),
+		        COALESCE(s.logo_url,''), COALESCE(s.banner_url,''),
+		        COALESCE(s.contact_phone,''), s.is_suspended, s.created_at, s.updated_at,
+		        COALESCE(r.avg_rating, 0)::float, COALESCE(r.review_count, 0)
+		 FROM shops s
+		 LEFT JOIN (
+		   SELECT shop_id, AVG(rating) AS avg_rating, COUNT(*) AS review_count
+		   FROM product_reviews
+		   GROUP BY shop_id
+		 ) r ON r.shop_id = s.id
 		 WHERE %s
-		 ORDER BY created_at DESC
+		 ORDER BY %s
 		 LIMIT $%d OFFSET $%d`,
-		where, argN, argN+1,
+		where, orderBy, argN, argN+1,
 	)
 
 	rows, err := r.db.QueryContext(ctx, q, listArgs...)
@@ -200,6 +250,7 @@ func (r *marketplaceRepo) ListShops(ctx context.Context, query string, limit, of
 			&s.ID, &s.OwnerUserID, &s.Slug, &s.Name, &s.Description,
 			&s.LogoURL, &s.BannerURL, &s.ContactPhone, &s.IsSuspended,
 			&s.CreatedAt, &s.UpdatedAt,
+			&s.RatingAverage, &s.RatingCount,
 		); err != nil {
 			return nil, 0, fmt.Errorf("marketplace shops scan: %w", err)
 		}

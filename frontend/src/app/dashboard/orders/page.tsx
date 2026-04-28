@@ -1,9 +1,10 @@
 'use client';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge, statusTone } from '@/components/ui/Badge';
+import { IcChevR } from '@/components/icons/Icons';
 import { listOrders } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
@@ -12,6 +13,7 @@ const tabs = ['All', 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
 
 export default function OrdersPage() {
   const { locale } = useI18n();
+  const router = useRouter();
   const [tab, setTab] = useState('All');
 
   const { data: orders = [], isLoading } = useQuery({
@@ -51,16 +53,18 @@ export default function OrdersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-stone-50 text-stone-500 text-left">
-                  <Th>Order</Th><Th>Buyer</Th><Th>Items</Th><Th>Total</Th><Th>Zone</Th><Th>Status</Th><Th>Date</Th>
+                  <Th>Order</Th><Th>Buyer</Th><Th>Items</Th><Th>Total</Th><Th>Zone</Th><Th>Status</Th><Th>Date</Th><Th>{''}</Th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
+                  <tr
+                    key={o.id}
+                    onClick={() => router.push(`/dashboard/orders/${o.id}`)}
+                    className="border-t border-stone-100 cursor-pointer hover:bg-teal-50/60 group"
+                  >
                     <Td>
-                      <Link href={`/dashboard/orders/${o.id}`} className="font-mono text-stone-700 hover:text-teal-600">
-                        {o.id.slice(0, 8)}
-                      </Link>
+                      <span className="font-mono text-stone-700 group-hover:text-teal-700">{o.id.slice(0, 8)}</span>
                     </Td>
                     <Td>
                       <div className="font-medium">{o.customer_name}</div>
@@ -71,6 +75,11 @@ export default function OrdersPage() {
                     <Td className="text-stone-600">{o.delivery_area}</Td>
                     <Td><Badge tone={statusTone(o.status)}>{o.status}</Badge></Td>
                     <Td className="text-stone-500">{formatDateTime(o.created_at, locale)}</Td>
+                    <Td className="text-right">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-colors whitespace-nowrap">
+                        Manage <IcChevR size={12} />
+                      </span>
+                    </Td>
                   </tr>
                 ))}
               </tbody>

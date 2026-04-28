@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
 import { IcArrowLeft } from '@/components/icons/Icons';
+import { LeaveReviewForm } from '@/components/storefront/LeaveReviewForm';
 import { lookupOrder, buyerCancelOrder } from '@/lib/storefrontApi';
 import { ApiRequestError } from '@/lib/api';
 import { formatBDT, formatDateTime } from '@/lib/format';
@@ -118,6 +119,29 @@ export default function StorefrontOrderLookup() {
             <div>{order.delivery_address}{order.delivery_area ? `, ${order.delivery_area}` : ''}</div>
           </div>
         </Card>
+
+        {order.status === 'delivered' && (
+          <Card className="p-5 mt-4" hover={false}>
+            <h3 className="text-sm font-semibold mb-3">
+              {locale === 'bn' ? 'রিভিউ লিখুন' : 'Leave a review'}
+            </h3>
+            <p className="text-[13px] text-stone-500 mb-3">
+              {locale === 'bn'
+                ? 'প্রতিটি পণ্যের জন্য আলাদা রিভিউ দিতে পারেন।'
+                : 'You can leave one review per product in this order.'}
+            </p>
+            <div className="grid gap-3">
+              {order.items.map((it) => (
+                <LeaveReviewForm
+                  key={it.id}
+                  orderItemId={it.id}
+                  productName={it.product_name_snapshot}
+                  customerPhone={phone.trim()}
+                />
+              ))}
+            </div>
+          </Card>
+        )}
 
         {(order.status === 'pending' || order.status === 'confirmed') && (
           <Card className="p-5 mt-4" hover={false}>

@@ -32,6 +32,8 @@ export interface MarketplaceShop {
   logo_url: string | null;
   banner_url: string | null;
   contact_phone: string;
+  rating_average: number;
+  rating_count: number;
 }
 
 export interface PaginatedMarketplaceShops {

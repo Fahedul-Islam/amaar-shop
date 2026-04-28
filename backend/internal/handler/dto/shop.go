@@ -48,13 +48,15 @@ type ShopDTO struct {
 
 // PublicShopDTO is the shop profile visible to public customers.
 type PublicShopDTO struct {
-	ID           string  `json:"id"`
-	Slug         string  `json:"slug"`
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	LogoURL      *string `json:"logo_url"`
-	BannerURL    *string `json:"banner_url"`
-	ContactPhone string  `json:"contact_phone"`
+	ID            string  `json:"id"`
+	Slug          string  `json:"slug"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	LogoURL       *string `json:"logo_url"`
+	BannerURL     *string `json:"banner_url"`
+	ContactPhone  string  `json:"contact_phone"`
+	RatingAverage float64 `json:"rating_average"`
+	RatingCount   int     `json:"rating_count"`
 }
 
 // DeliverySettingsDTO is the delivery settings response.

@@ -20,13 +20,15 @@ type MarketplaceProductDTO struct {
 
 // MarketplaceShopDTO is the public shop card for the marketplace.
 type MarketplaceShopDTO struct {
-	ID           string  `json:"id"`
-	Slug         string  `json:"slug"`
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	LogoURL      *string `json:"logo_url"`
-	BannerURL    *string `json:"banner_url"`
-	ContactPhone string  `json:"contact_phone"`
+	ID            string  `json:"id"`
+	Slug          string  `json:"slug"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	LogoURL       *string `json:"logo_url"`
+	BannerURL     *string `json:"banner_url"`
+	ContactPhone  string  `json:"contact_phone"`
+	RatingAverage float64 `json:"rating_average"`
+	RatingCount   int     `json:"rating_count"`
 }
 
 // PhoneLookupRequest is the body for POST /api/marketplace/orders/lookup.

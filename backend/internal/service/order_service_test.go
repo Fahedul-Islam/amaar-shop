@@ -69,6 +69,19 @@ func (m *mockOrderRepo) UpdateOrderStatusForShopOwner(_ context.Context, ownerUs
 	return o, nil
 }
 
+func (m *mockOrderRepo) RestoreCancelledOrder(_ context.Context, ownerUserID, orderID string) (*domain.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return nil, domain.ErrOrderNotFound
+	}
+	if o.Status != "cancelled" {
+		return nil, domain.ErrOrderNotFound
+	}
+	o.Status = "pending"
+	o.CancelledReason = nil
+	return o, nil
+}
+
 func (m *mockOrderRepo) CancelOrderByBuyer(_ context.Context, shopID, orderID, customerPhone, cancelledReason string) (*domain.Order, error) {
 	o, ok := m.orders[orderID]
 	if !ok {
@@ -372,11 +385,17 @@ func TestUpdateOrderStatus_ValidTransitions(t *testing.T) {
 		{"confirmed", "cancelled", true},
 		{"shipped", "delivered", true},
 		{"shipped", "returned", true},
+		// Backward (undo) transitions.
+		{"confirmed", "pending", true},
+		{"shipped", "confirmed", true},
+		{"delivered", "shipped", true},
+		{"returned", "shipped", true},
+		{"cancelled", "pending", true},
+		// Still invalid: skips and forward-from-terminal.
 		{"pending", "shipped", false},
 		{"pending", "delivered", false},
 		{"confirmed", "delivered", false},
 		{"delivered", "cancelled", false},
-		{"cancelled", "pending", false},
 	}
 
 	for _, tt := range tests {

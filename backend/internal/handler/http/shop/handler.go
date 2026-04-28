@@ -42,11 +42,13 @@ func toShopDTO(s *domain.Shop) dto.ShopDTO {
 
 func toPublicShopDTO(s *domain.Shop) dto.PublicShopDTO {
 	d := dto.PublicShopDTO{
-		ID:           s.ID,
-		Slug:         s.Slug,
-		Name:         s.Name,
-		Description:  s.Description,
-		ContactPhone: s.ContactPhone,
+		ID:            s.ID,
+		Slug:          s.Slug,
+		Name:          s.Name,
+		Description:   s.Description,
+		ContactPhone:  s.ContactPhone,
+		RatingAverage: s.RatingAverage,
+		RatingCount:   s.RatingCount,
 	}
 	if s.LogoURL != "" {
 		d.LogoURL = &s.LogoURL

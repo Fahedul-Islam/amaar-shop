@@ -75,7 +75,7 @@ function MarketplaceHomePageInner() {
 
   return (
     <>
-      <MarketplaceHeader defaultQuery={initialQ} />
+      <MarketplaceHeader defaultQuery={initialQ} revealSearchOnScroll />
 
       {/* Hero */}
       <section className="py-14 px-4 bg-gradient-to-b from-teal-50 to-white">
@@ -90,17 +90,21 @@ function MarketplaceHomePageInner() {
               ? 'হাতে তৈরি পণ্য, সৎ বিক্রেতা, বিশ্বাসযোগ্য ডেলিভারি।'
               : 'Handmade goods, honest sellers, delivery you can trust.'}
           </p>
-          <form onSubmit={submit} className="flex gap-2 bg-white border border-stone-200 rounded-xl p-1.5 max-w-[520px] mx-auto shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
-            <div className="flex items-center px-2 pl-3 text-stone-500">
-              <IcSearch size={18} />
+          <form
+            onSubmit={submit}
+            className="flex gap-2 bg-white border border-stone-200 rounded-2xl p-1.5 max-w-[560px] mx-auto shadow-[0_2px_10px_rgba(28,25,23,0.05)] transition-all focus-within:border-teal-400 focus-within:shadow-[0_6px_20px_rgba(13,148,136,0.12)]"
+          >
+            <div className="flex items-center pl-3 text-stone-400">
+              <IcSearch size={20} />
             </div>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={locale === 'bn' ? 'কী খুঁজছেন?' : 'What are you looking for?'}
-              className="flex-1 border-0 outline-none text-base bg-transparent text-stone-900 placeholder-stone-400"
+              placeholder={locale === 'bn' ? 'কী খুঁজছেন?' : 'Search shops, products, categories…'}
+              className="flex-1 border-0 outline-none text-base bg-transparent text-stone-900 placeholder-stone-400 px-2 min-w-0"
+              aria-label={locale === 'bn' ? 'খুঁজুন' : 'Search'}
             />
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" className="px-5">
               {locale === 'bn' ? 'খুঁজুন' : 'Search'}
             </Button>
           </form>

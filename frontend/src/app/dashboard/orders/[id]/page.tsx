@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
-import { IcArrowLeft } from '@/components/icons/Icons';
+import { IcArrowLeft, IcUndo } from '@/components/icons/Icons';
 import { getOrder, updateOrderStatus, markAdvanceReceived } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
@@ -18,6 +18,15 @@ const nextStatus: Record<string, string[]> = {
   shipped: ['delivered'],
   delivered: [],
   cancelled: [],
+};
+
+// Previous status for one-step undo of an accidental click.
+const prevStatus: Record<string, string> = {
+  confirmed: 'pending',
+  shipped: 'confirmed',
+  delivered: 'shipped',
+  returned: 'shipped',
+  cancelled: 'pending',
 };
 
 export default function OrderDetailPage() {
@@ -59,6 +68,7 @@ export default function OrderDetailPage() {
   if (!order) return <div className="p-8 text-stone-500">Order not found.</div>;
 
   const actions = nextStatus[order.status] ?? [];
+  const undoTo = prevStatus[order.status];
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7 max-w-5xl">
@@ -91,7 +101,7 @@ export default function OrderDetailPage() {
             <div className="flex justify-between text-base text-stone-900 font-semibold mt-2"><span>Total</span><span>{formatBDT(order.total_bdt, locale)}</span></div>
           </div>
 
-          {actions.length > 0 && (
+          {(actions.length > 0 || undoTo) && (
             <div className="mt-5 flex gap-2 flex-wrap">
               {actions.map((s) => (
                 <Button
@@ -108,6 +118,17 @@ export default function OrderDetailPage() {
                   Mark {s}
                 </Button>
               ))}
+              {undoTo && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (!confirm(`Undo and revert this order back to "${undoTo}"?`)) return;
+                    updateStatus(undoTo);
+                  }}
+                >
+                  <IcUndo size={14} /> Undo (back to {undoTo})
+                </Button>
+              )}
             </div>
           )}
 

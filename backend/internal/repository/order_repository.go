@@ -23,6 +23,11 @@ type OrderRepository interface {
 	// If the new status is "cancelled", stock is restored in the same transaction.
 	UpdateOrderStatusForShopOwner(ctx context.Context, ownerUserID, orderID, status string, cancelledReason *string) (*domain.Order, error)
 
+	// RestoreCancelledOrder reverses a cancellation: sets status back to "pending",
+	// clears cancelled_reason, and re-decrements product stock atomically.
+	// Returns ErrInsufficientStock if any item can no longer be re-served.
+	RestoreCancelledOrder(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error)
+
 	// CancelOrderByBuyer cancels an order identified by shopID + orderID + customerPhone.
 	// Only orders in "pending" status can be cancelled by the buyer.
 	// Stock is restored in the same transaction.

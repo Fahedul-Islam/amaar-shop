@@ -49,12 +49,8 @@ func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, size := parsePagination(q.Get("page"), q.Get("page_size"))
 	query := strings.TrimSpace(q.Get("q"))
-	offset := 0
-	if page > 1 {
-		offset = (page - 1) * size
-	}
 
-	shops, total, err := h.svc.ListShops(r.Context(), query, size, offset)
+	shops, total, err := h.svc.ListShops(r.Context(), query, page, size)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -84,13 +80,12 @@ func (h *Handler) LookupOrders(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "invalid request body")
 		return
 	}
-	phone := strings.TrimSpace(req.Phone)
-	if phone == "" {
+	if strings.TrimSpace(req.Phone) == "" {
 		httputil.WriteValidationError(w, "phone number is required")
 		return
 	}
 
-	orders, err := h.svc.LookupOrdersByPhone(r.Context(), phone)
+	orders, err := h.svc.LookupOrdersByPhone(r.Context(), req.Phone)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -136,11 +131,13 @@ func toMarketplaceProductDTO(mp *domain.MarketplaceProduct) dto.MarketplaceProdu
 
 func toMarketplaceShopDTO(s *domain.Shop) dto.MarketplaceShopDTO {
 	d := dto.MarketplaceShopDTO{
-		ID:           s.ID,
-		Slug:         s.Slug,
-		Name:         s.Name,
-		Description:  s.Description,
-		ContactPhone: s.ContactPhone,
+		ID:            s.ID,
+		Slug:          s.Slug,
+		Name:          s.Name,
+		Description:   s.Description,
+		ContactPhone:  s.ContactPhone,
+		RatingAverage: s.RatingAverage,
+		RatingCount:   s.RatingCount,
 	}
 	if s.LogoURL != "" {
 		d.LogoURL = &s.LogoURL

@@ -14,15 +14,17 @@ import (
 type ShopService struct {
 	shops    repository.ShopRepository
 	delivery repository.DeliverySettingsRepository
+	reviews  repository.ReviewRepository
 	files    storage.FileStorage
 }
 
 func NewShopService(
 	shops repository.ShopRepository,
 	delivery repository.DeliverySettingsRepository,
+	reviews repository.ReviewRepository,
 	files storage.FileStorage,
 ) *ShopService {
-	return &ShopService{shops: shops, delivery: delivery, files: files}
+	return &ShopService{shops: shops, delivery: delivery, reviews: reviews, files: files}
 }
 
 // CreateShop creates a new shop for the authenticated user and seeds default delivery settings.
@@ -171,6 +173,7 @@ func (s *ShopService) UpdateDeliverySettings(ctx context.Context, ownerUserID st
 }
 
 // GetPublicShop returns the shop by slug, returning ErrShopNotFound if suspended.
+// The returned shop is enriched with the aggregate review rating.
 func (s *ShopService) GetPublicShop(ctx context.Context, slug string) (*domain.Shop, error) {
 	shop, err := s.shops.FindBySlug(ctx, slug)
 	if err != nil {
@@ -178,6 +181,10 @@ func (s *ShopService) GetPublicShop(ctx context.Context, slug string) (*domain.S
 	}
 	if shop.IsSuspended {
 		return nil, domain.ErrShopNotFound
+	}
+	if rating, err := s.reviews.ShopRating(ctx, shop.ID); err == nil {
+		shop.RatingAverage = rating.Average
+		shop.RatingCount = rating.Count
 	}
 	return shop, nil
 }
