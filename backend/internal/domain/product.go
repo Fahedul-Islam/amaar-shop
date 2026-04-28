@@ -53,9 +53,11 @@ func (f ProductFilter) Offset() int {
 // cross-shop listings on the marketplace homepage.
 type MarketplaceProduct struct {
 	Product
-	ShopName    string `json:"shop_name"`
-	ShopSlug    string `json:"shop_slug"`
-	ShopLogoURL string `json:"shop_logo_url"`
+	ShopName      string  `json:"shop_name"`
+	ShopSlug      string  `json:"shop_slug"`
+	ShopLogoURL   string  `json:"shop_logo_url"`
+	RatingAverage float64 `json:"rating_average"`
+	RatingCount   int     `json:"rating_count"`
 }
 
 // MarketplaceProductFilter captures filters for the marketplace-wide product listing.

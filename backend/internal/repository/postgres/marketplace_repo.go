@@ -70,7 +70,12 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 
 	joinClause := `FROM products p
 		JOIN shops s ON s.id = p.shop_id
-		LEFT JOIN categories c ON c.id = p.category_id`
+		LEFT JOIN categories c ON c.id = p.category_id
+		LEFT JOIN (
+		  SELECT product_id, AVG(rating) AS avg_rating, COUNT(*) AS review_count
+		  FROM product_reviews
+		  GROUP BY product_id
+		) pr ON pr.product_id = p.id`
 
 	// Count total.
 	var total int
@@ -87,7 +92,8 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 		        p.discount_type, p.discount_value::text,
 		        p.delivery_charge_dhaka::text, p.delivery_charge_outside::text,
 		        p.created_at, p.updated_at,
-		        s.name, s.slug, COALESCE(s.logo_url, '')
+		        s.name, s.slug, COALESCE(s.logo_url, ''),
+		        COALESCE(pr.avg_rating, 0)::float, COALESCE(pr.review_count, 0)
 		 %s
 		 WHERE %s
 		 ORDER BY %s
@@ -112,6 +118,7 @@ func (r *marketplaceRepo) ListProducts(ctx context.Context, filter domain.Market
 			&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
 			&mp.CreatedAt, &mp.UpdatedAt,
 			&mp.ShopName, &mp.ShopSlug, &mp.ShopLogoURL,
+			&mp.RatingAverage, &mp.RatingCount,
 		); err != nil {
 			return nil, 0, fmt.Errorf("marketplace scan: %w", err)
 		}

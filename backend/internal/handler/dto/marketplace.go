@@ -16,6 +16,8 @@ type MarketplaceProductDTO struct {
 	ShopName              string            `json:"shop_name"`
 	ShopSlug              string            `json:"shop_slug"`
 	ShopLogoURL           string            `json:"shop_logo_url"`
+	RatingAverage         float64           `json:"rating_average"`
+	RatingCount           int               `json:"rating_count"`
 }
 
 // MarketplaceShopDTO is the public shop card for the marketplace.

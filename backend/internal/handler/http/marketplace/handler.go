@@ -126,6 +126,8 @@ func toMarketplaceProductDTO(mp *domain.MarketplaceProduct) dto.MarketplaceProdu
 		ShopName:              mp.ShopName,
 		ShopSlug:              mp.ShopSlug,
 		ShopLogoURL:           mp.ShopLogoURL,
+		RatingAverage:         mp.RatingAverage,
+		RatingCount:           mp.RatingCount,
 	}
 }
 

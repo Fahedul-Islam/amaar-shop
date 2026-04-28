@@ -12,20 +12,36 @@ interface Props {
   oldPrice?: string | number | null;
   imageUrl?: string | null;
   shopName?: string;
+  rating?: number;
+  ratingCount?: number;
   locale?: 'en' | 'bn';
   href?: string;
   onAdd?: () => void;
   badge?: ReactNode;
 }
 
-export function ProductCard({ id, name, price, oldPrice, imageUrl, shopName, locale = 'en', href, onAdd, badge }: Props) {
+export function ProductCard({
+  id,
+  name,
+  price,
+  oldPrice,
+  imageUrl,
+  shopName,
+  rating,
+  ratingCount,
+  locale = 'en',
+  href,
+  onAdd,
+  badge,
+}: Props) {
   const hue = hueFromString(id);
   const priceNum = typeof price === 'string' ? parseFloat(price) : price;
   const oldNum = oldPrice != null ? (typeof oldPrice === 'string' ? parseFloat(oldPrice) : oldPrice) : null;
   const discount = oldNum && oldNum > priceNum ? Math.round((1 - priceNum / oldNum) * 100) : 0;
+  const hasRating = (ratingCount ?? 0) > 0 && rating != null;
 
   const Content = (
-    <div className="group bg-white border border-stone-200 rounded-lg overflow-hidden relative transition-shadow duration-200 ease-standard hover:shadow-sm">
+    <div className="group bg-white border border-stone-200 rounded-lg overflow-hidden relative transition-shadow duration-200 ease-standard hover:shadow-sm hover:border-stone-300">
       {badge ?? (discount > 0 && (
         <span className="absolute top-2 right-2 z-10 bg-coral-50 text-coral-600 text-[11px] font-medium px-2 py-0.5 rounded-full">
           −{discount}%
@@ -34,7 +50,22 @@ export function ProductCard({ id, name, price, oldPrice, imageUrl, shopName, loc
       <ProductImage src={imageUrl} alt={name} hue={hue} ratio="1/1" />
       <div className="p-3">
         <div className="font-medium text-sm text-stone-900 leading-snug line-clamp-2 min-h-[2.4em]">{name}</div>
-        {shopName && <div className="text-xs text-stone-500 mt-0.5">{shopName}</div>}
+        <div className="flex items-center justify-between gap-2 mt-0.5 min-h-[1.1em]">
+          {shopName ? (
+            <span className="text-xs text-stone-500 truncate">{shopName}</span>
+          ) : (
+            <span />
+          )}
+          {hasRating && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-stone-700 flex-shrink-0">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth={1.6} strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              {rating!.toFixed(1)}
+              <span className="text-stone-400 font-normal">({ratingCount})</span>
+            </span>
+          )}
+        </div>
         <div className="flex items-center justify-between mt-2">
           <Price amount={priceNum} old={oldNum} locale={locale} />
           {onAdd && (

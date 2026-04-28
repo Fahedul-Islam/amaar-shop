@@ -17,6 +17,8 @@ export interface MarketplaceProduct {
   shop_name: string;
   shop_slug: string;
   shop_logo_url: string;
+  rating_average: number;
+  rating_count: number;
 }
 
 export interface PaginatedMarketplaceProducts {

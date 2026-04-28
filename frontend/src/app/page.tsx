@@ -135,14 +135,15 @@ function MarketplaceHomePageInner() {
               {locale === 'bn' ? 'সব দেখুন' : 'See all'} →
             </Link>
           </div>
-          <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+          <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
             {shops.map((s) => {
               const hue = hueFromString(s.id);
+              const hasRating = (s.rating_count ?? 0) > 0;
               return (
                 <Link key={s.id} href={`/s/${s.slug}`}>
-                  <Card className="p-3.5 flex gap-3 items-center cursor-pointer">
+                  <Card className="p-3.5 flex gap-3 items-center cursor-pointer transition-shadow duration-200 ease-standard hover:shadow-sm hover:border-stone-300">
                     <div
-                      className="w-12 h-12 flex-shrink-0 rounded-[10px] grid place-items-center font-bold text-base overflow-hidden"
+                      className="w-14 h-14 flex-shrink-0 rounded-xl grid place-items-center font-bold text-lg overflow-hidden ring-1 ring-stone-100"
                       style={{ background: `hsl(${hue},30%,88%)`, color: `hsl(${hue},30%,35%)` }}
                     >
                       {s.logo_url ? (
@@ -154,9 +155,23 @@ function MarketplaceHomePageInner() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm text-stone-900 truncate">{s.name}</div>
-                      <div className="text-xs text-stone-500 truncate">
-                        {s.description?.trim() || (locale === 'bn' ? 'দোকান দেখুন' : 'Browse shop')}
-                      </div>
+                      {hasRating ? (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-stone-800">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth={1.6} strokeLinejoin="round">
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                            {s.rating_average.toFixed(1)}
+                          </span>
+                          <span className="text-[11px] text-stone-500">
+                            ({s.rating_count} {locale === 'bn' ? 'রিভিউ' : s.rating_count === 1 ? 'review' : 'reviews'})
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-stone-500 truncate mt-0.5">
+                          {s.description?.trim() || (locale === 'bn' ? 'নতুন দোকান' : 'New shop')}
+                        </div>
+                      )}
                     </div>
                     <IcChevR size={16} className="text-stone-400 flex-shrink-0" />
                   </Card>
@@ -211,6 +226,8 @@ function MarketplaceHomePageInner() {
                   oldPrice={original}
                   imageUrl={p.images?.[0]?.url}
                   shopName={p.shop_name}
+                  rating={p.rating_average}
+                  ratingCount={p.rating_count}
                   locale={locale}
                   href={`/s/${p.shop_slug}/p/${p.id}`}
                 />
