@@ -7,7 +7,7 @@ import { Logo } from '@/components/ui/Logo';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { Button } from '@/components/ui/Button';
 import {
-  IcHome, IcPackage, IcTruck, IcChart, IcFacebook, IcSettings, IcTag, IcStore, IcLogout, IcHeart,
+  IcHome, IcPackage, IcTruck, IcChart, IcFacebook, IcSettings, IcTag, IcStore, IcLogout, IcHeart, IcUser,
 } from '@/components/icons/Icons';
 import { useAuth } from '@/hooks/useAuth';
 import { useShop } from '@/hooks/useShop';
@@ -17,6 +17,7 @@ const nav = [
   { href: '/dashboard/products', label: 'Products', Icon: IcPackage },
   { href: '/dashboard/categories', label: 'Categories', Icon: IcTag },
   { href: '/dashboard/orders', label: 'Orders', Icon: IcTruck },
+  { href: '/dashboard/customers', label: 'Customers', Icon: IcUser },
   { href: '/dashboard/reviews', label: 'Reviews', Icon: IcHeart },
   { href: '/dashboard/analytics', label: 'Analytics', Icon: IcChart },
   { href: '/dashboard/facebook', label: 'Facebook', Icon: IcFacebook },

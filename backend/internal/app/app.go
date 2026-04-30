@@ -15,6 +15,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
@@ -73,6 +74,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceRepo := postgres.NewMarketplaceRepo(db)
 	reviewRepo := postgres.NewReviewRepo(db)
 	visitRepo := postgres.NewVisitRepo(db)
+	customerRepo := postgres.NewCustomerRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -83,6 +85,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
+	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -117,6 +120,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
 	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
+	customerHandler := customer.NewHandler(customerSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -131,6 +135,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		MarketplaceHandler: marketplaceHandler,
 		ReviewHandler:      reviewHandler,
 		VisitHandler:       visitHandler,
+		CustomerHandler:    customerHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})
