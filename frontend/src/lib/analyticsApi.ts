@@ -51,6 +51,31 @@ export interface StatsSummary {
   changes?: SummaryChanges;
 }
 
+export interface LowStockProduct {
+  id: string;
+  name: string;
+  stock: number;
+  price_bdt: string;
+}
+
+export interface DashboardSummary {
+  pending_orders_count: number;
+  awaiting_advance_count: number;
+  unanswered_reviews_count: number;
+  out_of_stock_count: number;
+  low_stock_count: number;
+  today_revenue_bdt: string;
+  today_orders: number;
+  in_transit_orders: number;
+  in_transit_amount_bdt: string;
+  delivered_week_orders: number;
+  delivered_week_bdt: string;
+  low_stock_products: LowStockProduct[];
+}
+
+export const getDashboardSummary = () =>
+  apiFetch<DashboardSummary>('/api/shops/me/dashboard/summary');
+
 export const getStatsSummary = (
   startDate: string,
   endDate: string,

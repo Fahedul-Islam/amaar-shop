@@ -117,6 +117,107 @@ func (r *analyticsRepo) TopProducts(ctx context.Context, shopID string, limit in
 	return products, nil
 }
 
+// lowStockThreshold defines how close to zero stock a product must be to
+// surface in the seller's reorder queue. 5 is small enough that sellers
+// have a real chance to reorder before stocking out.
+const lowStockThreshold = 5
+
+// DashboardSummary returns everything the home page needs in one repo call.
+// Each piece is its own query — composing them in SQL would obscure intent
+// and the home page is hit once per visit, so two round-trips is fine.
+func (r *analyticsRepo) DashboardSummary(ctx context.Context, shopID string) (*domain.DashboardSummary, error) {
+	s := &domain.DashboardSummary{
+		LowStockProducts: []domain.LowStockProduct{},
+	}
+
+	// Action queue + cash flow from orders table in a single aggregate.
+	err := r.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'pending')                                               AS pending_orders,
+			COUNT(*) FILTER (WHERE status IN ('pending','confirmed')
+			                 AND advance_payment_required = true
+			                 AND advance_payment_received = false)                                   AS awaiting_advance,
+			COUNT(*) FILTER (WHERE status NOT IN ('cancelled')
+			                 AND (created_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date) AS today_orders,
+			COALESCE(SUM(total_bdt) FILTER (WHERE status NOT IN ('cancelled')
+			                 AND (created_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date), 0)::text AS today_revenue,
+			COUNT(*) FILTER (WHERE status = 'shipped')                                               AS in_transit_orders,
+			COALESCE(SUM(total_bdt) FILTER (WHERE status = 'shipped'), 0)::text                      AS in_transit_amount,
+			COUNT(*) FILTER (WHERE status = 'delivered'
+			                 AND (updated_at AT TIME ZONE $2)::date >= (now() AT TIME ZONE $2)::date - 6) AS delivered_week_orders,
+			COALESCE(SUM(total_bdt) FILTER (WHERE status = 'delivered'
+			                 AND (updated_at AT TIME ZONE $2)::date >= (now() AT TIME ZONE $2)::date - 6), 0)::text AS delivered_week_amount
+		FROM orders
+		WHERE shop_id = $1`,
+		shopID, shopTZ,
+	).Scan(
+		&s.PendingOrdersCount,
+		&s.AwaitingAdvanceCount,
+		&s.TodayOrders,
+		&s.TodayRevenueBDT,
+		&s.InTransitOrders,
+		&s.InTransitAmountBDT,
+		&s.DeliveredWeekOrders,
+		&s.DeliveredWeekBDT,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard order aggregate: %w", err)
+	}
+
+	// Stock counts. Out-of-stock = 0; low-stock = > 0 and <= threshold.
+	err = r.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE stock = 0)                                          AS out_of_stock,
+			COUNT(*) FILTER (WHERE stock > 0 AND stock <= $2)                          AS low_stock
+		FROM products
+		WHERE shop_id = $1
+		  AND is_archived = false
+		  AND is_active = true`,
+		shopID, lowStockThreshold,
+	).Scan(&s.OutOfStockCount, &s.LowStockCount)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard stock counts: %w", err)
+	}
+
+	// Top low-stock products to act on. Out-of-stock first, then ascending stock.
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, stock, price_bdt::text
+		FROM products
+		WHERE shop_id = $1
+		  AND is_archived = false
+		  AND is_active = true
+		  AND stock <= $2
+		ORDER BY stock ASC, name ASC
+		LIMIT 5`,
+		shopID, lowStockThreshold,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard low-stock list: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p domain.LowStockProduct
+		if err := rows.Scan(&p.ID, &p.Name, &p.Stock, &p.PriceBDT); err != nil {
+			return nil, fmt.Errorf("dashboard low-stock scan: %w", err)
+		}
+		s.LowStockProducts = append(s.LowStockProducts, p)
+	}
+
+	// Unanswered review count.
+	err = r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM product_reviews
+		WHERE shop_id = $1
+		  AND owner_reply IS NULL`,
+		shopID,
+	).Scan(&s.UnansweredReviewsCount)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard unanswered reviews: %w", err)
+	}
+
+	return s, nil
+}
+
 // PopularProducts returns top-selling products (public — no revenue data leaked).
 func (r *analyticsRepo) PopularProducts(ctx context.Context, shopID string, limit int) ([]domain.TopProduct, error) {
 	// Last 30 days.

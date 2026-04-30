@@ -1,20 +1,31 @@
 'use client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge, statusTone } from '@/components/ui/Badge';
 import { IcChevR } from '@/components/icons/Icons';
-import { listOrders } from '@/lib/orderApi';
+import { listOrders, prettyOrderStatus } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
 
-const tabs = ['All', 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+// Tab keys are the raw status sent to the API; labels are seller-friendly.
+const tabs: { key: string; label: string }[] = [
+  { key: 'All', label: 'All' },
+  { key: 'pending', label: 'Awaiting confirmation' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'shipped', label: 'With courier' },
+  { key: 'delivered', label: 'Delivered' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
 
 export default function OrdersPage() {
   const { locale } = useI18n();
   const router = useRouter();
-  const [tab, setTab] = useState('All');
+  const params = useSearchParams();
+  const validTabs = new Set(tabs.map((t) => t.key));
+  const initialTab = params?.get('status');
+  const [tab, setTab] = useState(initialTab && validTabs.has(initialTab) ? initialTab : 'All');
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['orders', tab],
@@ -28,16 +39,16 @@ export default function OrdersPage() {
 
       <div className="flex gap-1.5 mb-4 overflow-auto no-scrollbar">
         {tabs.map((t) => {
-          const on = tab === t;
+          const on = tab === t.key;
           return (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors capitalize ${
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                 on ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
               }`}
             >
-              {t}
+              {t.label}
             </button>
           );
         })}
@@ -73,7 +84,7 @@ export default function OrdersPage() {
                     <Td>{o.items.length}</Td>
                     <Td className="font-semibold">{formatBDT(o.total_bdt, locale)}</Td>
                     <Td className="text-stone-600">{o.delivery_area}</Td>
-                    <Td><Badge tone={statusTone(o.status)}>{o.status}</Badge></Td>
+                    <Td><Badge tone={statusTone(o.status)}>{prettyOrderStatus(o.status)}</Badge></Td>
                     <Td className="text-stone-500">{formatDateTime(o.created_at, locale)}</Td>
                     <Td className="text-right">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-colors whitespace-nowrap">

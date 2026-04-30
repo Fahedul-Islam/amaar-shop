@@ -145,9 +145,9 @@ func (h *Handler) ListOwnerReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := dto.ReviewListDTO{
+	out := dto.OwnerReviewListDTO{
 		Rating:  dto.ShopRatingDTO{Average: rating.Average, Count: rating.Count},
-		Reviews: toReviewDTOs(reviews),
+		Reviews: toOwnerReviewDTOs(reviews),
 	}
 	httputil.WritePaginated(w, http.StatusOK, out, paginationDTO(page, size, total))
 }
@@ -168,10 +168,41 @@ func (h *Handler) ReplyReview(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, err)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, toReviewDTO(review))
+	httputil.WriteJSON(w, http.StatusOK, toOwnerReviewDTO(review))
 }
 
 // --- helpers ---
+
+func toOwnerReviewDTOs(reviews []*domain.Review) []dto.OwnerReviewDTO {
+	out := make([]dto.OwnerReviewDTO, 0, len(reviews))
+	for _, r := range reviews {
+		out = append(out, toOwnerReviewDTO(r))
+	}
+	return out
+}
+
+func toOwnerReviewDTO(r *domain.Review) dto.OwnerReviewDTO {
+	d := dto.OwnerReviewDTO{
+		ID:            r.ID,
+		ShopID:        r.ShopID,
+		ProductID:     r.ProductID,
+		ProductName:   r.ProductName,
+		OrderID:       r.OrderID,
+		OrderItemID:   r.OrderItemID,
+		CustomerName:  r.CustomerName,
+		CustomerPhone: r.CustomerPhone,
+		Rating:        r.Rating,
+		Body:          r.Body,
+		ImageURL:      r.ImageURL,
+		OwnerReply:    r.OwnerReply,
+		CreatedAt:     r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if r.OwnerRepliedAt != nil {
+		ts := r.OwnerRepliedAt.Format("2006-01-02T15:04:05Z07:00")
+		d.OwnerRepliedAt = &ts
+	}
+	return d
+}
 
 func toReviewDTOs(reviews []*domain.Review) []dto.ReviewDTO {
 	out := make([]dto.ReviewDTO, 0, len(reviews))

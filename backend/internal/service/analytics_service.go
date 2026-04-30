@@ -268,6 +268,18 @@ func pctChange(cur, prev float64) *float64 {
 	return &v
 }
 
+// DashboardSummary returns the seller home page in a single call.
+// Not cached: action counts must reflect the latest order/stock state so
+// the seller sees a freshly-confirmed order disappear from "pending" the
+// moment they tap.
+func (s *AnalyticsService) DashboardSummary(ctx context.Context, ownerUserID string) (*domain.DashboardSummary, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.analytics.DashboardSummary(ctx, shop.ID)
+}
+
 // PopularProducts returns top products for the public storefront (no revenue data).
 func (s *AnalyticsService) PopularProducts(ctx context.Context, slug string) ([]domain.TopProduct, error) {
 	shop, err := s.shops.FindBySlug(ctx, slug)

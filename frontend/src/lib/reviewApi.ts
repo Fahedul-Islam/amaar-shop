@@ -17,6 +17,12 @@ export interface Review {
   created_at: string;
 }
 
+// OwnerReview is the seller-only view: includes the buyer's phone so the
+// shop owner can follow up on a low rating or thank a happy buyer directly.
+export interface OwnerReview extends Review {
+  customer_phone: string;
+}
+
 export interface ShopRating {
   average: number;
   count: number;
@@ -72,12 +78,12 @@ export function uploadReviewImage(file: File) {
 
 // Owner-side
 export const getOwnerReviews = (page = 1, pageSize = 20) =>
-  apiFetch<{ rating: ShopRating; reviews: Review[] }>(
+  apiFetch<{ rating: ShopRating; reviews: OwnerReview[] }>(
     `/api/shops/me/reviews?page=${page}&page_size=${pageSize}`,
   );
 
 export const replyToReview = (reviewId: string, reply: string) =>
-  apiFetch<Review>(`/api/shops/me/reviews/${encodeURIComponent(reviewId)}/reply`, {
+  apiFetch<OwnerReview>(`/api/shops/me/reviews/${encodeURIComponent(reviewId)}/reply`, {
     method: 'POST',
     body: JSON.stringify({ reply }),
   });

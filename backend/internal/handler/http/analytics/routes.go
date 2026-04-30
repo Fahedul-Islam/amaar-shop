@@ -11,6 +11,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	auth := mw.With(middleware.Auth(h.cfg.JWTSecret))
 
 	// Seller analytics (authenticated)
+	mux.HandleFunc("GET /api/shops/me/dashboard/summary", auth.Then(h.DashboardSummary))
 	mux.HandleFunc("GET /api/shops/me/stats/today", auth.Then(h.TodayStats))
 	mux.HandleFunc("GET /api/shops/me/stats/range", auth.Then(h.RangeStats))
 	mux.HandleFunc("GET /api/shops/me/stats/summary", auth.Then(h.StatsSummary))

@@ -183,6 +183,43 @@ func toChangesDTO(c *domain.SummaryChanges) *dto.SummaryChangesDTO {
 	}
 }
 
+// DashboardSummary handles GET /api/shops/me/dashboard/summary.
+// Bundles the home page's action queue and cash flow snapshot in one call.
+func (h *Handler) DashboardSummary(w http.ResponseWriter, r *http.Request) {
+	ownerID := middleware.GetUserID(r.Context())
+
+	s, err := h.svc.DashboardSummary(r.Context(), ownerID)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	products := make([]dto.LowStockProductDTO, 0, len(s.LowStockProducts))
+	for _, p := range s.LowStockProducts {
+		products = append(products, dto.LowStockProductDTO{
+			ID:       p.ID,
+			Name:     p.Name,
+			Stock:    p.Stock,
+			PriceBDT: p.PriceBDT,
+		})
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, dto.DashboardSummaryDTO{
+		PendingOrdersCount:     s.PendingOrdersCount,
+		AwaitingAdvanceCount:   s.AwaitingAdvanceCount,
+		UnansweredReviewsCount: s.UnansweredReviewsCount,
+		OutOfStockCount:        s.OutOfStockCount,
+		LowStockCount:          s.LowStockCount,
+		TodayRevenueBDT:        s.TodayRevenueBDT,
+		TodayOrders:            s.TodayOrders,
+		InTransitOrders:        s.InTransitOrders,
+		InTransitAmountBDT:     s.InTransitAmountBDT,
+		DeliveredWeekOrders:    s.DeliveredWeekOrders,
+		DeliveredWeekBDT:       s.DeliveredWeekBDT,
+		LowStockProducts:       products,
+	})
+}
+
 // TopProducts handles GET /api/shops/me/stats/top-products.
 func (h *Handler) TopProducts(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())

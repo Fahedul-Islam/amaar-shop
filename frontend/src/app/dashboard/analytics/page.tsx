@@ -118,6 +118,7 @@ export default function AnalyticsPage() {
       <div className="grid gap-3.5 mb-5 mt-5 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
         <MetricCard
           label="Revenue"
+          tooltip="Total money earned from completed and in-progress orders. Cancelled orders are excluded."
           value={summary ? formatBDT(summary.revenue_bdt, locale) : '—'}
           previousValue={previousSummary ? formatBDT(previousSummary.revenue_bdt, locale) : null}
           change={changes?.revenue_pct ?? null}
@@ -125,34 +126,39 @@ export default function AnalyticsPage() {
         />
         <MetricCard
           label="Orders"
+          tooltip="Number of orders received in this period. Cancelled orders are not counted."
           value={summary ? String(summary.orders) : '—'}
           previousValue={previousSummary ? String(previousSummary.orders) : null}
           change={changes?.orders_pct ?? null}
           showChange={compare}
         />
         <MetricCard
-          label="Avg order value"
+          label="Average order size"
+          tooltip="Average money spent per order. If this is rising, your buyers are spending more each time."
           value={summary ? formatBDT(summary.aov_bdt, locale) : '—'}
           previousValue={previousSummary ? formatBDT(previousSummary.aov_bdt, locale) : null}
           change={changes?.aov_pct ?? null}
           showChange={compare}
         />
         <MetricCard
-          label="Total visits"
+          label="Page views"
+          tooltip="Total number of times your products were viewed. One person can count multiple times if they reload."
           value={summary ? String(summary.total_visits) : '—'}
           previousValue={previousSummary ? String(previousSummary.total_visits) : null}
           change={changes?.total_visits_pct ?? null}
           showChange={compare}
         />
         <MetricCard
-          label="Unique visitors"
+          label="Different shoppers"
+          tooltip="How many separate people browsed your shop. Each device counts once."
           value={summary ? String(summary.unique_visits) : '—'}
           previousValue={previousSummary ? String(previousSummary.unique_visits) : null}
           change={changes?.unique_visits_pct ?? null}
           showChange={compare}
         />
         <MetricCard
-          label="Visit → order rate"
+          label="Browsers who bought"
+          tooltip="Out of every 100 different shoppers, how many placed an order. Higher is better — try improving product photos or descriptions if this is low."
           value={summary ? `${summary.order_rate.toFixed(2)}%` : '—'}
           previousValue={previousSummary ? `${previousSummary.order_rate.toFixed(2)}%` : null}
           change={changes?.order_rate_pct ?? null}
@@ -187,7 +193,7 @@ export default function AnalyticsPage() {
       </Card>
 
       <div className="flex items-center justify-between mb-3 mt-8">
-        <h2 className="text-lg font-semibold tracking-tight">Visitor traffic</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Shop visitors</h2>
         <div className="flex bg-stone-100 rounded-md p-0.5 text-xs">
           {(['daily', 'weekly', 'monthly'] as VisitPeriod[]).map((p) => (
             <button
@@ -206,13 +212,13 @@ export default function AnalyticsPage() {
       <Card className="p-5 mb-5" hover={false}>
         <div className="flex items-baseline justify-between mb-3.5 gap-3 flex-wrap">
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">Visits per {visitPeriod === 'daily' ? 'day' : visitPeriod === 'weekly' ? 'week' : 'month'}</h3>
+            <h3 className="text-sm font-semibold text-stone-900">Shoppers per {visitPeriod === 'daily' ? 'day' : visitPeriod === 'weekly' ? 'week' : 'month'}</h3>
             <p className="text-[11px] text-stone-500 mt-0.5">
-              <span className="inline-flex items-center gap-1.5 mr-3">
-                <span className="w-3 h-0.5 bg-teal-600" /> Total visits
+              <span className="inline-flex items-center gap-1.5 mr-3" title="Total times your products were viewed">
+                <span className="w-3 h-0.5 bg-teal-600" /> Page views
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-coral-500" /> Unique visitors
+              <span className="inline-flex items-center gap-1.5" title="Different people who browsed">
+                <span className="w-3 h-0.5 bg-coral-500" /> Different shoppers
               </span>
             </p>
           </div>
@@ -223,8 +229,8 @@ export default function AnalyticsPage() {
           <DualLineChart
             primary={totalVisitPoints}
             secondary={uniqueVisitPoints}
-            primaryLabel="Total visits"
-            secondaryLabel="Unique visitors"
+            primaryLabel="Page views"
+            secondaryLabel="Different shoppers"
             formatY={(n) => formatCompactNumber(n, locale)}
             formatX={(s) => formatShortDate(s, locale)}
           />
@@ -232,7 +238,10 @@ export default function AnalyticsPage() {
       </Card>
 
       <Card className="p-5 mb-5" hover={false}>
-        <h3 className="text-sm font-semibold mb-3">Most visited products · 30d</h3>
+        <h3 className="text-sm font-semibold mb-3">Most viewed products · 30d</h3>
+        <p className="text-[11px] text-stone-500 mb-3 -mt-2">
+          Products that get attention but may not be selling — try sharpening the photos or price.
+        </p>
         {(topVisitedQ.data ?? []).length === 0 ? (
           <div className="text-sm text-stone-500 py-3">No product visits yet.</div>
         ) : (
@@ -258,7 +267,10 @@ export default function AnalyticsPage() {
       </Card>
 
       <Card className="p-5" hover={false}>
-        <h3 className="text-sm font-semibold mb-3">Top products · sales</h3>
+        <h3 className="text-sm font-semibold mb-3">Best sellers</h3>
+        <p className="text-[11px] text-stone-500 mb-3 -mt-2">
+          Products that earned you the most this month.
+        </p>
         {(topQ.data ?? []).length === 0 ? (
           <div className="text-sm text-stone-500 py-3">No sales data yet.</div>
         ) : (
@@ -288,12 +300,14 @@ export default function AnalyticsPage() {
 
 function MetricCard({
   label,
+  tooltip,
   value,
   previousValue,
   change,
   showChange,
 }: {
   label: string;
+  tooltip?: string;
   value: string;
   previousValue: string | null;
   change: number | null;
@@ -309,7 +323,12 @@ function MetricCard({
 
   return (
     <Card className={`p-4 ${accent}`} hover={false}>
-      <div className="text-[11px] text-stone-500 font-medium uppercase tracking-wider">{label}</div>
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-[11px] text-stone-500 font-medium uppercase tracking-wider">{label}</div>
+        {tooltip && (
+          <span className="text-stone-300 text-xs cursor-help" title={tooltip}>ⓘ</span>
+        )}
+      </div>
       <div className="text-2xl font-bold tracking-tight mt-1.5 text-stone-900">{value}</div>
 
       {showChange && !noPrev && change != null && (

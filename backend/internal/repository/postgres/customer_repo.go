@@ -91,12 +91,15 @@ func (r *customerRepo) List(ctx context.Context, shopID string, f domain.Custome
 		return fmt.Sprintf("$%d", len(args))
 	}
 
+	// Filters reference the `enriched` CTE (see query below). Postgres won't
+	// resolve a column alias defined in the same SELECT inside its own WHERE,
+	// so the segment column must come from a wrapping CTE.
 	if f.Segment != "" {
-		whereClauses = append(whereClauses, "segment = "+addArg(string(f.Segment)))
+		whereClauses = append(whereClauses, "e.segment = "+addArg(string(f.Segment)))
 	}
 	if s := strings.TrimSpace(f.Search); s != "" {
 		pattern := "%" + s + "%"
-		whereClauses = append(whereClauses, "(l.customer_name ILIKE "+addArg(pattern)+" OR l.customer_phone ILIKE "+addArg(pattern)+")")
+		whereClauses = append(whereClauses, "(e.customer_name ILIKE "+addArg(pattern)+" OR e.customer_phone ILIKE "+addArg(pattern)+")")
 	}
 
 	where := ""
@@ -104,36 +107,51 @@ func (r *customerRepo) List(ctx context.Context, shopID string, f domain.Custome
 		where = "WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	orderBy := "ORDER BY a.last_order_at DESC NULLS LAST"
+	orderBy := "ORDER BY e.last_order_at DESC NULLS LAST"
 	switch f.Sort {
 	case "orders":
-		orderBy = "ORDER BY a.total_orders DESC, a.last_order_at DESC NULLS LAST"
+		orderBy = "ORDER BY e.total_orders DESC, e.last_order_at DESC NULLS LAST"
 	case "spent":
-		orderBy = "ORDER BY a.total_spent DESC, a.last_order_at DESC NULLS LAST"
+		orderBy = "ORDER BY e.total_spent DESC, e.last_order_at DESC NULLS LAST"
 	case "name":
-		orderBy = "ORDER BY l.customer_name ASC"
+		orderBy = "ORDER BY e.customer_name ASC"
 	}
 
 	limitArg := addArg(limit)
 	offsetArg := addArg(offset)
 
-	query := baseAggregateCTE + `
+	query := baseAggregateCTE + `,
+        enriched AS (
+            SELECT
+                a.phone_key,
+                l.customer_name,
+                l.customer_phone,
+                l.delivery_area,
+                a.total_orders,
+                a.total_spent,
+                a.first_order_at,
+                a.last_order_at,
+                CASE WHEN a.total_orders > 0 THEN (a.total_spent / a.total_orders) ELSE 0 END AS avg_order,
+                ` + segmentExpr + ` AS segment
+            FROM agg a
+            JOIN latest l USING (phone_key)
+        )
         SELECT
-            a.phone_key,
-            l.customer_name,
-            l.customer_phone,
-            COALESCE(l.delivery_area, ''),
-            a.total_orders,
-            a.total_spent::text,
-            CASE WHEN a.total_orders > 0 THEN (a.total_spent / a.total_orders)::text ELSE '0' END AS avg_order,
-            a.first_order_at,
-            a.last_order_at,` + segmentExpr + ` AS segment,
+            e.phone_key,
+            e.customer_name,
+            e.customer_phone,
+            COALESCE(e.delivery_area, ''),
+            e.total_orders,
+            e.total_spent::text,
+            e.avg_order::text,
+            e.first_order_at,
+            e.last_order_at,
+            e.segment,
             COALESCE(n.note, '') AS note,
             n.updated_at AS note_updated_at,
             COUNT(*) OVER () AS total_count
-        FROM agg a
-        JOIN latest l USING (phone_key)
-        LEFT JOIN customer_notes n ON n.shop_id = $1 AND n.customer_phone = a.phone_key
+        FROM enriched e
+        LEFT JOIN customer_notes n ON n.shop_id = $1 AND n.customer_phone = e.phone_key
         ` + where + `
         ` + orderBy + `
         LIMIT ` + limitArg + ` OFFSET ` + offsetArg

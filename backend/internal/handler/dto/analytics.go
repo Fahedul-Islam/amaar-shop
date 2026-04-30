@@ -59,3 +59,29 @@ type StatsSummaryDTO struct {
 	Previous *PeriodSummaryDTO  `json:"previous,omitempty"`
 	Changes  *SummaryChangesDTO `json:"changes,omitempty"`
 }
+
+// LowStockProductDTO is one row in the dashboard's reorder list.
+type LowStockProductDTO struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Stock    int    `json:"stock"`
+	PriceBDT string `json:"price_bdt"`
+}
+
+// DashboardSummaryDTO is the seller home page response.
+type DashboardSummaryDTO struct {
+	PendingOrdersCount     int                  `json:"pending_orders_count"`
+	AwaitingAdvanceCount   int                  `json:"awaiting_advance_count"`
+	UnansweredReviewsCount int                  `json:"unanswered_reviews_count"`
+	OutOfStockCount        int                  `json:"out_of_stock_count"`
+	LowStockCount          int                  `json:"low_stock_count"`
+
+	TodayRevenueBDT     string `json:"today_revenue_bdt"`
+	TodayOrders         int    `json:"today_orders"`
+	InTransitOrders     int    `json:"in_transit_orders"`
+	InTransitAmountBDT  string `json:"in_transit_amount_bdt"`
+	DeliveredWeekOrders int    `json:"delivered_week_orders"`
+	DeliveredWeekBDT    string `json:"delivered_week_bdt"`
+
+	LowStockProducts []LowStockProductDTO `json:"low_stock_products"`
+}

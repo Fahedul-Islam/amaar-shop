@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge, statusTone } from '@/components/ui/Badge';
+import { prettyOrderStatus } from '@/lib/orderApi';
 import { SegmentBadge } from '@/components/ui/SegmentBadge';
 import { Button } from '@/components/ui/Button';
 import { IcChevL, IcChevR } from '@/components/icons/Icons';
@@ -155,7 +156,7 @@ export default function CustomerDetailPage() {
                     <Td>{o.items_count}</Td>
                     <Td className="font-semibold">{formatBDT(o.total_bdt, locale)}</Td>
                     <Td>
-                      <Badge tone={statusTone(o.status)}>{o.status}</Badge>
+                      <Badge tone={statusTone(o.status)}>{prettyOrderStatus(o.status)}</Badge>
                     </Td>
                     <Td className="text-right">
                       <span className="inline-flex items-center gap-1 text-xs text-teal-700 group-hover:text-teal-800">

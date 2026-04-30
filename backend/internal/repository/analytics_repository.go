@@ -20,4 +20,8 @@ type AnalyticsRepository interface {
 
 	// PopularProducts returns the top-selling products for a shop (public, no revenue exposed).
 	PopularProducts(ctx context.Context, shopID string, limit int) ([]domain.TopProduct, error)
+
+	// DashboardSummary returns the home-page action queue + cash flow snapshot
+	// in a single round-trip.
+	DashboardSummary(ctx context.Context, shopID string) (*domain.DashboardSummary, error)
 }

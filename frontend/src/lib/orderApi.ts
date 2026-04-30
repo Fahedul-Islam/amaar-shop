@@ -3,6 +3,20 @@ import type { Order } from './storefrontApi';
 
 export type { Order, OrderItem } from './storefrontApi';
 
+// prettyOrderStatus turns the raw enum into seller-friendly copy. "Pending"
+// alone is ambiguous — sellers wonder whose move is next. The mapping makes
+// the next action explicit and is reused everywhere status is rendered.
+export function prettyOrderStatus(s: string): string {
+  switch (s) {
+    case 'pending': return 'Awaiting confirmation';
+    case 'confirmed': return 'Confirmed';
+    case 'shipped': return 'With courier';
+    case 'delivered': return 'Delivered';
+    case 'cancelled': return 'Cancelled';
+    default: return s;
+  }
+}
+
 export interface OrderListParams {
   page?: number;
   page_size?: number;

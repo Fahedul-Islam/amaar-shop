@@ -97,10 +97,10 @@ export default function CustomersPage() {
           subtitle="Re-engage them"
         />
         <SummaryStat
-          label="Avg lifetime value"
+          label="Avg spent per customer"
           value={a ? formatBDT(a.avg_lifetime_bdt, locale) : '—'}
           accent="text-stone-900"
-          subtitle="Per customer"
+          subtitle="Across all their orders"
         />
       </div>
 
@@ -182,10 +182,10 @@ export default function CustomersPage() {
               <thead>
                 <tr className="bg-stone-50 text-stone-500 text-left">
                   <Th>Customer</Th>
-                  <Th>Segment</Th>
+                  <Th>Type</Th>
                   <Th>Orders</Th>
                   <Th>Total spent</Th>
-                  <Th>Avg order</Th>
+                  <Th>Avg per order</Th>
                   <Th>Last order</Th>
                   <Th>{''}</Th>
                 </tr>

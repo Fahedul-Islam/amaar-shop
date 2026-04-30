@@ -53,3 +53,35 @@ type StatsSummaryResult struct {
 	Previous *PeriodSummary  `json:"previous,omitempty"`
 	Changes  *SummaryChanges `json:"changes,omitempty"`
 }
+
+// LowStockProduct surfaces a single product nearing or at zero inventory.
+type LowStockProduct struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Stock int    `json:"stock"`
+	// PriceBDT is the price the buyer pays — useful so the seller can sort
+	// reorder priority by potential lost revenue.
+	PriceBDT string `json:"price_bdt"`
+}
+
+// DashboardSummary is everything the dashboard home page needs in one
+// round-trip. Composed at the service layer from multiple repositories.
+type DashboardSummary struct {
+	// Action queue — counts the seller should clear today.
+	PendingOrdersCount     int `json:"pending_orders_count"`
+	AwaitingAdvanceCount   int `json:"awaiting_advance_count"`
+	UnansweredReviewsCount int `json:"unanswered_reviews_count"`
+	OutOfStockCount        int `json:"out_of_stock_count"`
+	LowStockCount          int `json:"low_stock_count"`
+
+	// Cash flow snapshot (defaults to today / last 7 days).
+	TodayRevenueBDT     string `json:"today_revenue_bdt"`
+	TodayOrders         int    `json:"today_orders"`
+	InTransitOrders     int    `json:"in_transit_orders"`     // status='shipped'
+	InTransitAmountBDT  string `json:"in_transit_amount_bdt"` // sum of those totals
+	DeliveredWeekOrders int    `json:"delivered_week_orders"` // last 7 days
+	DeliveredWeekBDT    string `json:"delivered_week_bdt"`
+
+	// Top low-stock products to act on.
+	LowStockProducts []LowStockProduct `json:"low_stock_products"`
+}

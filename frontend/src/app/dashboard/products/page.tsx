@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -10,16 +11,28 @@ import { IcPlus, IcSearch, IcChevR } from '@/components/icons/Icons';
 import { listProducts } from '@/lib/productApi';
 import { useI18n } from '@/hooks/useI18n';
 
+type StockFilter = 'all' | 'low' | 'out';
+
 export default function ProductsPage() {
   const { locale } = useI18n();
+  const params = useSearchParams();
+  const initialStock = (params?.get('stock') === 'low' || params?.get('stock') === 'out')
+    ? (params.get('stock') as StockFilter)
+    : 'all';
   const [q, setQ] = useState('');
+  const [stockFilter, setStockFilter] = useState<StockFilter>(initialStock);
 
   const { data, isLoading } = useQuery({
     queryKey: ['prods', q],
-    queryFn: () => listProducts({ q: q || undefined, page_size: 50 }),
+    queryFn: () => listProducts({ q: q || undefined, page_size: 100 }),
   });
 
-  const products = data?.data ?? [];
+  const allProducts = data?.data ?? [];
+  const products = allProducts.filter((p) => {
+    if (stockFilter === 'out') return p.stock === 0;
+    if (stockFilter === 'low') return p.stock > 0 && p.stock <= 5;
+    return true;
+  });
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7">
@@ -44,7 +57,26 @@ export default function ProductsPage() {
               className="bg-transparent outline-none flex-1 text-sm text-stone-900"
             />
           </div>
-          <div className="ml-auto text-sm text-stone-500">Sort: Recently added</div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            {([
+              { key: 'all', label: 'All' },
+              { key: 'low', label: 'Running low' },
+              { key: 'out', label: 'Out of stock' },
+            ] as { key: StockFilter; label: string }[]).map((f) => {
+              const on = stockFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setStockFilter(f.key)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                    on ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {isLoading ? (
