@@ -19,6 +19,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
 )
 
 // RouterDeps holds everything the router needs to register all routes.
@@ -33,6 +34,7 @@ type RouterDeps struct {
 	AnalyticsHandler   *analytics.Handler
 	MarketplaceHandler *marketplace.Handler
 	ReviewHandler      *review.Handler
+	VisitHandler       *visit.Handler
 	Middleware         *middleware.Manager
 	RateLimiter        *middleware.RateLimiter
 }
@@ -53,6 +55,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.AnalyticsHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.MarketplaceHandler.RegisterRoutes(mux)
 	deps.ReviewHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.VisitHandler.RegisterRoutes(mux)
 
 	return deps.Middleware.Handler(mux)
 }

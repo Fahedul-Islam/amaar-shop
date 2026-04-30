@@ -1,7 +1,16 @@
 'use client';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
-import { getRangeStats, getTodayStats, getTopProducts } from '@/lib/analyticsApi';
+import {
+  getRangeStats,
+  getTodayStats,
+  getTopProducts,
+  getVisitSummary,
+  getTopVisitedProducts,
+  getVisitConversion,
+  type VisitPeriod,
+} from '@/lib/analyticsApi';
 import { formatBDT } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -15,17 +24,31 @@ export default function AnalyticsPage() {
   const { locale } = useI18n();
   const todayIso = new Date().toISOString().slice(0, 10);
   const from = isoDaysAgo(29);
+  const [visitPeriod, setVisitPeriod] = useState<VisitPeriod>('daily');
 
   const todayQ = useQuery({ queryKey: ['stats-today'], queryFn: getTodayStats });
   const rangeQ = useQuery({ queryKey: ['stats-range', from, todayIso], queryFn: () => getRangeStats(from, todayIso) });
   const topQ = useQuery({ queryKey: ['top-products'], queryFn: getTopProducts });
+
+  const visitSummaryQ = useQuery({
+    queryKey: ['visits-summary', visitPeriod],
+    queryFn: () => getVisitSummary(visitPeriod),
+  });
+  const topVisitedQ = useQuery({
+    queryKey: ['visits-top-products'],
+    queryFn: getTopVisitedProducts,
+  });
+  const conversionQ = useQuery({
+    queryKey: ['visits-conversion', 30],
+    queryFn: () => getVisitConversion(30),
+  });
 
   const series = rangeQ.data ?? [];
   const totalRevenue = series.reduce((s, d) => s + parseFloat(d.revenue_bdt), 0);
   const totalOrders = series.reduce((s, d) => s + d.orders, 0);
   const avg = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-  // chart path
+  // Revenue chart path
   const w = 600, h = 160;
   const max = Math.max(1, ...series.map((d) => parseFloat(d.revenue_bdt)));
   const pts = series.map((d, i) => {
@@ -35,6 +58,24 @@ export default function AnalyticsPage() {
   });
   const path = pts.length ? 'M' + pts.map((p) => p.join(',')).join(' L') : '';
   const fill = path ? `${path} L ${w},${h - 20} L 0,${h - 20} Z` : '';
+
+  // Visit chart paths (total + unique stacked as two lines)
+  const buckets = visitSummaryQ.data?.buckets ?? [];
+  const visitMax = Math.max(1, ...buckets.map((b) => b.total_visits));
+  const xy = (val: number, i: number) => {
+    const x = (i / Math.max(1, buckets.length - 1)) * w;
+    const y = h - 20 - (val / visitMax) * (h - 30);
+    return [x, y];
+  };
+  const totalPath = buckets.length
+    ? 'M' + buckets.map((b, i) => xy(b.total_visits, i).join(',')).join(' L')
+    : '';
+  const uniquePath = buckets.length
+    ? 'M' + buckets.map((b, i) => xy(b.unique_visits, i).join(',')).join(' L')
+    : '';
+
+  const totalVisits30d = buckets.reduce((s, b) => s + b.total_visits, 0);
+  const uniqueVisits30d = buckets.reduce((s, b) => s + b.unique_visits, 0);
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7">
@@ -69,8 +110,90 @@ export default function AnalyticsPage() {
         )}
       </Card>
 
+      {/* --- Visit analytics section --- */}
+
+      <div className="flex items-center justify-between mb-3 mt-8">
+        <h2 className="text-lg font-semibold tracking-tight">Visitor traffic</h2>
+        <div className="flex bg-stone-100 rounded-md p-0.5 text-xs">
+          {(['daily', 'weekly', 'monthly'] as VisitPeriod[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setVisitPeriod(p)}
+              className={`px-3 py-1.5 rounded font-medium capitalize transition-colors ${
+                visitPeriod === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3.5 mb-5 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
+        <Stat label="Total visits · 30d" value={String(totalVisits30d)} />
+        <Stat label="Unique visitors · 30d" value={String(uniqueVisits30d)} />
+        <Stat
+          label="Order count · 30d"
+          value={conversionQ.data ? String(conversionQ.data.order_count) : '—'}
+        />
+        <Stat
+          label="Visit → order rate"
+          value={conversionQ.data ? `${conversionQ.data.order_rate.toFixed(2)}%` : '—'}
+        />
+      </div>
+
+      <Card className="p-5 mb-5" hover={false}>
+        <div className="flex items-center justify-between mb-3.5">
+          <h3 className="text-sm font-semibold">
+            Visits · {visitPeriod}
+          </h3>
+          <div className="flex gap-3 text-[11px] text-stone-500">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-teal-600" /> Total
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-coral-500" /> Unique
+            </span>
+          </div>
+        </div>
+        {buckets.length === 0 ? (
+          <div className="text-sm text-stone-500 py-10 text-center">No visits yet.</div>
+        ) : (
+          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-40">
+            <path d={totalPath} fill="none" stroke="#0D9488" strokeWidth="2" />
+            <path d={uniquePath} fill="none" stroke="#F87171" strokeWidth="2" strokeDasharray="3 3" />
+          </svg>
+        )}
+      </Card>
+
+      <Card className="p-5 mb-5" hover={false}>
+        <h3 className="text-sm font-semibold mb-3">Most visited products · 30d</h3>
+        {(topVisitedQ.data ?? []).length === 0 ? (
+          <div className="text-sm text-stone-500 py-3">No product visits yet.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-stone-500 text-left">
+                <th className="py-2 font-medium">Product</th>
+                <th className="py-2 font-medium">Visits</th>
+                <th className="py-2 font-medium">Unique</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(topVisitedQ.data ?? []).map((p) => (
+                <tr key={p.product_id} className="border-t border-stone-100">
+                  <td className="py-2.5">{p.product_name}</td>
+                  <td className="py-2.5 font-medium">{p.total_visits}</td>
+                  <td className="py-2.5 text-stone-600">{p.unique_visits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
       <Card className="p-5" hover={false}>
-        <h3 className="text-sm font-semibold mb-3">Top products</h3>
+        <h3 className="text-sm font-semibold mb-3">Top products · sales</h3>
         {(topQ.data ?? []).length === 0 ? (
           <div className="text-sm text-stone-500 py-3">No sales data yet.</div>
         ) : (

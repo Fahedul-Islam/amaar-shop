@@ -21,19 +21,23 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
+	visithandler "github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
 	"github.com/fhedul/amaarshop/backend/internal/service"
 	localstorage "github.com/fhedul/amaarshop/backend/internal/storage/local"
+	"github.com/fhedul/amaarshop/backend/internal/visit"
 
 	"net/http"
 )
 
 // App holds the assembled application: the HTTP handler ready to serve,
-// and the database handle for lifecycle management.
+// and the database handle plus background workers for lifecycle management.
 type App struct {
-	Handler http.Handler
-	DB      *sql.DB
+	Handler         http.Handler
+	DB              *sql.DB
+	VisitWorker     *visit.Worker
+	VisitAggregator *visit.Aggregator
 }
 
 // New builds the full dependency graph from config and returns a ready App.
@@ -68,6 +72,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
 	marketplaceRepo := postgres.NewMarketplaceRepo(db)
 	reviewRepo := postgres.NewReviewRepo(db)
+	visitRepo := postgres.NewVisitRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -75,7 +80,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, fileStore)
 	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo)
-	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo)
+	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 
@@ -91,39 +96,61 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	// --- Middleware ---
 	mw := middleware.NewManager()
 	mw.Use(middleware.Logger(log))
+	mw.Use(middleware.BotFilter()) // tag bot UAs so visit-tracking can skip them
 	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5
+
+	// --- Background workers ---
+	// Async visit pipeline: handlers Enqueue() events; the worker batches inserts.
+	// Defaults are sized for ~100 visits/sec sustained throughput.
+	visitWorker := visit.NewWorker(visitRepo, log, visit.Config{})
+	visitWorker.Start()
+	visitAggregator := visit.NewAggregator(visitRepo, log, 0, 30) // 00:30 UTC daily
+	visitAggregator.Start()
 
 	// --- Handlers (depend only on service interfaces) ---
 	authHandler := auth.NewHandler(authSvc, cfg)
 	shopHandler := shop.NewHandler(shopSvc, cfg)
 	categoryHandler := category.NewHandler(categorySvc, cfg)
-	productHandler := product.NewHandler(productSvc, cfg)
+	productHandler := product.NewHandler(productSvc, cfg, visitWorker)
 	orderHandler := order.NewHandler(orderSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
+	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
-		DB:               db,
-		UploadDir:        cfg.UploadDir,
-		AuthHandler:      authHandler,
-		ShopHandler:      shopHandler,
-		CategoryHandler:  categoryHandler,
-		ProductHandler:   productHandler,
-		OrderHandler:     orderHandler,
+		DB:                 db,
+		UploadDir:          cfg.UploadDir,
+		AuthHandler:        authHandler,
+		ShopHandler:        shopHandler,
+		CategoryHandler:    categoryHandler,
+		ProductHandler:     productHandler,
+		OrderHandler:       orderHandler,
 		AnalyticsHandler:   analyticsHandler,
 		MarketplaceHandler: marketplaceHandler,
 		ReviewHandler:      reviewHandler,
+		VisitHandler:       visitHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})
 
-	return &App{Handler: handler, DB: db}, nil
+	return &App{
+		Handler:         handler,
+		DB:              db,
+		VisitWorker:     visitWorker,
+		VisitAggregator: visitAggregator,
+	}, nil
 }
 
-// Close releases resources held by the app (currently the DB handle).
+// Close shuts down background workers (draining in-flight visits) and the DB.
 func (a *App) Close() error {
+	if a.VisitAggregator != nil {
+		a.VisitAggregator.Stop()
+	}
+	if a.VisitWorker != nil {
+		a.VisitWorker.Stop()
+	}
 	if a.DB != nil {
 		return a.DB.Close()
 	}

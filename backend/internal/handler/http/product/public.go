@@ -3,10 +3,13 @@ package product
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/dto"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
+	"github.com/fhedul/amaarshop/backend/internal/visit"
 )
 
 // ListPublic handles GET /api/shops/by-slug/{slug}/products.
@@ -39,6 +42,9 @@ func (h *Handler) ListPublic(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetPublic handles GET /api/shops/by-slug/{slug}/products/{id}.
+//
+// On success, fires off a non-blocking visit event to the async worker.
+// Bots (per User-Agent) are skipped so analytics reflect real shoppers.
 func (h *Handler) GetPublic(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	id := r.PathValue("id")
@@ -48,5 +54,17 @@ func (h *Handler) GetPublic(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, err)
 		return
 	}
+
+	if h.tracker != nil && !middleware.IsBotRequest(r) {
+		h.tracker.Enqueue(domain.ProductVisit{
+			ShopID:    p.ShopID,
+			ProductID: p.ID,
+			VisitorID: visit.VisitorID(visit.ClientIP(r), r.UserAgent()),
+			Referrer:  r.Header.Get("Referer"),
+			UserAgent: r.UserAgent(),
+			VisitedAt: time.Now().UTC(),
+		})
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, toPublicProductDTO(p))
 }

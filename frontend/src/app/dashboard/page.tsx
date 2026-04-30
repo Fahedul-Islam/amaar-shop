@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
 import { IcFacebook, IcPlus } from '@/components/icons/Icons';
-import { getTodayStats, getTopProducts } from '@/lib/analyticsApi';
+import { getTodayStats, getTopProducts, getVisitConversion } from '@/lib/analyticsApi';
 import { listOrders } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useShop } from '@/hooks/useShop';
@@ -18,6 +18,7 @@ export default function DashboardHomePage() {
   const todayQ = useQuery({ queryKey: ['stats-today'], queryFn: getTodayStats });
   const ordersQ = useQuery({ queryKey: ['orders-recent'], queryFn: () => listOrders({ page_size: 5 }) });
   const topQ = useQuery({ queryKey: ['top-products'], queryFn: getTopProducts });
+  const visitsQ = useQuery({ queryKey: ['visits-conversion', 7], queryFn: () => getVisitConversion(7) });
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -52,6 +53,10 @@ export default function DashboardHomePage() {
         <StatCard
           label={locale === 'bn' ? 'আজকের আয়' : 'Revenue · today'}
           value={todayQ.data ? formatBDT(todayQ.data.revenue_bdt, locale) : '—'}
+        />
+        <StatCard
+          label={locale === 'bn' ? 'ভিজিটর · ৭দিন' : 'Visitors · 7d'}
+          value={visitsQ.data?.unique_visits ?? '—'}
         />
         <StatCard
           label={locale === 'bn' ? 'দোকানের URL' : 'Shop URL'}

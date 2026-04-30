@@ -10,7 +10,10 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
-const cacheTTL = 5 * time.Minute
+// cacheTTL is intentionally short — sellers expect dashboard counts to react
+// the moment they mark an order delivered. 30s smooths refresh-button spam
+// without making the data look stale.
+const cacheTTL = 30 * time.Second
 
 // cacheEntry holds a cached value with its expiration time.
 type cacheEntry struct {
@@ -22,6 +25,7 @@ type cacheEntry struct {
 type AnalyticsService struct {
 	shops     repository.ShopRepository
 	analytics repository.AnalyticsRepository
+	visits    repository.VisitRepository
 
 	mu    sync.RWMutex
 	cache map[string]cacheEntry
@@ -30,10 +34,12 @@ type AnalyticsService struct {
 func NewAnalyticsService(
 	shops repository.ShopRepository,
 	analytics repository.AnalyticsRepository,
+	visits repository.VisitRepository,
 ) *AnalyticsService {
 	return &AnalyticsService{
 		shops:     shops,
 		analytics: analytics,
+		visits:    visits,
 		cache:     make(map[string]cacheEntry),
 	}
 }
@@ -117,6 +123,52 @@ func (s *AnalyticsService) TopProducts(ctx context.Context, ownerUserID string) 
 	}
 	s.set(key, products)
 	return products, nil
+}
+
+// VisitSummary returns a date-bucketed visit time series for the seller's shop.
+// Not cached: today's data updates continuously and a stale cache would
+// confuse sellers who just saw a visit land. The underlying queries hit
+// indexed columns and stay fast even without caching.
+func (s *AnalyticsService) VisitSummary(ctx context.Context, ownerUserID string, period domain.VisitPeriod, days int) ([]domain.VisitBucketStats, time.Time, time.Time, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, time.Time{}, time.Time{}, err
+	}
+
+	to := time.Now().UTC()
+	from := to.AddDate(0, 0, -days+1)
+
+	buckets, err := s.visits.VisitsByPeriod(ctx, shop.ID, period, from, to)
+	if err != nil {
+		return nil, time.Time{}, time.Time{}, err
+	}
+	return buckets, from, to, nil
+}
+
+// TopVisitedProducts returns the most-visited products for the seller's shop
+// over the last 30 days. Not cached (see VisitSummary).
+func (s *AnalyticsService) TopVisitedProducts(ctx context.Context, ownerUserID string) ([]domain.TopVisitedProduct, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	to := time.Now().UTC()
+	from := to.AddDate(0, 0, -30)
+	return s.visits.TopVisitedProducts(ctx, shop.ID, from, to, 10)
+}
+
+// VisitConversion returns visit-to-order conversion stats for the last `days` days.
+// Not cached (see VisitSummary).
+func (s *AnalyticsService) VisitConversion(ctx context.Context, ownerUserID string, days int) (*domain.VisitConversion, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	to := time.Now().UTC()
+	from := to.AddDate(0, 0, -days+1)
+	return s.visits.Conversion(ctx, shop.ID, from, to)
 }
 
 // PopularProducts returns top products for the public storefront (no revenue data).

@@ -18,22 +18,29 @@ func NewAnalyticsRepo(db *sql.DB) repository.AnalyticsRepository {
 	return &analyticsRepo{db: db}
 }
 
-func (r *analyticsRepo) TodayStats(ctx context.Context, shopID string) (*domain.TodayStats, error) {
-	today := time.Now().Format("2006-01-02")
+// shopTZ is the seller-facing timezone — Bangladesh-only platform, so we
+// hard-code Asia/Dhaka. Postgres does the conversion in-query, so the host
+// container's TZ doesn't matter.
+const shopTZ = "Asia/Dhaka"
 
+func (r *analyticsRepo) TodayStats(ctx context.Context, shopID string) (*domain.TodayStats, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*)                                          AS total_orders,
 			COUNT(*) FILTER (WHERE status = 'pending')        AS pending_orders,
-			COALESCE(SUM(total_bdt) FILTER (WHERE status NOT IN ('cancelled')), 0) AS revenue_bdt
+			COALESCE(SUM(total_bdt) FILTER (WHERE status NOT IN ('cancelled')), 0) AS revenue_bdt,
+			(now() AT TIME ZONE $2)::date                     AS today
 		FROM orders
 		WHERE shop_id = $1
-		  AND created_at::date = $2::date`, shopID, today)
+		  AND (created_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date`,
+		shopID, shopTZ)
 
-	s := &domain.TodayStats{Date: today}
-	if err := row.Scan(&s.TotalOrders, &s.PendingOrders, &s.RevenueBDT); err != nil {
+	s := &domain.TodayStats{}
+	var today time.Time
+	if err := row.Scan(&s.TotalOrders, &s.PendingOrders, &s.RevenueBDT, &today); err != nil {
 		return nil, fmt.Errorf("today stats: %w", err)
 	}
+	s.Date = today.Format("2006-01-02")
 	return s, nil
 }
 
@@ -46,10 +53,10 @@ func (r *analyticsRepo) RangeStats(ctx context.Context, shopID string, from, to 
 		FROM generate_series($2::date, $3::date, '1 day') AS d
 		LEFT JOIN orders o
 			ON o.shop_id = $1
-			AND o.created_at::date = d::date
+			AND (o.created_at AT TIME ZONE $4)::date = d::date
 		GROUP BY d::date
 		ORDER BY d::date`,
-		shopID, from.Format("2006-01-02"), to.Format("2006-01-02"))
+		shopID, from.Format("2006-01-02"), to.Format("2006-01-02"), shopTZ)
 	if err != nil {
 		return nil, fmt.Errorf("range stats query: %w", err)
 	}

@@ -6,14 +6,22 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/dto"
 )
 
-// Handler implements the /api/shops/me/products/* and /api/shops/by-slug/*/products endpoints.
-type Handler struct {
-	svc Service
-	cfg *config.Config
+// VisitTracker enqueues a non-blocking visit event. Implemented by the
+// asynchronous visit worker. The handler depends on this interface (not the
+// concrete worker) so visit recording stays optional in tests.
+type VisitTracker interface {
+	Enqueue(v domain.ProductVisit)
 }
 
-func NewHandler(svc Service, cfg *config.Config) *Handler {
-	return &Handler{svc: svc, cfg: cfg}
+// Handler implements the /api/shops/me/products/* and /api/shops/by-slug/*/products endpoints.
+type Handler struct {
+	svc     Service
+	cfg     *config.Config
+	tracker VisitTracker
+}
+
+func NewHandler(svc Service, cfg *config.Config, tracker VisitTracker) *Handler {
+	return &Handler{svc: svc, cfg: cfg, tracker: tracker}
 }
 
 func toImageDTO(img domain.ProductImage) dto.ProductImageDTO {

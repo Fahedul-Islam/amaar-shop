@@ -48,6 +48,13 @@ export default function OrderDetailPage() {
       await updateOrderStatus(order.id, status, status === 'cancelled' ? cancelReason : undefined);
       qc.invalidateQueries({ queryKey: ['order', id] });
       qc.invalidateQueries({ queryKey: ['orders'] });
+      // The dashboard home and analytics page have their own keyed views of
+      // the same data — invalidate them too so a pending → delivered move is
+      // reflected everywhere on the next render.
+      qc.invalidateQueries({ queryKey: ['orders-recent'] });
+      qc.invalidateQueries({ queryKey: ['stats-today'] });
+      qc.invalidateQueries({ queryKey: ['top-products'] });
+      qc.invalidateQueries({ queryKey: ['stats-range'] });
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not update status');
     }

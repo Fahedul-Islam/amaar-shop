@@ -15,6 +15,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	mux.HandleFunc("GET /api/shops/me/stats/range", auth.Then(h.RangeStats))
 	mux.HandleFunc("GET /api/shops/me/stats/top-products", auth.Then(h.TopProducts))
 
+	// Visit analytics (authenticated)
+	mux.HandleFunc("GET /api/shops/me/visits/summary", auth.Then(h.VisitSummary))
+	mux.HandleFunc("GET /api/shops/me/visits/top-products", auth.Then(h.TopVisitedProducts))
+	mux.HandleFunc("GET /api/shops/me/visits/conversion", auth.Then(h.VisitConversion))
+
 	// Public storefront analytics (no auth)
 	mux.HandleFunc("GET /api/shops/by-slug/{slug}/popular-products", h.PopularProducts)
 }

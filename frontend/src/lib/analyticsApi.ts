@@ -43,3 +43,61 @@ export async function getPopularProducts(slug: string): Promise<PopularProduct[]
     throw err;
   }
 }
+
+// --- Visit analytics ---
+
+export type VisitPeriod = 'daily' | 'weekly' | 'monthly';
+
+export interface VisitBucket {
+  bucket: string;
+  total_visits: number;
+  unique_visits: number;
+}
+
+export interface VisitSummary {
+  period: VisitPeriod;
+  from: string;
+  to: string;
+  buckets: VisitBucket[];
+}
+
+export interface TopVisitedProduct {
+  product_id: string;
+  product_name: string;
+  total_visits: number;
+  unique_visits: number;
+}
+
+export interface VisitConversion {
+  unique_visits: number;
+  total_visits: number;
+  order_count: number;
+  order_rate: number;
+}
+
+export const getVisitSummary = (period: VisitPeriod = 'daily', days?: number) => {
+  const qs = new URLSearchParams({ period });
+  if (days) qs.set('days', String(days));
+  return apiFetch<VisitSummary>(`/api/shops/me/visits/summary?${qs.toString()}`);
+};
+
+export const getTopVisitedProducts = () =>
+  apiFetch<TopVisitedProduct[]>('/api/shops/me/visits/top-products');
+
+export const getVisitConversion = (days = 30) =>
+  apiFetch<VisitConversion>(`/api/shops/me/visits/conversion?days=${days}`);
+
+// trackProductView fires a fire-and-forget visit event. Failures are
+// intentionally swallowed: missing a beacon must never disrupt the page.
+export async function trackProductView(shopSlug: string, productId: string): Promise<void> {
+  try {
+    await fetch('/api/track/product-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shop_slug: shopSlug, product_id: productId }),
+      keepalive: true,
+    });
+  } catch {
+    // ignore — best-effort beacon
+  }
+}
