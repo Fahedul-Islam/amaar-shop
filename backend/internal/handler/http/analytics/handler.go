@@ -65,8 +65,8 @@ func (h *Handler) RangeStats(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "to must not be before from")
 		return
 	}
-	if to.Sub(from).Hours() > 90*24 {
-		httputil.WriteValidationError(w, "date range must not exceed 90 days")
+	if to.Sub(from).Hours() > 366*24 {
+		httputil.WriteValidationError(w, "date range must not exceed 366 days")
 		return
 	}
 
@@ -85,6 +85,102 @@ func (h *Handler) RangeStats(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, out)
+}
+
+// StatsSummary handles GET /api/shops/me/stats/summary?startDate&endDate&compareStartDate&compareEndDate.
+// Returns aggregate metrics (revenue, orders, AOV, visits, conversion) for
+// the current window plus an optional previous window with percentage changes.
+func (h *Handler) StatsSummary(w http.ResponseWriter, r *http.Request) {
+	ownerID := middleware.GetUserID(r.Context())
+
+	q := r.URL.Query()
+	curFrom, curTo, ok := parseRange(w, q.Get("startDate"), q.Get("endDate"), "startDate", "endDate")
+	if !ok {
+		return
+	}
+
+	var prevFrom, prevTo time.Time
+	prevFromStr := q.Get("compareStartDate")
+	prevToStr := q.Get("compareEndDate")
+	if prevFromStr != "" || prevToStr != "" {
+		var ok2 bool
+		prevFrom, prevTo, ok2 = parseRange(w, prevFromStr, prevToStr, "compareStartDate", "compareEndDate")
+		if !ok2 {
+			return
+		}
+	}
+
+	res, err := h.svc.StatsSummary(r.Context(), ownerID, curFrom, curTo, prevFrom, prevTo)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, dto.StatsSummaryDTO{
+		Current:  toPeriodSummaryDTO(res.Current),
+		Previous: toPeriodSummaryPtrDTO(res.Previous),
+		Changes:  toChangesDTO(res.Changes),
+	})
+}
+
+func parseRange(w http.ResponseWriter, fromStr, toStr, fromName, toName string) (time.Time, time.Time, bool) {
+	if fromStr == "" || toStr == "" {
+		httputil.WriteValidationError(w, fromName+" and "+toName+" query parameters are required (YYYY-MM-DD)")
+		return time.Time{}, time.Time{}, false
+	}
+	from, err := time.Parse("2006-01-02", fromStr)
+	if err != nil {
+		httputil.WriteValidationError(w, fromName+" must be a valid date (YYYY-MM-DD)")
+		return time.Time{}, time.Time{}, false
+	}
+	to, err := time.Parse("2006-01-02", toStr)
+	if err != nil {
+		httputil.WriteValidationError(w, toName+" must be a valid date (YYYY-MM-DD)")
+		return time.Time{}, time.Time{}, false
+	}
+	if to.Before(from) {
+		httputil.WriteValidationError(w, toName+" must not be before "+fromName)
+		return time.Time{}, time.Time{}, false
+	}
+	if to.Sub(from).Hours() > 366*24 {
+		httputil.WriteValidationError(w, "date range must not exceed 366 days")
+		return time.Time{}, time.Time{}, false
+	}
+	return from, to, true
+}
+
+func toPeriodSummaryDTO(p domain.PeriodSummary) dto.PeriodSummaryDTO {
+	return dto.PeriodSummaryDTO{
+		StartDate:    p.StartDate,
+		EndDate:      p.EndDate,
+		RevenueBDT:   p.RevenueBDT,
+		Orders:       p.Orders,
+		AOVBDT:       p.AOVBDT,
+		TotalVisits:  p.TotalVisits,
+		UniqueVisits: p.UniqueVisits,
+		OrderRate:    p.OrderRate,
+	}
+}
+
+func toPeriodSummaryPtrDTO(p *domain.PeriodSummary) *dto.PeriodSummaryDTO {
+	if p == nil {
+		return nil
+	}
+	d := toPeriodSummaryDTO(*p)
+	return &d
+}
+
+func toChangesDTO(c *domain.SummaryChanges) *dto.SummaryChangesDTO {
+	if c == nil {
+		return nil
+	}
+	return &dto.SummaryChangesDTO{
+		RevenuePct:      c.RevenuePct,
+		OrdersPct:       c.OrdersPct,
+		AOVPct:          c.AOVPct,
+		TotalVisitsPct:  c.TotalVisitsPct,
+		UniqueVisitsPct: c.UniqueVisitsPct,
+		OrderRatePct:    c.OrderRatePct,
+	}
 }
 
 // TopProducts handles GET /api/shops/me/stats/top-products.

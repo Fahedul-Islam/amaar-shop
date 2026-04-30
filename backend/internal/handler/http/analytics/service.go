@@ -11,6 +11,7 @@ import (
 type Service interface {
 	TodayStats(ctx context.Context, ownerUserID string) (*domain.TodayStats, error)
 	RangeStats(ctx context.Context, ownerUserID string, from, to time.Time) ([]domain.DayStat, error)
+	StatsSummary(ctx context.Context, ownerUserID string, curFrom, curTo, prevFrom, prevTo time.Time) (*domain.StatsSummaryResult, error)
 	TopProducts(ctx context.Context, ownerUserID string) ([]domain.TopProduct, error)
 	PopularProducts(ctx context.Context, slug string) ([]domain.TopProduct, error)
 

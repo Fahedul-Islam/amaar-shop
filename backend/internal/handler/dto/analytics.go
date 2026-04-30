@@ -29,3 +29,33 @@ type PopularProductDTO struct {
 	ProductName   string `json:"product_name"`
 	TotalQuantity int    `json:"total_quantity"`
 }
+
+// PeriodSummaryDTO is the aggregate metrics for a single date window.
+type PeriodSummaryDTO struct {
+	StartDate    string  `json:"start_date"`
+	EndDate      string  `json:"end_date"`
+	RevenueBDT   string  `json:"revenue_bdt"`
+	Orders       int     `json:"orders"`
+	AOVBDT       string  `json:"aov_bdt"`
+	TotalVisits  int     `json:"total_visits"`
+	UniqueVisits int     `json:"unique_visits"`
+	OrderRate    float64 `json:"order_rate"`
+}
+
+// SummaryChangesDTO holds percentage changes between two periods. Null fields
+// signal "previous value was zero so percentage is undefined".
+type SummaryChangesDTO struct {
+	RevenuePct      *float64 `json:"revenue_pct"`
+	OrdersPct       *float64 `json:"orders_pct"`
+	AOVPct          *float64 `json:"aov_pct"`
+	TotalVisitsPct  *float64 `json:"total_visits_pct"`
+	UniqueVisitsPct *float64 `json:"unique_visits_pct"`
+	OrderRatePct    *float64 `json:"order_rate_pct"`
+}
+
+// StatsSummaryDTO is the response for GET /api/shops/me/stats/summary.
+type StatsSummaryDTO struct {
+	Current  PeriodSummaryDTO   `json:"current"`
+	Previous *PeriodSummaryDTO  `json:"previous,omitempty"`
+	Changes  *SummaryChangesDTO `json:"changes,omitempty"`
+}

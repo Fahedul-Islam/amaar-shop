@@ -15,6 +15,33 @@ export function formatBDT(n: number | string, locale: 'en' | 'bn' = 'en'): strin
   return '৳' + formatNumber(n, locale);
 }
 
+// formatCompactNumber renders 1230 → "1.2k", 1_500_000 → "1.5M". Used for
+// chart axis labels where horizontal space is tight.
+export function formatCompactNumber(n: number, locale: 'en' | 'bn' = 'en'): string {
+  const abs = Math.abs(n);
+  let s: string;
+  if (abs >= 1_000_000) s = (n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1) + 'M';
+  else if (abs >= 1_000) s = (n / 1_000).toFixed(abs >= 10_000 ? 0 : 1) + 'k';
+  else s = String(Math.round(n));
+  s = s.replace(/\.0([kM])/, '$1');
+  return locale === 'bn' ? toBnDigits(s) : s;
+}
+
+export function formatCompactBDT(n: number, locale: 'en' | 'bn' = 'en'): string {
+  return '৳' + formatCompactNumber(n, locale);
+}
+
+// formatShortDate renders "2026-04-30" → "30 Apr". Used as chart x-axis labels.
+export function formatShortDate(iso: string, locale: 'en' | 'bn' = 'en'): string {
+  try {
+    const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+    const s = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return locale === 'bn' ? toBnDigits(s) : s;
+  } catch {
+    return iso;
+  }
+}
+
 export function formatDate(iso: string, locale: 'en' | 'bn' = 'en'): string {
   try {
     const d = new Date(iso);

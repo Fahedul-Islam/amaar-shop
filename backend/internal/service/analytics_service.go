@@ -87,9 +87,9 @@ func (s *AnalyticsService) RangeStats(ctx context.Context, ownerUserID string, f
 		return nil, err
 	}
 
-	// Enforce max 90-day range.
-	if to.Sub(from).Hours() > 90*24 {
-		return nil, fmt.Errorf("date range must not exceed 90 days")
+	// Enforce max 366-day range so "This year" works.
+	if to.Sub(from).Hours() > 366*24 {
+		return nil, fmt.Errorf("date range must not exceed 366 days")
 	}
 
 	key := fmt.Sprintf("range:%s:%s:%s", shop.ID, from.Format("2006-01-02"), to.Format("2006-01-02"))
@@ -169,6 +169,103 @@ func (s *AnalyticsService) VisitConversion(ctx context.Context, ownerUserID stri
 	to := time.Now().UTC()
 	from := to.AddDate(0, 0, -days+1)
 	return s.visits.Conversion(ctx, shop.ID, from, to)
+}
+
+// StatsSummary returns aggregate metrics for the current window and, when
+// previous bounds are non-zero, the prior window plus percentage changes.
+// Composing on top of RangeStats + Conversion avoids duplicating SQL.
+func (s *AnalyticsService) StatsSummary(
+	ctx context.Context,
+	ownerUserID string,
+	curFrom, curTo time.Time,
+	prevFrom, prevTo time.Time,
+) (*domain.StatsSummaryResult, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	cur, err := s.computeSummary(ctx, shop.ID, curFrom, curTo)
+	if err != nil {
+		return nil, err
+	}
+	out := &domain.StatsSummaryResult{Current: *cur}
+
+	if !prevFrom.IsZero() && !prevTo.IsZero() {
+		prev, err := s.computeSummary(ctx, shop.ID, prevFrom, prevTo)
+		if err != nil {
+			return nil, err
+		}
+		out.Previous = prev
+		out.Changes = computeChanges(cur, prev)
+	}
+	return out, nil
+}
+
+func (s *AnalyticsService) computeSummary(ctx context.Context, shopID string, from, to time.Time) (*domain.PeriodSummary, error) {
+	if to.Sub(from).Hours() > 366*24 {
+		return nil, fmt.Errorf("date range must not exceed 366 days")
+	}
+
+	days, err := s.analytics.RangeStats(ctx, shopID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	conv, err := s.visits.Conversion(ctx, shopID, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	var revenue float64
+	var orders int
+	for _, d := range days {
+		// RevenueBDT is a NUMERIC string from Postgres. ParseFloat keeps the
+		// math simple; precision is ample for dashboard sums.
+		var v float64
+		fmt.Sscanf(d.RevenueBDT, "%f", &v)
+		revenue += v
+		orders += d.Orders
+	}
+	var aov float64
+	if orders > 0 {
+		aov = revenue / float64(orders)
+	}
+
+	return &domain.PeriodSummary{
+		StartDate:    from.Format("2006-01-02"),
+		EndDate:      to.Format("2006-01-02"),
+		RevenueBDT:   fmt.Sprintf("%.2f", revenue),
+		Orders:       orders,
+		AOVBDT:       fmt.Sprintf("%.2f", aov),
+		TotalVisits:  conv.TotalVisits,
+		UniqueVisits: conv.UniqueVisits,
+		OrderRate:    conv.OrderRate,
+	}, nil
+}
+
+func computeChanges(cur, prev *domain.PeriodSummary) *domain.SummaryChanges {
+	parse := func(s string) float64 {
+		var v float64
+		fmt.Sscanf(s, "%f", &v)
+		return v
+	}
+	return &domain.SummaryChanges{
+		RevenuePct:      pctChange(parse(cur.RevenueBDT), parse(prev.RevenueBDT)),
+		OrdersPct:       pctChange(float64(cur.Orders), float64(prev.Orders)),
+		AOVPct:          pctChange(parse(cur.AOVBDT), parse(prev.AOVBDT)),
+		TotalVisitsPct:  pctChange(float64(cur.TotalVisits), float64(prev.TotalVisits)),
+		UniqueVisitsPct: pctChange(float64(cur.UniqueVisits), float64(prev.UniqueVisits)),
+		OrderRatePct:    pctChange(cur.OrderRate, prev.OrderRate),
+	}
+}
+
+func pctChange(cur, prev float64) *float64 {
+	if prev == 0 {
+		return nil
+	}
+	v := (cur - prev) / prev * 100
+	v = float64(int(v*100)) / 100
+	return &v
 }
 
 // PopularProducts returns top products for the public storefront (no revenue data).

@@ -25,6 +25,46 @@ export const getTodayStats = () => apiFetch<TodayStats>('/api/shops/me/stats/tod
 export const getRangeStats = (from: string, to: string) =>
   apiFetch<DayStat[]>(`/api/shops/me/stats/range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
+export interface PeriodSummary {
+  start_date: string;
+  end_date: string;
+  revenue_bdt: string;
+  orders: number;
+  aov_bdt: string;
+  total_visits: number;
+  unique_visits: number;
+  order_rate: number;
+}
+
+export interface SummaryChanges {
+  revenue_pct: number | null;
+  orders_pct: number | null;
+  aov_pct: number | null;
+  total_visits_pct: number | null;
+  unique_visits_pct: number | null;
+  order_rate_pct: number | null;
+}
+
+export interface StatsSummary {
+  current: PeriodSummary;
+  previous?: PeriodSummary;
+  changes?: SummaryChanges;
+}
+
+export const getStatsSummary = (
+  startDate: string,
+  endDate: string,
+  compareStartDate?: string,
+  compareEndDate?: string,
+) => {
+  const qs = new URLSearchParams({ startDate, endDate });
+  if (compareStartDate && compareEndDate) {
+    qs.set('compareStartDate', compareStartDate);
+    qs.set('compareEndDate', compareEndDate);
+  }
+  return apiFetch<StatsSummary>(`/api/shops/me/stats/summary?${qs.toString()}`);
+};
+
 export const getTopProducts = () => apiFetch<TopProduct[]>('/api/shops/me/stats/top-products');
 
 export interface PopularProduct {
