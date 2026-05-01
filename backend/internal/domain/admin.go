@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // PlatformStats are the headline numbers on the admin overview page.
 // Money fields are decimal strings to preserve precision through JSON.
@@ -166,44 +169,88 @@ type AnalyticsReport struct {
 }
 
 // ----- Financial report (Money & payouts page) -----------------------------
+//
+// Money model: AmaarShop is COD-first. Cash flows direct from buyer to shop.
+// The shop owner then owes AmaarShop a 5% platform fee, billed every 14 days.
+// So all financial reporting is framed as "fees collected" / "fees still owed
+// by shops to the platform" — never the other way around.
 
-// RevenueSplit shows how the platform's GMV is divided between the shops
-// (paid to owners) and AmaarShop (platform fee).
-type RevenueSplit struct {
-	ToShopsBDT     string  `json:"to_shops_bdt"`
-	PlatformFeeBDT string  `json:"platform_fee_bdt"`
-	ShopsPct       float64 `json:"to_shops_pct"`
-	FeePct         float64 `json:"platform_fee_pct"`
+// FeeBillingCycleDays is how often a shop is expected to settle its
+// platform-fee balance with AmaarShop.
+const FeeBillingCycleDays = 14
+
+// FeeStatus describes where one shop stands on its current fee balance.
+type FeeStatus string
+
+const (
+	FeeStatusPaidUp  FeeStatus = "paid_up"  // no outstanding balance
+	FeeStatusDue     FeeStatus = "due"      // balance owed, within current 14-day window
+	FeeStatusOverdue FeeStatus = "overdue"  // balance owed, last payment > 14 days ago (or never)
+)
+
+// ShopFeeStatus is one shop's current fee picture. It's computed live from
+// orders + payments — there's no "invoice" entity. The UI uses it to render
+// "shop X owes ৳Y, last paid Z days ago".
+type ShopFeeStatus struct {
+	ShopID         string    `json:"shop_id"`
+	ShopName       string    `json:"shop_name"`
+	ShopSlug       string    `json:"shop_slug"`
+
+	UnbilledOrders int       `json:"unbilled_orders"` // orders since last payment (period start)
+	UnbilledGMVBDT string    `json:"unbilled_gmv_bdt"`
+	OutstandingFeeBDT string `json:"outstanding_fee_bdt"` // 5% × UnbilledGMV
+
+	LastPaidAt        *string  `json:"last_paid_at,omitempty"`        // ISO8601, nil if never paid
+	LastPaidAmountBDT string   `json:"last_paid_amount_bdt,omitempty"` // amount of the last payment
+	DaysSinceLastPaid *int     `json:"days_since_last_paid,omitempty"` // nil if never paid
+
+	Status   FeeStatus `json:"status"`
 }
 
-// ShopPayout is one shop's pending earnings for the period.
-// "Pending" = orders that have been placed and not cancelled, since AmaarShop
-// has no real payout/settlement system yet — the number reflects what we'd
-// owe the shop if we cut a check today.
-type ShopPayout struct {
-	ShopID    string `json:"shop_id"`
-	ShopName  string `json:"shop_name"`
-	ShopSlug  string `json:"shop_slug"`
-	Orders    int    `json:"orders"`
-	GrossBDT  string `json:"gross_bdt"`
-	FeeBDT    string `json:"fee_bdt"`
-	NetBDT    string `json:"net_bdt"`
-}
-
-// FinancialReport bundles money-and-payouts data for the admin financial page.
+// FinancialReport bundles fee-collection data for the admin financial page.
 type FinancialReport struct {
 	Days int `json:"days"`
 
-	GMV             PeriodMetric `json:"gmv_bdt"`
-	PlatformFee     PeriodMetric `json:"platform_fee_bdt"`
-	PendingPayouts  string       `json:"pending_payouts_bdt"`  // outstanding to shops right now
-	PendingPayoutCount int       `json:"pending_payout_count"` // how many shops have any pending earnings
-	Refunds         PeriodMetric `json:"refunds_bdt"`          // sum of cancelled order totals
+	// Window-scoped metrics:
+	GMV         PeriodMetric `json:"gmv_bdt"`         // total order value processed by all shops
+	PlatformFee PeriodMetric `json:"platform_fee_bdt"` // 5% of GMV — what the platform earned in this window
+	FeesCollected PeriodMetric `json:"fees_collected_bdt"` // sum of shop_fee_payments rows in window
+	Refunds     PeriodMetric `json:"refunds_bdt"`       // cancelled order totals (informational)
 
-	GMVDaily        []DailyPoint   `json:"gmv_daily"`
-	RevenueSplit    RevenueSplit   `json:"revenue_split"`
-	UpcomingPayouts []ShopPayout   `json:"upcoming_payouts"`
+	// Live cross-window snapshots:
+	OutstandingFeesBDT       string `json:"outstanding_fees_bdt"`        // total still owed by all shops right now
+	ShopsWithOutstandingFees int    `json:"shops_with_outstanding_fees"` // count of shops with > 0 owed
+	ShopsOverdue             int    `json:"shops_overdue"`               // count whose last_paid_at + 14d has passed
+
+	GMVDaily []DailyPoint    `json:"gmv_daily"`
+	ShopFees []ShopFeeStatus `json:"shop_fees"`
 }
+
+// RecordFeePaymentInput is the admin-supplied payload for marking a shop's
+// outstanding fees as paid.
+type RecordFeePaymentInput struct {
+	ShopID      string
+	AmountBDT   string
+	CoversUntil time.Time // settles all unbilled orders strictly before this
+	Note        string
+	RecordedBy  string // admin user id
+}
+
+// ShopFeePayment is one settlement row.
+type ShopFeePayment struct {
+	ID          string    `json:"id"`
+	ShopID      string    `json:"shop_id"`
+	AmountBDT   string    `json:"amount_bdt"`
+	CoversUntil time.Time `json:"covers_until"`
+	RecordedBy  *string   `json:"recorded_by,omitempty"`
+	Note        string    `json:"note,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+var (
+	ErrInvalidPaymentAmount = errors.New("payment amount must be greater than zero")
+	ErrInvalidCoversUntil   = errors.New("covers_until must be a valid timestamp in the past or now")
+)
 
 // ----- Admin team (Roles & access page) ------------------------------------
 

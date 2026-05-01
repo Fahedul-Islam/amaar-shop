@@ -6,6 +6,7 @@ import { ProductCard } from '@/components/ProductCard';
 import { Button } from '@/components/ui/Button';
 import { StarRating } from '@/components/ui/StarRating';
 import { ReviewList } from '@/components/storefront/ReviewList';
+import { ReportShopButton } from '@/components/storefront/ReportShopButton';
 import { getCategories, getProducts } from '@/lib/storefrontApi';
 import { getPopularProducts } from '@/lib/analyticsApi';
 import { applyDiscount, formatBDT } from '@/lib/format';
@@ -210,6 +211,9 @@ export default function ShopLandingPage() {
                   </a>
                 </>
               )}
+            </div>
+            <div className="mt-3">
+              <ReportShopButton shopSlug={shop.slug} shopName={shop.name} />
             </div>
           </div>
         </div>

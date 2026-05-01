@@ -11,6 +11,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
+	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // Service is the subset of AdminService methods the HTTP handler uses.
@@ -34,16 +35,30 @@ type Service interface {
 	FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error)
 	ListAdmins(ctx context.Context) ([]domain.AdminTeamMember, error)
 	SetUserAdmin(ctx context.Context, callerID, targetID string, isAdmin bool) error
+
+	RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error)
+	FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error)
+}
+
+// ReportService is the subset of report service methods the admin handler
+// uses. Kept separate from Service so the report code can evolve without
+// churning the larger admin interface.
+type ReportService interface {
+	List(ctx context.Context, f repository.ReportListFilter) ([]domain.AdminReportRow, int, error)
+	CountByStatus(ctx context.Context) (map[string]int, error)
+	FindByID(ctx context.Context, id string) (*domain.AdminReportRow, error)
+	UpdateStatus(ctx context.Context, reportID, newStatus, adminNote, adminUserID string) (*domain.AdminReportRow, error)
 }
 
 // Handler implements the /api/admin/* endpoints.
 type Handler struct {
-	svc Service
-	cfg *config.Config
+	svc     Service
+	reports ReportService
+	cfg     *config.Config
 }
 
-func NewHandler(svc Service, cfg *config.Config) *Handler {
-	return &Handler{svc: svc, cfg: cfg}
+func NewHandler(svc Service, reports ReportService, cfg *config.Config) *Handler {
+	return &Handler{svc: svc, reports: reports, cfg: cfg}
 }
 
 // RegisterRoutes mounts every admin endpoint under /api/admin behind the
@@ -70,6 +85,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 
 	mux.HandleFunc("GET /api/admin/admins", gated.Then(h.ListAdmins))
 	mux.HandleFunc("PATCH /api/admin/users/{id}/role", gated.Then(h.UpdateUserRole))
+
+	// Customer-submitted shop reports.
+	mux.HandleFunc("GET /api/admin/reports", gated.Then(h.ListReports))
+	mux.HandleFunc("GET /api/admin/reports/{id}", gated.Then(h.GetReport))
+	mux.HandleFunc("PATCH /api/admin/reports/{id}", gated.Then(h.UpdateReport))
+
+	// Platform-fee settlements (admin records a payment after the shop
+	// owner sends the fee via bKash / bank / cash).
+	mux.HandleFunc("POST /api/admin/shops/{id}/fee-payments", gated.Then(h.RecordFeePayment))
+	mux.HandleFunc("GET /api/admin/shops/{id}/fee-payments", gated.Then(h.GetFeePaymentHistory))
 }
 
 // requireAdmin asks the service whether the authenticated user is an admin.

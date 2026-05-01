@@ -6,7 +6,7 @@ import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
 import {
   IcHome, IcStore, IcUser, IcTruck, IcPackage, IcLogout,
-  IcChart, IcTag, IcLock,
+  IcChart, IcTag, IcLock, IcInfo,
 } from '@/components/icons/Icons';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -17,11 +17,12 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Marketplace',
     items: [
-      { href: '/admin',          label: 'Overview', Icon: IcHome,    exact: true },
-      { href: '/admin/shops',    label: 'Shops',    Icon: IcStore },
-      { href: '/admin/users',    label: 'Users',    Icon: IcUser },
-      { href: '/admin/orders',   label: 'Orders',   Icon: IcTruck },
-      { href: '/admin/products', label: 'Products', Icon: IcPackage },
+      { href: '/admin',          label: 'Overview',         Icon: IcHome,    exact: true },
+      { href: '/admin/shops',    label: 'Shops',            Icon: IcStore },
+      { href: '/admin/users',    label: 'Users',            Icon: IcUser },
+      { href: '/admin/orders',   label: 'Orders',           Icon: IcTruck },
+      { href: '/admin/products', label: 'Products',         Icon: IcPackage },
+      { href: '/admin/reports',  label: 'Customer reports', Icon: IcInfo },
     ],
   },
   {

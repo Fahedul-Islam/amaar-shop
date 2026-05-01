@@ -21,6 +21,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	visithandler "github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
@@ -77,6 +78,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	visitRepo := postgres.NewVisitRepo(db)
 	customerRepo := postgres.NewCustomerRepo(db)
 	adminRepo := postgres.NewAdminRepo(db)
+	reportRepo := postgres.NewReportRepo(db)
+	feePaymentRepo := postgres.NewFeePaymentRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -88,7 +91,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
-	adminSvc := service.NewAdminService(adminRepo, userRepo)
+	adminSvc := service.NewAdminService(adminRepo, userRepo, feePaymentRepo)
+	reportSvc := service.NewReportService(reportRepo, shopRepo)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -124,7 +128,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
 	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
 	customerHandler := customer.NewHandler(customerSvc, cfg)
-	adminHandler := admin.NewHandler(adminSvc, cfg)
+	adminHandler := admin.NewHandler(adminSvc, reportSvc, cfg)
+	reportHandler := report.NewHandler(reportSvc)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -141,6 +146,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		VisitHandler:       visitHandler,
 		CustomerHandler:    customerHandler,
 		AdminHandler:       adminHandler,
+		ReportHandler:      reportHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})

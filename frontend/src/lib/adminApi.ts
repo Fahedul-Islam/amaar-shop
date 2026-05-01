@@ -190,38 +190,111 @@ export const getAnalytics = (days = 30) =>
   apiFetch<AnalyticsReport>(`/api/admin/analytics?days=${days}`);
 
 // ----- Money & payouts (Financial) ------------------------------------------
+//
+// Money model: shops collect cash from buyers (COD) and owe AmaarShop a 5%
+// platform fee, billed every 14 days. Reporting is framed as "what shops owe
+// the platform" — outstanding fees, fees collected, etc.
 
-export interface RevenueSplit {
-  to_shops_bdt: string;
-  platform_fee_bdt: string;
-  to_shops_pct: number;
-  platform_fee_pct: number;
-}
+export type FeeStatus = 'paid_up' | 'due' | 'overdue';
 
-export interface ShopPayout {
+export interface ShopFeeStatus {
   shop_id: string;
   shop_name: string;
   shop_slug: string;
-  orders: number;
-  gross_bdt: string;
-  fee_bdt: string;
-  net_bdt: string;
+  unbilled_orders: number;
+  unbilled_gmv_bdt: string;
+  outstanding_fee_bdt: string;
+  last_paid_at?: string | null;
+  last_paid_amount_bdt?: string;
+  days_since_last_paid?: number | null;
+  status: FeeStatus;
 }
 
 export interface FinancialReport {
   days: number;
   gmv_bdt: PeriodMetric;
   platform_fee_bdt: PeriodMetric;
-  pending_payouts_bdt: string;
-  pending_payout_count: number;
+  fees_collected_bdt: PeriodMetric;
   refunds_bdt: PeriodMetric;
+  outstanding_fees_bdt: string;
+  shops_with_outstanding_fees: number;
+  shops_overdue: number;
   gmv_daily: DailyPoint[];
-  revenue_split: RevenueSplit;
-  upcoming_payouts: ShopPayout[];
+  shop_fees: ShopFeeStatus[];
 }
 
 export const getFinancial = (days = 30) =>
   apiFetch<FinancialReport>(`/api/admin/financial?days=${days}`);
+
+export interface RecordFeePaymentRequest {
+  amount_bdt: string;
+  covers_until?: string;
+  note?: string;
+}
+
+export interface ShopFeePayment {
+  id: string;
+  shop_id: string;
+  amount_bdt: string;
+  covers_until: string;
+  recorded_by?: string | null;
+  note?: string;
+  created_at: string;
+}
+
+export const recordFeePayment = (shopId: string, body: RecordFeePaymentRequest) =>
+  apiFetch<ShopFeePayment>(`/api/admin/shops/${shopId}/fee-payments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const getFeePaymentHistory = (shopId: string) =>
+  apiFetch<ShopFeePayment[]>(`/api/admin/shops/${shopId}/fee-payments`);
+
+// ----- Customer reports (admin review) --------------------------------------
+
+export type ReportStatus = 'open' | 'reviewing' | 'resolved' | 'dismissed';
+
+export interface AdminReportRow {
+  id: string;
+  shop_id: string;
+  shop_name: string;
+  shop_slug: string;
+  reason: string;
+  description: string;
+  reporter_name?: string;
+  reporter_phone?: string;
+  status: ReportStatus;
+  admin_note?: string;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
+}
+
+export interface AdminReportsList {
+  reports: AdminReportRow[];
+  counts: Record<ReportStatus, number>;
+}
+
+export const listReports = (params: { status?: string; page?: number; page_size?: number } = {}) => {
+  const sp = new URLSearchParams();
+  if (params.status) sp.set('status', params.status);
+  if (params.page) sp.set('page', String(params.page));
+  if (params.page_size) sp.set('page_size', String(params.page_size));
+  const qs = sp.toString();
+  return apiFetchEnvelope<{ data: AdminReportsList; pagination: Pagination }>(
+    `/api/admin/reports${qs ? '?' + qs : ''}`,
+  );
+};
+
+export const updateReport = (
+  reportId: string,
+  body: { status: ReportStatus; admin_note?: string },
+) =>
+  apiFetch<AdminReportRow>(`/api/admin/reports/${reportId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 
 // ----- Admin team (Roles & access) ------------------------------------------
 

@@ -1,11 +1,18 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { getFinancial, type FinancialReport, type PeriodMetric } from '@/lib/adminApi';
-import { formatBDT, formatNumber, formatShortDate } from '@/lib/format';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  getFinancial, recordFeePayment,
+  type FinancialReport, type PeriodMetric,
+  type ShopFeeStatus, type FeeStatus,
+} from '@/lib/adminApi';
+import { formatBDT, formatNumber, formatShortDate, formatDate } from '@/lib/format';
 import {
   PageHeader, PageBody, SectionCard, ShopMark, Spinner, EmptyState,
 } from '../ui';
 import { LineChart } from '@/components/ui/LineChart';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { IcX } from '@/components/icons/Icons';
 
 const RANGES = [
   { id: 7,   label: 'Last 7 days' },
@@ -14,6 +21,7 @@ const RANGES = [
   { id: 365, label: 'Last year' },
 ];
 
+// formatChange renders "↑ 14.2%" / "↓ 3.1%" / "—" for a PeriodMetric.
 function formatChange(m: PeriodMetric): { text: string; up: boolean | null } {
   if (m.change_pct === null || m.change_pct === undefined) return { text: '—', up: null };
   const up = m.change_pct >= 0;
@@ -21,10 +29,7 @@ function formatChange(m: PeriodMetric): { text: string; up: boolean | null } {
 }
 
 function MoneyTile({
-  label,
-  metric,
-  hint,
-  accent,
+  label, metric, hint, accent,
 }: {
   label: string;
   metric: PeriodMetric;
@@ -53,7 +58,15 @@ function MoneyTile({
   );
 }
 
-function PlainTile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function PlainTile({
+  label, value, sub, accent, valueClass,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+  valueClass?: string;
+}) {
   return (
     <div className="bg-white border border-stone-200 rounded-xl p-4 relative overflow-hidden">
       {accent && (
@@ -62,26 +75,43 @@ function PlainTile({ label, value, sub, accent }: { label: string; value: string
       <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">
         {label}
       </div>
-      <div className="text-2xl font-bold tracking-tight text-stone-900 mt-1">{value}</div>
+      <div className={`text-2xl font-bold tracking-tight mt-1 ${valueClass || 'text-stone-900'}`}>
+        {value}
+      </div>
       {sub && <div className="text-xs text-stone-500 mt-1">{sub}</div>}
     </div>
   );
 }
+
+const STATUS_LABEL: Record<FeeStatus, string> = {
+  paid_up: 'All settled',
+  due:     'Owes money',
+  overdue: 'Overdue',
+};
+
+const STATUS_TONE: Record<FeeStatus, string> = {
+  paid_up: 'bg-emerald-100 text-emerald-700',
+  due:     'bg-amber-100 text-amber-700',
+  overdue: 'bg-red-100 text-red-700',
+};
 
 export default function AdminFinancialPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<FinancialReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recordingFor, setRecordingFor] = useState<ShopFeeStatus | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     setLoading(true);
     setError(null);
-    getFinancial(days)
-      .then((r) => setData(r))
+    return getFinancial(days)
+      .then(setData)
       .catch((e) => setError(e?.message || 'Failed to load financial report'))
       .finally(() => setLoading(false));
   }, [days]);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   return (
     <>
@@ -113,123 +143,138 @@ export default function AdminFinancialPage() {
           </div>
         )}
 
+        {/* Plain-English explainer so admins remember how the money flow works */}
+        <div className="bg-teal-50 border border-teal-200 text-teal-900 text-sm rounded-md p-3 mb-4 leading-relaxed">
+          <strong>How money flows:</strong> Buyers pay shops directly in cash on delivery.
+          AmaarShop earns a 5% platform fee — shop owners send this to us every 14 days
+          via bKash, bank transfer, or cash. Use this page to see what each shop owes
+          and record payments as they come in.
+        </div>
+
         {loading || !data ? (
           <Spinner />
         ) : (
           <>
-            {/* Headline tiles — money in, fee earned, refunds, owed to shops */}
+            {/* Headline tiles — what shops owe vs what was collected */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-              <MoneyTile
-                label="Total sales"
-                metric={data.gmv_bdt}
-                accent="#0D9488"
-                hint="all paid orders"
-              />
-              <MoneyTile
-                label="Platform fee earned"
-                metric={data.platform_fee_bdt}
-                hint={`${data.revenue_split.platform_fee_pct.toFixed(0)}% of sales`}
-              />
               <PlainTile
-                label="Owed to shops"
-                value={formatBDT(data.pending_payouts_bdt)}
-                sub={`${formatNumber(data.pending_payout_count)} shop${data.pending_payout_count === 1 ? '' : 's'} · running total`}
-                accent="#F59E0B"
+                label="Shops owe right now"
+                value={formatBDT(data.outstanding_fees_bdt)}
+                sub={`${formatNumber(data.shops_with_outstanding_fees)} shop${data.shops_with_outstanding_fees === 1 ? '' : 's'} · ${formatNumber(data.shops_overdue)} overdue`}
+                accent={data.shops_overdue > 0 ? '#DC2626' : '#F59E0B'}
+                valueClass={data.shops_overdue > 0 ? 'text-red-700' : 'text-stone-900'}
               />
               <MoneyTile
-                label="Refunded"
-                metric={data.refunds_bdt}
-                hint="cancelled orders"
+                label="Fees we collected"
+                metric={data.fees_collected_bdt}
+                hint="payments recorded in this window"
+                accent="#0D9488"
+              />
+              <MoneyTile
+                label="Total sales by shops"
+                metric={data.gmv_bdt}
+                hint="cash collected by shops"
+              />
+              <MoneyTile
+                label="Fees earned (theoretical)"
+                metric={data.platform_fee_bdt}
+                hint="5% of total sales"
               />
             </div>
 
-            {/* Sales chart + revenue split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-              <div className="lg:col-span-2">
-                <SectionCard title="Sales per day">
-                  {data.gmv_daily.length === 0 ? (
-                    <EmptyState message="No sales yet." />
-                  ) : (
-                    <LineChart
-                      data={data.gmv_daily.map((p) => ({ x: p.date, y: Number(p.value) }))}
-                      formatY={(n) => formatBDT(Math.round(n))}
-                      formatX={(s) => formatShortDate(s)}
-                      height={220}
-                    />
-                  )}
-                </SectionCard>
-              </div>
+            {/* Sales chart */}
+            <SectionCard title="Marketplace sales per day" padBody={true}>
+              {data.gmv_daily.length === 0 ? (
+                <EmptyState message="No sales yet." />
+              ) : (
+                <LineChart
+                  data={data.gmv_daily.map((p) => ({ x: p.date, y: Number(p.value) }))}
+                  formatY={(n) => formatBDT(Math.round(n))}
+                  formatX={(s) => formatShortDate(s)}
+                  height={220}
+                />
+              )}
+            </SectionCard>
 
-              <SectionCard title="Where the money goes">
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="font-medium text-stone-900">Paid to shop owners</span>
-                      <span className="text-stone-500 tabular-nums">
-                        {formatBDT(data.revenue_split.to_shops_bdt)}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-teal-600 rounded-full"
-                        style={{ width: `${data.revenue_split.to_shops_pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="font-medium text-stone-900">Platform fee</span>
-                      <span className="text-stone-500 tabular-nums">
-                        {formatBDT(data.revenue_split.platform_fee_bdt)}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500 rounded-full"
-                        style={{ width: `${data.revenue_split.platform_fee_pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t border-stone-100 flex justify-between text-sm">
-                    <span className="text-stone-500">Total sales · period</span>
-                    <span className="font-bold tabular-nums">{formatBDT(data.gmv_bdt.current)}</span>
-                  </div>
-                </div>
-              </SectionCard>
-            </div>
+            <div className="h-4" />
 
-            {/* Per-shop earnings table */}
-            <SectionCard title="What each shop has earned" padBody={false}>
-              {data.upcoming_payouts.length === 0 ? (
-                <EmptyState message="No shop earnings in this period." />
+            {/* Per-shop fee table */}
+            <SectionCard title="What each shop owes" padBody={false}>
+              {data.shop_fees.length === 0 ? (
+                <EmptyState message="No shops yet." />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-stone-50 text-stone-500 text-left">
                         <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Shop</th>
-                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Orders</th>
-                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Total sales</th>
-                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Platform fee</th>
-                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Owed to shop</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Unbilled orders</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Sales since last paid</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-right">Owes (5%)</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Last paid</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.upcoming_payouts.map((p) => (
-                        <tr key={p.shop_id} className="border-t border-stone-100 hover:bg-stone-50">
+                      {data.shop_fees.map((s) => (
+                        <tr key={s.shop_id} className="border-t border-stone-100 hover:bg-stone-50">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">
-                              <ShopMark name={p.shop_name} size={28} />
-                              <span className="font-medium text-stone-900">{p.shop_name}</span>
+                              <ShopMark name={s.shop_name} size={28} />
+                              <span className="font-medium text-stone-900">{s.shop_name}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatNumber(p.orders)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatBDT(p.gross_bdt)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-stone-500">
-                            −{formatBDT(p.fee_bdt)}
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatNumber(s.unbilled_orders)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatBDT(s.unbilled_gmv_bdt)}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums font-bold">
-                            {formatBDT(p.net_bdt)}
+                            {Number(s.outstanding_fee_bdt) > 0 ? (
+                              <span className={s.status === 'overdue' ? 'text-red-700' : 'text-stone-900'}>
+                                {formatBDT(s.outstanding_fee_bdt)}
+                              </span>
+                            ) : (
+                              <span className="text-stone-400 font-normal">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-stone-500">
+                            {s.last_paid_at ? (
+                              <>
+                                {formatDate(s.last_paid_at)}
+                                {typeof s.days_since_last_paid === 'number' && (
+                                  <span className="text-stone-400 ml-1">
+                                    ({s.days_since_last_paid}d ago)
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-stone-400 italic">Never</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                STATUS_TONE[s.status]
+                              }`}
+                            >
+                              {STATUS_LABEL[s.status]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {Number(s.outstanding_fee_bdt) > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => setRecordingFor(s)}
+                              >
+                                Mark fee paid
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-stone-400">All settled</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -240,7 +285,127 @@ export default function AdminFinancialPage() {
             </SectionCard>
           </>
         )}
+
+        {recordingFor && (
+          <RecordPaymentModal
+            shop={recordingFor}
+            onClose={() => setRecordingFor(null)}
+            onRecorded={async () => {
+              setRecordingFor(null);
+              await refresh();
+            }}
+          />
+        )}
       </PageBody>
     </>
+  );
+}
+
+// RecordPaymentModal records a fee payment from a shop owner.
+function RecordPaymentModal({
+  shop,
+  onClose,
+  onRecorded,
+}: {
+  shop: ShopFeeStatus;
+  onClose: () => void;
+  onRecorded: () => void;
+}) {
+  const [amount, setAmount] = useState(shop.outstanding_fee_bdt);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const amt = parseFloat(amount);
+      if (!isFinite(amt) || amt <= 0) {
+        setError('Amount must be greater than zero.');
+        setBusy(false);
+        return;
+      }
+      await recordFeePayment(shop.shop_id, {
+        amount_bdt: amt.toFixed(2),
+        note: note.trim() || undefined,
+      });
+      onRecorded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to record payment');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center px-5 py-4 border-b border-stone-200">
+          <h2 className="text-base font-semibold flex-1">Record fee payment</h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700">
+            <IcX size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="p-5 grid gap-4">
+          <div className="flex items-center gap-3">
+            <ShopMark name={shop.shop_name} size={36} />
+            <div>
+              <div className="font-medium text-stone-900">{shop.shop_name}</div>
+              <div className="text-xs text-stone-500">
+                Owes {formatBDT(shop.outstanding_fee_bdt)} · {formatNumber(shop.unbilled_orders)} unbilled orders
+              </div>
+            </div>
+          </div>
+
+          <Input
+            type="text"
+            inputMode="decimal"
+            label="Amount received (BDT)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            required
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">
+              Note (optional)
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="e.g. Paid via bKash on May 1"
+              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:border-teal-500 focus:ring-teal-100 resize-none"
+            />
+          </div>
+
+          <div className="text-xs text-stone-500 bg-stone-50 border border-stone-100 rounded-md p-2.5 leading-relaxed">
+            This marks all current unbilled orders as settled. Any new orders going forward
+            will start a fresh balance for this shop.
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-2.5">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="neutral" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? 'Recording…' : 'Record payment'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

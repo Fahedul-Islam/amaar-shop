@@ -32,6 +32,14 @@ var domainErrorMap = []struct {
 	// Admin
 	{domain.ErrAdminAccessRequired, http.StatusForbidden, "forbidden"},
 	{domain.ErrCannotDemoteSelf, http.StatusUnprocessableEntity, "cannot_demote_self"},
+	{domain.ErrInvalidPaymentAmount, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidCoversUntil, http.StatusBadRequest, "validation_error"},
+	// Reports
+	{domain.ErrReportNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrInvalidReportReason, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidReportStatus, http.StatusBadRequest, "validation_error"},
+	{domain.ErrReportDescriptionTooShort, http.StatusBadRequest, "validation_error"},
+	{domain.ErrReportDescriptionTooLong, http.StatusBadRequest, "validation_error"},
 	// Shops
 	{domain.ErrShopNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrSlugTaken, http.StatusConflict, "slug_taken"},

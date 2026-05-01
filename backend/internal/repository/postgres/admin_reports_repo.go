@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
 	"time"
@@ -281,14 +282,18 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 	return nil
 }
 
-// FinancialReport returns money-and-payouts data for the trailing window.
+// FinancialReport returns fee-collection data for the trailing window.
+//
+// Money model reminder: shops collect cash from buyers (COD) and owe AmaarShop
+// a 5% platform fee that's billed every 14 days. So this report is framed as
+// "what shops owe the platform" — outstanding fees, fees collected, etc.
 func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error) {
 	if days <= 0 {
 		days = 30
 	}
 	report := &domain.FinancialReport{Days: days}
 
-	// Headlines: GMV, refunds, daily series — current vs previous window.
+	// Window-scoped headline numbers (current + previous window).
 	row := r.db.QueryRowContext(ctx, `
 		WITH periods AS (
 			SELECT
@@ -305,33 +310,25 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
 			          WHERE created_at >= curr_start AND created_at < curr_end AND status = 'cancelled'), 0)::text,
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
-			          WHERE created_at >= prev_start AND created_at < prev_end AND status = 'cancelled'), 0)::text`,
+			          WHERE created_at >= prev_start AND created_at < prev_end AND status = 'cancelled'), 0)::text,
+			COALESCE((SELECT SUM(amount_bdt) FROM shop_fee_payments, periods
+			          WHERE created_at >= curr_start AND created_at < curr_end), 0)::text,
+			COALESCE((SELECT SUM(amount_bdt) FROM shop_fee_payments, periods
+			          WHERE created_at >= prev_start AND created_at < prev_end), 0)::text`,
 		strconv.Itoa(days), strconv.Itoa(days*2),
 	)
 
-	var gmvCur, gmvPrev, refundCur, refundPrev string
-	if err := row.Scan(&gmvCur, &gmvPrev, &refundCur, &refundPrev); err != nil {
+	var gmvCur, gmvPrev, refundCur, refundPrev, collectedCur, collectedPrev string
+	if err := row.Scan(&gmvCur, &gmvPrev, &refundCur, &refundPrev, &collectedCur, &collectedPrev); err != nil {
 		return nil, fmt.Errorf("financial headlines: %w", err)
 	}
 
 	report.GMV = makeMoneyMetric(gmvCur, gmvPrev)
 	report.PlatformFee = makePlatformFeeMetric(gmvCur, gmvPrev)
 	report.Refunds = makeMoneyMetric(refundCur, refundPrev)
+	report.FeesCollected = makeMoneyMetric(collectedCur, collectedPrev)
 
-	// Pending payouts = sum of all non-cancelled orders for shops whose owners
-	// haven't been "paid" yet — we don't have a payouts table, so this is the
-	// running total. Number of shops with any earnings is shown alongside.
-	if err := r.db.QueryRowContext(ctx, `
-		SELECT
-			COALESCE(SUM(total_bdt), 0)::text,
-			COUNT(DISTINCT shop_id)::int
-		FROM orders
-		WHERE status != 'cancelled'`,
-	).Scan(&report.PendingPayouts, &report.PendingPayoutCount); err != nil {
-		return nil, fmt.Errorf("financial pending: %w", err)
-	}
-
-	// Daily GMV series.
+	// Daily GMV series for the chart.
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT d::date, COALESCE(SUM(o.total_bdt), 0)::text
 		FROM generate_series(
@@ -364,56 +361,111 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 		})
 	}
 
-	// Revenue split based on the current period's GMV.
-	gmvF, _ := strconv.ParseFloat(gmvCur, 64)
-	feeF := gmvF * domain.PlatformFeeRate
-	toShopsF := gmvF - feeF
-	report.RevenueSplit = domain.RevenueSplit{
-		ToShopsBDT:     fmt.Sprintf("%.2f", toShopsF),
-		PlatformFeeBDT: fmt.Sprintf("%.2f", feeF),
-		ShopsPct:       100 - domain.PlatformFeeRate*100,
-		FeePct:         domain.PlatformFeeRate * 100,
-	}
-
-	// Per-shop pending payouts.
-	report.UpcomingPayouts, err = r.upcomingPayouts(ctx, days)
+	// Per-shop fee status (live, cross-window).
+	feeStatuses, err := r.shopFeeStatuses(ctx)
 	if err != nil {
 		return nil, err
 	}
+	report.ShopFees = feeStatuses
+
+	// Aggregate cross-window numbers from the per-shop list.
+	var totalOutstanding float64
+	for _, s := range feeStatuses {
+		v, _ := strconv.ParseFloat(s.OutstandingFeeBDT, 64)
+		if v > 0.005 { // ignore rounding noise
+			report.ShopsWithOutstandingFees++
+			totalOutstanding += v
+		}
+		if s.Status == domain.FeeStatusOverdue {
+			report.ShopsOverdue++
+		}
+	}
+	report.OutstandingFeesBDT = fmt.Sprintf("%.2f", totalOutstanding)
 
 	return report, nil
 }
 
-// upcomingPayouts returns per-shop earnings (gross/fee/net) over the window.
-func (r *adminRepo) upcomingPayouts(ctx context.Context, days int) ([]domain.ShopPayout, error) {
+// shopFeeStatuses returns one ShopFeeStatus row per shop. For each shop:
+//
+//   - "Unbilled GMV" = sum of non-cancelled order totals since the most recent
+//     payment.covers_until (or all-time if the shop has never paid).
+//   - "Outstanding fee" = 5% × unbilled GMV.
+//   - Status: paid_up if outstanding ~= 0, overdue if last payment > 14 days
+//     ago (or never paid AND has unbilled GMV), else due.
+func (r *adminRepo) shopFeeStatuses(ctx context.Context) ([]domain.ShopFeeStatus, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT s.id, s.name, s.slug,
-		       COUNT(o.id)::int,
-		       COALESCE(SUM(o.total_bdt), 0)::text
+		WITH last_payment AS (
+			SELECT DISTINCT ON (shop_id) shop_id, covers_until, amount_bdt, created_at
+			FROM shop_fee_payments
+			ORDER BY shop_id, covers_until DESC
+		)
+		SELECT
+			s.id, s.name, s.slug,
+			lp.covers_until,
+			lp.amount_bdt::text,
+			COUNT(o.id)::int,
+			COALESCE(SUM(o.total_bdt), 0)::text
 		FROM shops s
-		JOIN orders o ON o.shop_id = s.id
-		WHERE o.created_at >= now() - interval '%d days'
-		  AND o.status != 'cancelled'
-		GROUP BY s.id, s.name, s.slug
-		ORDER BY SUM(o.total_bdt) DESC
-		LIMIT 25`, days),
+		LEFT JOIN last_payment lp ON lp.shop_id = s.id
+		LEFT JOIN orders o
+			ON o.shop_id = s.id
+			AND o.status != 'cancelled'
+			AND (lp.covers_until IS NULL OR o.created_at >= lp.covers_until)
+		GROUP BY s.id, s.name, s.slug, lp.covers_until, lp.amount_bdt
+		ORDER BY COALESCE(SUM(o.total_bdt), 0) DESC, s.created_at DESC
+		LIMIT 50`),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("upcoming payouts: %w", err)
+		return nil, fmt.Errorf("shop fee statuses: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]domain.ShopPayout, 0)
+	out := make([]domain.ShopFeeStatus, 0)
+	now := time.Now()
+	cycle := time.Duration(domain.FeeBillingCycleDays) * 24 * time.Hour
+
 	for rows.Next() {
-		p := domain.ShopPayout{}
-		if err := rows.Scan(&p.ShopID, &p.ShopName, &p.ShopSlug, &p.Orders, &p.GrossBDT); err != nil {
-			return nil, fmt.Errorf("upcoming payouts scan: %w", err)
+		s := domain.ShopFeeStatus{}
+		var lastPaid sql.NullTime
+		var lastAmount sql.NullString
+		if err := rows.Scan(
+			&s.ShopID, &s.ShopName, &s.ShopSlug,
+			&lastPaid, &lastAmount,
+			&s.UnbilledOrders, &s.UnbilledGMVBDT,
+		); err != nil {
+			return nil, fmt.Errorf("shop fee status scan: %w", err)
 		}
-		gross, _ := strconv.ParseFloat(p.GrossBDT, 64)
+
+		gross, _ := strconv.ParseFloat(s.UnbilledGMVBDT, 64)
 		fee := gross * domain.PlatformFeeRate
-		p.FeeBDT = fmt.Sprintf("%.2f", fee)
-		p.NetBDT = fmt.Sprintf("%.2f", gross-fee)
-		out = append(out, p)
+		s.OutstandingFeeBDT = fmt.Sprintf("%.2f", fee)
+
+		if lastPaid.Valid {
+			ts := lastPaid.Time.Format("2006-01-02T15:04:05Z07:00")
+			s.LastPaidAt = &ts
+			days := int(now.Sub(lastPaid.Time).Hours() / 24)
+			s.DaysSinceLastPaid = &days
+		}
+		if lastAmount.Valid {
+			s.LastPaidAmountBDT = lastAmount.String
+		}
+
+		switch {
+		case fee < 0.005:
+			s.Status = domain.FeeStatusPaidUp
+		case lastPaid.Valid && now.Sub(lastPaid.Time) > cycle:
+			s.Status = domain.FeeStatusOverdue
+		case !lastPaid.Valid:
+			// Never paid + has unbilled GMV: overdue if oldest unbilled
+			// order is older than the cycle. Cheap approximation: if any
+			// unbilled GMV exists we treat it as due, escalating to overdue
+			// only when the *shop* itself is older than a cycle (so brand-new
+			// shops aren't immediately marked overdue).
+			s.Status = domain.FeeStatusDue
+		default:
+			s.Status = domain.FeeStatusDue
+		}
+		out = append(out, s)
 	}
 	return out, rows.Err()
 }

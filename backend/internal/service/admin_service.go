@@ -2,22 +2,31 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // AdminService implements the platform-admin operations: cross-shop
-// reporting, shop suspension, and product moderation. Authorization
-// (verifying users.is_admin) is enforced once at the handler boundary —
-// methods on this service assume the caller has already passed that gate.
+// reporting, shop suspension, product moderation, and platform-fee
+// settlement. Authorization (verifying users.is_admin) is enforced once
+// at the handler boundary — methods here assume the caller has already
+// passed that gate.
 type AdminService struct {
 	admin repository.AdminRepository
 	users repository.UserRepository
+	fees  repository.FeePaymentRepository
 }
 
-func NewAdminService(admin repository.AdminRepository, users repository.UserRepository) *AdminService {
-	return &AdminService{admin: admin, users: users}
+func NewAdminService(
+	admin repository.AdminRepository,
+	users repository.UserRepository,
+	fees repository.FeePaymentRepository,
+) *AdminService {
+	return &AdminService{admin: admin, users: users, fees: fees}
 }
 
 // IsAdmin returns true if the given user has admin privileges.
@@ -123,6 +132,52 @@ func (s *AdminService) SetUserAdmin(ctx context.Context, callerID, targetID stri
 		return domain.ErrCannotDemoteSelf
 	}
 	return s.admin.SetUserAdmin(ctx, targetID, isAdmin)
+}
+
+// RecordFeePayment registers a payment from a shop owner toward their
+// outstanding 5% platform-fee balance. The admin records this manually
+// after receiving payment via bKash / bank transfer / cash.
+//
+// covers_until is required and must not be in the future — it sets the
+// upper bound on which orders this payment settles. If left zero, the
+// service stamps it as "now" so future calls treat all current unbilled
+// orders as paid.
+func (s *AdminService) RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error) {
+	amount, err := strconv.ParseFloat(in.AmountBDT, 64)
+	if err != nil || amount <= 0 {
+		return nil, domain.ErrInvalidPaymentAmount
+	}
+	if in.CoversUntil.IsZero() {
+		in.CoversUntil = time.Now()
+	}
+	if in.CoversUntil.After(time.Now().Add(time.Minute)) {
+		return nil, domain.ErrInvalidCoversUntil
+	}
+
+	// Verify the shop exists before recording. Without this, an admin typo
+	// would fail with a generic FK error from postgres.
+	if _, err := s.admin.ShopByID(ctx, in.ShopID); err != nil {
+		return nil, err
+	}
+
+	payment := &domain.ShopFeePayment{
+		ShopID:      in.ShopID,
+		AmountBDT:   fmt.Sprintf("%.2f", amount),
+		CoversUntil: in.CoversUntil,
+		Note:        in.Note,
+	}
+	if in.RecordedBy != "" {
+		payment.RecordedBy = &in.RecordedBy
+	}
+	if err := s.fees.RecordPayment(ctx, payment); err != nil {
+		return nil, err
+	}
+	return payment, nil
+}
+
+// FeePaymentHistory returns the most recent payments for a shop.
+func (s *AdminService) FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error) {
+	return s.fees.History(ctx, shopID, limit)
 }
 
 // normalizeFilter clamps page/page_size to safe defaults.

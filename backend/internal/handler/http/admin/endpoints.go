@@ -3,9 +3,12 @@ package admin
 import (
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
+	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // GetStats returns the platform overview headline numbers.
@@ -185,4 +188,139 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, map[string]any{"id": target, "is_admin": *body.IsAdmin})
+}
+
+// ListReports returns paginated customer-submitted shop reports.
+func (h *Handler) ListReports(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	f := repository.ReportListFilter{
+		Status:   q.Get("status"),
+		ShopID:   q.Get("shop_id"),
+		Page:     page,
+		PageSize: pageSize,
+	}
+
+	rows, total, err := h.reports.List(r.Context(), f)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	// Bundle status counts so the frontend can render tab badges without a
+	// second round-trip.
+	counts, err := h.reports.CountByStatus(r.Context())
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	httputil.WritePaginated(w, http.StatusOK, map[string]any{
+		"reports": rows,
+		"counts":  counts,
+	}, map[string]any{
+		"page":      f.Page,
+		"page_size": f.PageSize,
+		"total":     total,
+	})
+}
+
+// GetReport returns one report by ID.
+func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
+	rep, err := h.reports.FindByID(r.Context(), r.PathValue("id"))
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, rep)
+}
+
+// UpdateReport transitions a report to a new status with an optional admin note.
+// The admin's user id is captured automatically from the auth context for audit.
+func (h *Handler) UpdateReport(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Status    string `json:"status"`
+		AdminNote string `json:"admin_note"`
+	}
+	if err := httputil.DecodeJSONBody(r, &body); err != nil {
+		httputil.WriteValidationError(w, "invalid request body")
+		return
+	}
+	if body.Status == "" {
+		httputil.WriteValidationError(w, "status is required")
+		return
+	}
+	caller := middleware.GetUserID(r.Context())
+	rep, err := h.reports.UpdateStatus(r.Context(), r.PathValue("id"), body.Status, body.AdminNote, caller)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, rep)
+}
+
+// RecordFeePayment registers a platform-fee payment from a shop owner.
+//
+// Body:
+//
+//	{
+//	  "amount_bdt":   "5000.00",
+//	  "covers_until": "2026-05-01T00:00:00Z", // optional, defaults to now
+//	  "note":         "Paid via bKash"
+//	}
+//
+// In the COD-first money model, the shop owner has already collected cash
+// from buyers. They periodically forward the 5% platform fee to AmaarShop;
+// this endpoint records that the admin received the payment.
+func (h *Handler) RecordFeePayment(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AmountBDT   string `json:"amount_bdt"`
+		CoversUntil string `json:"covers_until"`
+		Note        string `json:"note"`
+	}
+	if err := httputil.DecodeJSONBody(r, &body); err != nil {
+		httputil.WriteValidationError(w, "invalid request body")
+		return
+	}
+	if body.AmountBDT == "" {
+		httputil.WriteValidationError(w, "amount_bdt is required")
+		return
+	}
+
+	in := domain.RecordFeePaymentInput{
+		ShopID:     r.PathValue("id"),
+		AmountBDT:  body.AmountBDT,
+		Note:       body.Note,
+		RecordedBy: middleware.GetUserID(r.Context()),
+	}
+	if body.CoversUntil != "" {
+		t, err := time.Parse(time.RFC3339, body.CoversUntil)
+		if err != nil {
+			httputil.WriteValidationError(w, "covers_until must be RFC3339 timestamp")
+			return
+		}
+		in.CoversUntil = t
+	}
+
+	payment, err := h.svc.RecordFeePayment(r.Context(), in)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, payment)
+}
+
+// GetFeePaymentHistory returns the most recent platform-fee payments for a shop.
+func (h *Handler) GetFeePaymentHistory(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 25
+	}
+	history, err := h.svc.FeePaymentHistory(r.Context(), r.PathValue("id"), limit)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, history)
 }
