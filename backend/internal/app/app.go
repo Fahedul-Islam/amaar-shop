@@ -12,6 +12,7 @@ import (
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
@@ -75,6 +76,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	reviewRepo := postgres.NewReviewRepo(db)
 	visitRepo := postgres.NewVisitRepo(db)
 	customerRepo := postgres.NewCustomerRepo(db)
+	adminRepo := postgres.NewAdminRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -86,6 +88,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
+	adminSvc := service.NewAdminService(adminRepo, userRepo)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -121,6 +124,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
 	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
 	customerHandler := customer.NewHandler(customerSvc, cfg)
+	adminHandler := admin.NewHandler(adminSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -136,6 +140,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		ReviewHandler:      reviewHandler,
 		VisitHandler:       visitHandler,
 		CustomerHandler:    customerHandler,
+		AdminHandler:       adminHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})

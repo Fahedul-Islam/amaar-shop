@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
@@ -37,6 +38,7 @@ type RouterDeps struct {
 	ReviewHandler      *review.Handler
 	VisitHandler       *visit.Handler
 	CustomerHandler    *customer.Handler
+	AdminHandler       *admin.Handler
 	Middleware         *middleware.Manager
 	RateLimiter        *middleware.RateLimiter
 }
@@ -59,6 +61,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.ReviewHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.VisitHandler.RegisterRoutes(mux)
 	deps.CustomerHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.AdminHandler.RegisterRoutes(mux, deps.Middleware)
 
 	return deps.Middleware.Handler(mux)
 }

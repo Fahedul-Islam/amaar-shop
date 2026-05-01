@@ -29,6 +29,9 @@ var domainErrorMap = []struct {
 	{domain.ErrUserNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrEmailAlreadyExists, http.StatusConflict, "email_already_exists"},
 	{domain.ErrInvalidCredentials, http.StatusUnauthorized, "unauthorized"},
+	// Admin
+	{domain.ErrAdminAccessRequired, http.StatusForbidden, "forbidden"},
+	{domain.ErrCannotDemoteSelf, http.StatusUnprocessableEntity, "cannot_demote_self"},
 	// Shops
 	{domain.ErrShopNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrSlugTaken, http.StatusConflict, "slug_taken"},
