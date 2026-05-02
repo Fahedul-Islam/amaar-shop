@@ -110,6 +110,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 
 	// --- Middleware ---
 	mw := middleware.NewManager()
+	mw.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	mw.Use(middleware.Logger(log))
 	mw.Use(middleware.BotFilter()) // tag bot UAs so visit-tracking can skip them
 	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5

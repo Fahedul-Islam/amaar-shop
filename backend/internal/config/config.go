@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
-	Port        int
-	Env         string
-	DatabaseURL string
-	JWTSecret   string
-	UploadDir   string
-	AdminEmail  string
-	AdminPass   string
+	Port               int
+	Env                string
+	DatabaseURL        string
+	JWTSecret          string
+	UploadDir          string
+	AdminEmail         string
+	AdminPass          string
+	CORSAllowedOrigins []string
 }
 
 // IsProduction reports whether the app is running in a production environment.
@@ -52,13 +54,35 @@ func Load() (*Config, error) {
 		env = "development"
 	}
 
+	corsAllowedOrigins := parseCSV(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if len(corsAllowedOrigins) == 0 && env != "production" {
+		corsAllowedOrigins = []string{"http://localhost:3000"}
+	}
+
 	return &Config{
-		Port:        port,
-		Env:         env,
-		DatabaseURL: dbURL,
-		JWTSecret:   jwtSecret,
-		UploadDir:   uploadDir,
-		AdminEmail:  os.Getenv("ADMIN_EMAIL"),
-		AdminPass:   os.Getenv("ADMIN_PASSWORD"),
+		Port:               port,
+		Env:                env,
+		DatabaseURL:        dbURL,
+		JWTSecret:          jwtSecret,
+		UploadDir:          uploadDir,
+		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
+		AdminPass:          os.Getenv("ADMIN_PASSWORD"),
+		CORSAllowedOrigins: corsAllowedOrigins,
 	}, nil
+}
+
+func parseCSV(value string) []string {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
