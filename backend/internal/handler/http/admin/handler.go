@@ -38,6 +38,9 @@ type Service interface {
 
 	RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error)
 	FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error)
+
+	FeeRule(ctx context.Context) (*domain.FeeRule, error)
+	UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
 }
 
 // ReportService is the subset of report service methods the admin handler
@@ -95,6 +98,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	// owner sends the fee via bKash / bank / cash).
 	mux.HandleFunc("POST /api/admin/shops/{id}/fee-payments", gated.Then(h.RecordFeePayment))
 	mux.HandleFunc("GET /api/admin/shops/{id}/fee-payments", gated.Then(h.GetFeePaymentHistory))
+
+	// Configurable platform fee rule.
+	mux.HandleFunc("GET /api/admin/fee-rule", gated.Then(h.GetFeeRule))
+	mux.HandleFunc("PUT /api/admin/fee-rule", gated.Then(h.UpdateFeeRule))
 }
 
 // requireAdmin asks the service whether the authenticated user is an admin.

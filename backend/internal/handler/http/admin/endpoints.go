@@ -324,3 +324,38 @@ func (h *Handler) GetFeePaymentHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, history)
 }
+
+// GetFeeRule returns the current platform fee rule.
+func (h *Handler) GetFeeRule(w http.ResponseWriter, r *http.Request) {
+	rule, err := h.svc.FeeRule(r.Context())
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, rule)
+}
+
+// UpdateFeeRule sets the platform fee rule. The admin chooses between
+// "percentage" (% of GMV) and "fixed_per_order" (BDT per order).
+func (h *Handler) UpdateFeeRule(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RuleType    string `json:"rule_type"`
+		Value       string `json:"value"`
+		Description string `json:"description"`
+	}
+	if err := httputil.DecodeJSONBody(r, &body); err != nil {
+		httputil.WriteValidationError(w, "invalid request body")
+		return
+	}
+	rule, err := h.svc.UpdateFeeRule(r.Context(), domain.UpdateFeeRuleInput{
+		RuleType:    body.RuleType,
+		Value:       body.Value,
+		Description: body.Description,
+		UpdatedBy:   middleware.GetUserID(r.Context()),
+	})
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	writeData(w, rule)
+}

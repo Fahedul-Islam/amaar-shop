@@ -16,17 +16,19 @@ import (
 // at the handler boundary — methods here assume the caller has already
 // passed that gate.
 type AdminService struct {
-	admin repository.AdminRepository
-	users repository.UserRepository
-	fees  repository.FeePaymentRepository
+	admin    repository.AdminRepository
+	users    repository.UserRepository
+	fees     repository.FeePaymentRepository
+	feeRule  repository.FeeRuleRepository
 }
 
 func NewAdminService(
 	admin repository.AdminRepository,
 	users repository.UserRepository,
 	fees repository.FeePaymentRepository,
+	feeRule repository.FeeRuleRepository,
 ) *AdminService {
-	return &AdminService{admin: admin, users: users, fees: fees}
+	return &AdminService{admin: admin, users: users, fees: fees, feeRule: feeRule}
 }
 
 // IsAdmin returns true if the given user has admin privileges.
@@ -115,9 +117,36 @@ func (s *AdminService) AnalyticsReport(ctx context.Context, days int) (*domain.A
 	return s.admin.AnalyticsReport(ctx, days)
 }
 
-// FinancialReport returns the money-and-payouts snapshot.
+// FinancialReport returns the money-and-payouts snapshot. It looks up the
+// current fee rule first so all per-shop and aggregate fee numbers are
+// computed against the same rule.
 func (s *AdminService) FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error) {
-	return s.admin.FinancialReport(ctx, days)
+	rule, err := s.feeRule.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.admin.FinancialReport(ctx, days, rule)
+}
+
+// FeeRule returns the current platform fee rule.
+func (s *AdminService) FeeRule(ctx context.Context) (*domain.FeeRule, error) {
+	return s.feeRule.Get(ctx)
+}
+
+// UpdateFeeRule writes a new rule. Validates type + value before persisting.
+// Percentage values are clamped to [0, 100] for sanity.
+func (s *AdminService) UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error) {
+	if !domain.IsValidFeeRuleType(in.RuleType) {
+		return nil, domain.ErrFeeRuleInvalidType
+	}
+	v, err := strconv.ParseFloat(in.Value, 64)
+	if err != nil || v < 0 {
+		return nil, domain.ErrFeeRuleInvalidValue
+	}
+	if domain.FeeRuleType(in.RuleType) == domain.FeeRuleTypePercentage && v > 100 {
+		return nil, domain.ErrFeeRulePercentTooBig
+	}
+	return s.feeRule.Update(ctx, in)
 }
 
 // ListAdmins returns every admin team member.

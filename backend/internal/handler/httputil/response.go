@@ -40,6 +40,16 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidReportStatus, http.StatusBadRequest, "validation_error"},
 	{domain.ErrReportDescriptionTooShort, http.StatusBadRequest, "validation_error"},
 	{domain.ErrReportDescriptionTooLong, http.StatusBadRequest, "validation_error"},
+	// Billing — fee rule + submissions
+	{domain.ErrFeeRuleInvalidType, http.StatusBadRequest, "validation_error"},
+	{domain.ErrFeeRuleInvalidValue, http.StatusBadRequest, "validation_error"},
+	{domain.ErrFeeRulePercentTooBig, http.StatusBadRequest, "validation_error"},
+	{domain.ErrSubmissionNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrInvalidSubmissionStatus, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidPaymentMethod, http.StatusBadRequest, "validation_error"},
+	{domain.ErrTransactionIDRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrSubmissionAlreadyReviewed, http.StatusUnprocessableEntity, "already_reviewed"},
+	{domain.ErrPendingSubmissionExists, http.StatusConflict, "pending_submission_exists"},
 	// Shops
 	{domain.ErrShopNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrSlugTaken, http.StatusConflict, "slug_taken"},

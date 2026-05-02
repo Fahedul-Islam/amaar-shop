@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
-import { IcArrowLeft, IcUndo } from '@/components/icons/Icons';
+import { IcArrowLeft, IcUndo, IcDownload } from '@/components/icons/Icons';
 import { getOrder, updateOrderStatus, markAdvanceReceived, prettyOrderStatus } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
@@ -85,6 +85,17 @@ export default function OrderDetailPage() {
       <div className="flex items-center gap-3 mb-1">
         <h1 className="text-2xl font-bold tracking-tight font-mono">{order.id.slice(0, 8)}</h1>
         <Badge tone={statusTone(order.status)}>{prettyOrderStatus(order.status)}</Badge>
+        <a
+          href={`/api/shops/me/orders/${order.id}/invoice.pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto"
+        >
+          <Button variant="neutral" size="sm">
+            <IcDownload size={13} />
+            Invoice PDF
+          </Button>
+        </a>
       </div>
       <p className="text-stone-500 mb-5">Placed {formatDateTime(order.created_at, locale)} · {order.customer_name}</p>
 

@@ -7,7 +7,7 @@ import { Logo } from '@/components/ui/Logo';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { Button } from '@/components/ui/Button';
 import {
-  IcHome, IcPackage, IcTruck, IcChart, IcFacebook, IcSettings, IcTag, IcStore, IcLogout, IcHeart, IcUser,
+  IcHome, IcPackage, IcTruck, IcChart, IcFacebook, IcSettings, IcTag, IcStore, IcLogout, IcHeart, IcUser, IcBanknote,
 } from '@/components/icons/Icons';
 import { useAuth } from '@/hooks/useAuth';
 import { useShop } from '@/hooks/useShop';
@@ -20,6 +20,7 @@ const nav = [
   { href: '/dashboard/customers', label: 'Customers', Icon: IcUser },
   { href: '/dashboard/reviews', label: 'Reviews', Icon: IcHeart },
   { href: '/dashboard/analytics', label: 'Analytics', Icon: IcChart },
+  { href: '/dashboard/billing', label: 'Billing', Icon: IcBanknote },
   { href: '/dashboard/facebook', label: 'Facebook', Icon: IcFacebook },
   { href: '/dashboard/settings', label: 'Settings', Icon: IcSettings },
 ];

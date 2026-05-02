@@ -13,10 +13,12 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/billing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
@@ -41,6 +43,8 @@ type RouterDeps struct {
 	CustomerHandler    *customer.Handler
 	AdminHandler       *admin.Handler
 	ReportHandler      *report.Handler
+	InvoiceHandler     *invoice.Handler
+	BillingHandler     *billing.Handler
 	Middleware         *middleware.Manager
 	RateLimiter        *middleware.RateLimiter
 }
@@ -65,6 +69,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.CustomerHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.AdminHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.ReportHandler.RegisterRoutes(mux)
+	deps.InvoiceHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.BillingHandler.RegisterRoutes(mux, deps.Middleware)
 
 	return deps.Middleware.Handler(mux)
 }

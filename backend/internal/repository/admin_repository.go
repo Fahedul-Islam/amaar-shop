@@ -46,7 +46,9 @@ type AdminRepository interface {
 	AnalyticsReport(ctx context.Context, days int) (*domain.AnalyticsReport, error)
 
 	// FinancialReport returns money-and-payouts data for the trailing window.
-	FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error)
+	// The rule is applied at the repo layer so per-shop fee numbers stay
+	// consistent across all queries that compute "what shops owe".
+	FinancialReport(ctx context.Context, days int, rule *domain.FeeRule) (*domain.FinancialReport, error)
 
 	// ListAdmins returns every user with is_admin = true, ordered by oldest first
 	// so the seeded "super admin" sorts to the top.
@@ -54,4 +56,9 @@ type AdminRepository interface {
 
 	// SetUserAdmin promotes or demotes a user. Returns ErrUserNotFound on miss.
 	SetUserAdmin(ctx context.Context, userID string, isAdmin bool) error
+
+	// UnbilledForShop returns (orderCount, gmvBdt) for the trailing window
+	// since the shop's last fee payment (or all-time if never paid). Used
+	// by the seller billing snapshot.
+	UnbilledForShop(ctx context.Context, shopID string) (int, string, error)
 }

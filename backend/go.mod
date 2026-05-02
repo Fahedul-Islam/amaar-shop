@@ -10,3 +10,5 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	golang.org/x/crypto v0.50.0
 )
+
+require github.com/jung-kurt/gofpdf v1.16.2 // indirect

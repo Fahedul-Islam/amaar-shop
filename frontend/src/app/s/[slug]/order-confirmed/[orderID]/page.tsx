@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { IcCheck } from '@/components/icons/Icons';
+import { IcCheck, IcDownload } from '@/components/icons/Icons';
 import { lookupOrder } from '@/lib/storefrontApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useStorefront } from '../../StorefrontShell';
@@ -66,7 +66,19 @@ function OrderConfirmedInner() {
         )}
       </Card>
 
-      <div className="flex gap-2.5 justify-center">
+      <div className="flex flex-wrap gap-2.5 justify-center">
+        {phone && (
+          <a
+            href={`/api/shops/by-slug/${shop.slug}/orders/${params.orderID}/invoice.pdf?phone=${encodeURIComponent(phone)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Button variant="neutral">
+              <IcDownload size={14} />
+              {locale === 'bn' ? 'ইনভয়েস ডাউনলোড' : 'Download invoice'}
+            </Button>
+          </a>
+        )}
         <Link href={`/s/${shop.slug}/order-lookup`}>
           <Button variant="secondary">{locale === 'bn' ? 'অর্ডার ট্র্যাক' : 'Track order'}</Button>
         </Link>

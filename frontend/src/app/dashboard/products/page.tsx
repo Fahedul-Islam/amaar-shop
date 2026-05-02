@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Price } from '@/components/ui/Price';
 import { ProductImage, hueFromString } from '@/components/ui/ProductImage';
-import { IcPlus, IcSearch, IcChevR } from '@/components/icons/Icons';
+import { IcPlus, IcSearch, IcChevR, IcDownload } from '@/components/icons/Icons';
 import { listProducts } from '@/lib/productApi';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -41,9 +41,14 @@ export default function ProductsPage() {
           <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Products</h1>
           <p className="text-stone-500 mt-1">{products.length} listed</p>
         </div>
-        <Link href="/dashboard/products/new">
-          <Button variant="primary"><IcPlus size={16} /> Add product</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <a href="/api/shops/me/exports/products.pdf" target="_blank" rel="noreferrer">
+            <Button variant="neutral"><IcDownload size={14} /> Download PDF</Button>
+          </a>
+          <Link href="/dashboard/products/new">
+            <Button variant="primary"><IcPlus size={16} /> Add product</Button>
+          </Link>
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden" hover={false}>

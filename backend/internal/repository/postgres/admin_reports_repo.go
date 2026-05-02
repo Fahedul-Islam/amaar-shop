@@ -285,9 +285,10 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 // FinancialReport returns fee-collection data for the trailing window.
 //
 // Money model reminder: shops collect cash from buyers (COD) and owe AmaarShop
-// a 5% platform fee that's billed every 14 days. So this report is framed as
-// "what shops owe the platform" — outstanding fees, fees collected, etc.
-func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error) {
+// a platform fee that's billed periodically. The fee rule is admin-configurable
+// (percentage of GMV, or fixed BDT per order). The rule is applied here so
+// the per-shop "outstanding fee" matches whatever rule is current.
+func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.FeeRule) (*domain.FinancialReport, error) {
 	if days <= 0 {
 		days = 30
 	}
@@ -307,6 +308,10 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 			          WHERE created_at >= curr_start AND created_at < curr_end AND status != 'cancelled'), 0)::text,
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
 			          WHERE created_at >= prev_start AND created_at < prev_end AND status != 'cancelled'), 0)::text,
+			COALESCE((SELECT COUNT(*) FROM orders, periods
+			          WHERE created_at >= curr_start AND created_at < curr_end AND status != 'cancelled'), 0),
+			COALESCE((SELECT COUNT(*) FROM orders, periods
+			          WHERE created_at >= prev_start AND created_at < prev_end AND status != 'cancelled'), 0),
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
 			          WHERE created_at >= curr_start AND created_at < curr_end AND status = 'cancelled'), 0)::text,
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
@@ -318,13 +323,23 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 		strconv.Itoa(days), strconv.Itoa(days*2),
 	)
 
-	var gmvCur, gmvPrev, refundCur, refundPrev, collectedCur, collectedPrev string
-	if err := row.Scan(&gmvCur, &gmvPrev, &refundCur, &refundPrev, &collectedCur, &collectedPrev); err != nil {
+	var (
+		gmvCur, gmvPrev               string
+		ordersCur, ordersPrev         int
+		refundCur, refundPrev         string
+		collectedCur, collectedPrev   string
+	)
+	if err := row.Scan(
+		&gmvCur, &gmvPrev,
+		&ordersCur, &ordersPrev,
+		&refundCur, &refundPrev,
+		&collectedCur, &collectedPrev,
+	); err != nil {
 		return nil, fmt.Errorf("financial headlines: %w", err)
 	}
 
 	report.GMV = makeMoneyMetric(gmvCur, gmvPrev)
-	report.PlatformFee = makePlatformFeeMetric(gmvCur, gmvPrev)
+	report.PlatformFee = makeRuleFeeMetric(rule, gmvCur, gmvPrev, ordersCur, ordersPrev)
 	report.Refunds = makeMoneyMetric(refundCur, refundPrev)
 	report.FeesCollected = makeMoneyMetric(collectedCur, collectedPrev)
 
@@ -361,8 +376,9 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 		})
 	}
 
-	// Per-shop fee status (live, cross-window).
-	feeStatuses, err := r.shopFeeStatuses(ctx)
+	// Per-shop fee status (live, cross-window). Rule-aware so the
+	// "outstanding fee" numbers match whatever rule is current.
+	feeStatuses, err := r.shopFeeStatuses(ctx, rule)
 	if err != nil {
 		return nil, err
 	}
@@ -389,10 +405,10 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int) (*domain.Fina
 //
 //   - "Unbilled GMV" = sum of non-cancelled order totals since the most recent
 //     payment.covers_until (or all-time if the shop has never paid).
-//   - "Outstanding fee" = 5% × unbilled GMV.
-//   - Status: paid_up if outstanding ~= 0, overdue if last payment > 14 days
+//   - "Outstanding fee" = rule applied to (unbilled GMV, unbilled order count).
+//   - Status: paid_up if outstanding ~= 0, overdue if last payment > FeeBillingCycleDays
 //     ago (or never paid AND has unbilled GMV), else due.
-func (r *adminRepo) shopFeeStatuses(ctx context.Context) ([]domain.ShopFeeStatus, error) {
+func (r *adminRepo) shopFeeStatuses(ctx context.Context, rule *domain.FeeRule) ([]domain.ShopFeeStatus, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
 		WITH last_payment AS (
 			SELECT DISTINCT ON (shop_id) shop_id, covers_until, amount_bdt, created_at
@@ -436,9 +452,8 @@ func (r *adminRepo) shopFeeStatuses(ctx context.Context) ([]domain.ShopFeeStatus
 			return nil, fmt.Errorf("shop fee status scan: %w", err)
 		}
 
-		gross, _ := strconv.ParseFloat(s.UnbilledGMVBDT, 64)
-		fee := gross * domain.PlatformFeeRate
-		s.OutstandingFeeBDT = fmt.Sprintf("%.2f", fee)
+		// Rule-driven: percentage of unbilled GMV, or fixed × order count.
+		s.OutstandingFeeBDT = rule.Apply(s.UnbilledGMVBDT, s.UnbilledOrders)
 
 		if lastPaid.Valid {
 			ts := lastPaid.Time.Format("2006-01-02T15:04:05Z07:00")
@@ -450,8 +465,9 @@ func (r *adminRepo) shopFeeStatuses(ctx context.Context) ([]domain.ShopFeeStatus
 			s.LastPaidAmountBDT = lastAmount.String
 		}
 
+		owed, _ := strconv.ParseFloat(s.OutstandingFeeBDT, 64)
 		switch {
-		case fee < 0.005:
+		case owed < 0.005:
 			s.Status = domain.FeeStatusPaidUp
 		case lastPaid.Valid && now.Sub(lastPaid.Time) > cycle:
 			s.Status = domain.FeeStatusOverdue
@@ -536,15 +552,17 @@ func makeMoneyMetric(curr, prev string) domain.PeriodMetric {
 	}
 }
 
-// makePlatformFeeMetric derives fee from GMV using the platform fee rate.
-func makePlatformFeeMetric(gmvCur, gmvPrev string) domain.PeriodMetric {
-	curF, _ := strconv.ParseFloat(gmvCur, 64)
-	prevF, _ := strconv.ParseFloat(gmvPrev, 64)
-	cur := curF * domain.PlatformFeeRate
-	prev := prevF * domain.PlatformFeeRate
+// makeRuleFeeMetric derives the platform-fee metric for the current and
+// previous windows by applying the rule to each. For percentage rules the
+// driver is GMV; for fixed_per_order it's the order count.
+func makeRuleFeeMetric(rule *domain.FeeRule, gmvCur, gmvPrev string, ordersCur, ordersPrev int) domain.PeriodMetric {
+	curStr := rule.Apply(gmvCur, ordersCur)
+	prevStr := rule.Apply(gmvPrev, ordersPrev)
+	cur, _ := strconv.ParseFloat(curStr, 64)
+	prev, _ := strconv.ParseFloat(prevStr, 64)
 	return domain.PeriodMetric{
-		Current:  fmt.Sprintf("%.2f", cur),
-		Previous: fmt.Sprintf("%.2f", prev),
+		Current:  curStr,
+		Previous: prevStr,
 		Pct:      pctChange(cur, prev),
 	}
 }

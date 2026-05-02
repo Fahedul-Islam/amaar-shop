@@ -308,6 +308,33 @@ func (r *adminRepo) ListProducts(ctx context.Context, f domain.AdminListFilter) 
 	return out, total, rows.Err()
 }
 
+// UnbilledForShop returns the (count, gmv) of non-cancelled orders since
+// the shop's last fee payment. Used to compute the seller's outstanding
+// fee balance using whatever rule is current.
+func (r *adminRepo) UnbilledForShop(ctx context.Context, shopID string) (int, string, error) {
+	var count int
+	var gmv string
+	err := r.db.QueryRowContext(ctx, `
+		WITH last_payment AS (
+			SELECT covers_until FROM shop_fee_payments
+			WHERE shop_id = $1
+			ORDER BY covers_until DESC LIMIT 1
+		)
+		SELECT COUNT(o.id)::int,
+		       COALESCE(SUM(o.total_bdt), 0)::text
+		FROM orders o
+		LEFT JOIN last_payment lp ON true
+		WHERE o.shop_id = $1
+		  AND o.status != 'cancelled'
+		  AND (lp.covers_until IS NULL OR o.created_at >= lp.covers_until)`,
+		shopID,
+	).Scan(&count, &gmv)
+	if err != nil {
+		return 0, "0", fmt.Errorf("unbilled for shop: %w", err)
+	}
+	return count, gmv, nil
+}
+
 // SetProductActive flips the visibility flag for a product (any shop).
 func (r *adminRepo) SetProductActive(ctx context.Context, productID string, active bool) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE products SET is_active = $1 WHERE id = $2 AND is_archived = false`, active, productID)

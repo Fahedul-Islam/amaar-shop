@@ -15,10 +15,12 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/billing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
@@ -80,6 +82,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	adminRepo := postgres.NewAdminRepo(db)
 	reportRepo := postgres.NewReportRepo(db)
 	feePaymentRepo := postgres.NewFeePaymentRepo(db)
+	feeRuleRepo := postgres.NewFeeRuleRepo(db)
+	feeSubmissionRepo := postgres.NewFeeSubmissionRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -91,8 +95,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
-	adminSvc := service.NewAdminService(adminRepo, userRepo, feePaymentRepo)
+	adminSvc := service.NewAdminService(adminRepo, userRepo, feePaymentRepo, feeRuleRepo)
 	reportSvc := service.NewReportService(reportRepo, shopRepo)
+	billingSvc := service.NewBillingService(feeRuleRepo, feeSubmissionRepo, feePaymentRepo, shopRepo, adminRepo)
 
 	// Seed admin user if configured. Non-fatal: logged and ignored on failure.
 	if cfg.AdminEmail != "" && cfg.AdminPass != "" {
@@ -130,6 +135,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	customerHandler := customer.NewHandler(customerSvc, cfg)
 	adminHandler := admin.NewHandler(adminSvc, reportSvc, cfg)
 	reportHandler := report.NewHandler(reportSvc)
+	invoiceHandler := invoice.NewHandler(orderSvc, shopSvc, productSvc, cfg)
+	billingHandler := billing.NewHandler(billingSvc, adminSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
@@ -147,6 +154,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		CustomerHandler:    customerHandler,
 		AdminHandler:       adminHandler,
 		ReportHandler:      reportHandler,
+		InvoiceHandler:     invoiceHandler,
+		BillingHandler:     billingHandler,
 		Middleware:         mw,
 		RateLimiter:        rl,
 	})

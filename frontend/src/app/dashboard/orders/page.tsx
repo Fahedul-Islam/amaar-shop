@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge, statusTone } from '@/components/ui/Badge';
-import { IcChevR } from '@/components/icons/Icons';
+import { Button } from '@/components/ui/Button';
+import { IcChevR, IcDownload } from '@/components/icons/Icons';
 import { listOrders, prettyOrderStatus } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
@@ -32,10 +33,24 @@ export default function OrdersPage() {
     queryFn: () => listOrders({ status: tab === 'All' ? undefined : tab, page_size: 100 }),
   });
 
+  // Build the export URL — passes through the active status tab so the PDF
+  // matches what the seller sees on screen.
+  const exportHref = `/api/shops/me/exports/orders.pdf${tab !== 'All' ? `?status=${encodeURIComponent(tab)}` : ''}`;
+
   return (
     <div className="px-6 md:px-8 py-6 md:py-7">
-      <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Orders</h1>
-      <p className="text-stone-500 mt-1 mb-4">Manage incoming orders across all zones.</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Orders</h1>
+          <p className="text-stone-500 mt-1 mb-4">Manage incoming orders across all zones.</p>
+        </div>
+        <a href={exportHref} target="_blank" rel="noreferrer">
+          <Button variant="neutral" size="sm">
+            <IcDownload size={13} />
+            Download as PDF
+          </Button>
+        </a>
+      </div>
 
       <div className="flex gap-1.5 mb-4 overflow-auto no-scrollbar">
         {tabs.map((t) => {

@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
-import { IcArrowLeft } from '@/components/icons/Icons';
+import { IcArrowLeft, IcDownload } from '@/components/icons/Icons';
 import { LeaveReviewForm } from '@/components/storefront/LeaveReviewForm';
 import { lookupOrder, buyerCancelOrder } from '@/lib/storefrontApi';
 import { ApiRequestError } from '@/lib/api';
@@ -87,7 +87,19 @@ export default function StorefrontOrderLookup() {
                 {locale === 'bn' ? 'প্লেস হয়েছে' : 'Placed'} {formatDateTime(order.created_at, locale)} · {shop.name}
               </p>
             </div>
-            <Badge tone={statusTone(order.status)}>{order.status}</Badge>
+            <div className="flex items-center gap-2">
+              <a
+                href={`/api/shops/by-slug/${shop.slug}/orders/${order.id}/invoice.pdf?phone=${encodeURIComponent(phone.trim())}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Button variant="neutral" size="sm">
+                  <IcDownload size={13} />
+                  {locale === 'bn' ? 'ইনভয়েস' : 'Invoice'}
+                </Button>
+              </a>
+              <Badge tone={statusTone(order.status)}>{order.status}</Badge>
+            </div>
           </div>
 
           <Card className="p-5 mt-4" hover={false}>
