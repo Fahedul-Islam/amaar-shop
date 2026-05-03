@@ -430,7 +430,7 @@ func TestUpdateOrderStatus_CancelRequiresReason(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 
@@ -458,7 +458,7 @@ func TestMarkAdvanceReceived_Success(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 
@@ -480,7 +480,7 @@ func TestLookupForCustomer_Success(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 
@@ -500,7 +500,7 @@ func TestLookupForCustomer_WrongPhone(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 
@@ -519,7 +519,7 @@ func TestBuyerCancelOrder_Success(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 
@@ -539,7 +539,7 @@ func TestBuyerCancelOrder_EmptyReason(t *testing.T) {
 
 	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
-		DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 

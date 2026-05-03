@@ -3,9 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strconv"
 	"time"
+
+	"fmt"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 )
@@ -48,10 +49,10 @@ func (r *adminRepo) fillAnalyticsHeadlines(ctx context.Context, days int, out *d
 		WITH
 		periods AS (
 			SELECT
-				now() - ($1 || ' days')::interval AS curr_start,
+				now() - (\$1 || ' days')::interval AS curr_start,
 				now()                              AS curr_end,
-				now() - ($2 || ' days')::interval  AS prev_start,
-				now() - ($1 || ' days')::interval  AS prev_end
+				now() - (\$2 || ' days')::interval  AS prev_start,
+				now() - (\$1 || ' days')::interval  AS prev_end
 		),
 		curr AS (
 			SELECT
@@ -104,12 +105,12 @@ func (r *adminRepo) fillAnalyticsDailySeries(ctx context.Context, days int, out 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT d::date, COUNT(o.id)
 		FROM generate_series(
-			(now() AT TIME ZONE $2)::date - ($1 - 1),
-			(now() AT TIME ZONE $2)::date,
+			(now() AT TIME ZONE \$2)::date - (\$1 - 1),
+			(now() AT TIME ZONE \$2)::date,
 			'1 day'
 		) AS d
 		LEFT JOIN orders o
-			ON (o.created_at AT TIME ZONE $2)::date = d::date
+			ON (o.created_at AT TIME ZONE \$2)::date = d::date
 			AND o.status != 'cancelled'
 		GROUP BY d::date
 		ORDER BY d::date`,
@@ -142,12 +143,12 @@ func (r *adminRepo) fillAnalyticsDailySeries(ctx context.Context, days int, out 
 		)
 		SELECT d::date, COUNT(fs.customer_phone)
 		FROM generate_series(
-			(now() AT TIME ZONE $2)::date - ($1 - 1),
-			(now() AT TIME ZONE $2)::date,
+			(now() AT TIME ZONE \$2)::date - (\$1 - 1),
+			(now() AT TIME ZONE \$2)::date,
 			'1 day'
 		) AS d
 		LEFT JOIN first_seen fs
-			ON (fs.first_at AT TIME ZONE $2)::date = d::date
+			ON (fs.first_at AT TIME ZONE \$2)::date = d::date
 		GROUP BY d::date
 		ORDER BY d::date`,
 		days, shopAdminTZ,
@@ -175,7 +176,7 @@ func (r *adminRepo) fillAnalyticsDailySeries(ctx context.Context, days int, out 
 
 // fillAnalyticsBreakdowns populates top categories, top products, and geo distribution.
 func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *domain.AnalyticsReport) error {
-	since := fmt.Sprintf("now() - interval '%d days'", days)
+	daysStr := strconv.Itoa(days)
 
 	// Top categories: GMV per category over the window.
 	// Aliasing the SELECT name to category_name avoids the "name" ambiguity
@@ -187,10 +188,11 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 		JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
 		JOIN products p ON p.id = oi.product_id
 		LEFT JOIN categories c ON c.id = p.category_id
-		WHERE o.created_at >= `+since+`
+		WHERE o.created_at >= now() - (\$1 || ' days')::interval
 		GROUP BY category_name
 		ORDER BY SUM(oi.line_total_bdt) DESC NULLS LAST
 		LIMIT 8`,
+		daysStr,
 	)
 	if err != nil {
 		return fmt.Errorf("analytics categories: %w", err)
@@ -228,10 +230,11 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 		JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
 		JOIN products p ON p.id = oi.product_id
 		JOIN shops s ON s.id = p.shop_id
-		WHERE o.created_at >= `+since+`
+		WHERE o.created_at >= now() - (\$1 || ' days')::interval
 		GROUP BY p.id, p.name, oi.product_name_snapshot, s.name
 		ORDER BY units DESC
 		LIMIT 8`,
+		daysStr,
 	)
 	if err != nil {
 		return fmt.Errorf("analytics products: %w", err)
@@ -252,10 +255,11 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 	geoRows, err := r.db.QueryContext(ctx, `
 		SELECT delivery_area, COUNT(*)::int
 		FROM orders
-		WHERE created_at >= `+since+` AND status != 'cancelled'
+		WHERE created_at >= now() - (\$1 || ' days')::interval AND status != 'cancelled'
 		GROUP BY delivery_area
 		ORDER BY COUNT(*) DESC
 		LIMIT 8`,
+		daysStr,
 	)
 	if err != nil {
 		return fmt.Errorf("analytics geo: %w", err)
@@ -298,10 +302,10 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 	row := r.db.QueryRowContext(ctx, `
 		WITH periods AS (
 			SELECT
-				now() - ($1 || ' days')::interval AS curr_start,
+				now() - (\$1 || ' days')::interval AS curr_start,
 				now()                              AS curr_end,
-				now() - ($2 || ' days')::interval  AS prev_start,
-				now() - ($1 || ' days')::interval  AS prev_end
+				now() - (\$2 || ' days')::interval  AS prev_start,
+				now() - (\$1 || ' days')::interval  AS prev_end
 		)
 		SELECT
 			COALESCE((SELECT SUM(total_bdt) FROM orders, periods
@@ -347,12 +351,12 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT d::date, COALESCE(SUM(o.total_bdt), 0)::text
 		FROM generate_series(
-			(now() AT TIME ZONE $2)::date - ($1 - 1),
-			(now() AT TIME ZONE $2)::date,
+			(now() AT TIME ZONE \$2)::date - (\$1 - 1),
+			(now() AT TIME ZONE \$2)::date,
 			'1 day'
 		) AS d
 		LEFT JOIN orders o
-			ON (o.created_at AT TIME ZONE $2)::date = d::date
+			ON (o.created_at AT TIME ZONE \$2)::date = d::date
 			AND o.status != 'cancelled'
 		GROUP BY d::date
 		ORDER BY d::date`,
@@ -396,7 +400,7 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 			report.ShopsOverdue++
 		}
 	}
-	report.OutstandingFeesBDT = fmt.Sprintf("%.2f", totalOutstanding)
+	report.OutstandingFeesBDT = strconv.FormatFloat(totalOutstanding, 'f', 2, 64)
 
 	return report, nil
 }
@@ -409,7 +413,7 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 //   - Status: paid_up if outstanding ~= 0, overdue if last payment > FeeBillingCycleDays
 //     ago (or never paid AND has unbilled GMV), else due.
 func (r *adminRepo) shopFeeStatuses(ctx context.Context, rule *domain.FeeRule) ([]domain.ShopFeeStatus, error) {
-	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := r.db.QueryContext(ctx, `
 		WITH last_payment AS (
 			SELECT DISTINCT ON (shop_id) shop_id, covers_until, amount_bdt, created_at
 			FROM shop_fee_payments
@@ -429,7 +433,7 @@ func (r *adminRepo) shopFeeStatuses(ctx context.Context, rule *domain.FeeRule) (
 			AND (lp.covers_until IS NULL OR o.created_at >= lp.covers_until)
 		GROUP BY s.id, s.name, s.slug, lp.covers_until, lp.amount_bdt
 		ORDER BY COALESCE(SUM(o.total_bdt), 0) DESC, s.created_at DESC
-		LIMIT 50`),
+		LIMIT 50`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("shop fee statuses: %w", err)
@@ -528,7 +532,7 @@ func (r *adminRepo) ListAdmins(ctx context.Context) ([]domain.AdminTeamMember, e
 
 // SetUserAdmin promotes or demotes a user.
 func (r *adminRepo) SetUserAdmin(ctx context.Context, userID string, isAdmin bool) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE users SET is_admin = $1 WHERE id = $2`, isAdmin, userID)
+	res, err := r.db.ExecContext(ctx, `UPDATE users SET is_admin = \$1 WHERE id = \$2`, isAdmin, userID)
 	if err != nil {
 		return fmt.Errorf("set user admin: %w", err)
 	}
@@ -588,8 +592,8 @@ func makeAOVMetric(gmvCur string, ordersCur int, gmvPrev string, ordersPrev int)
 		aovPrev = gmvPrevF / float64(ordersPrev)
 	}
 	return domain.PeriodMetric{
-		Current:  fmt.Sprintf("%.2f", aovCur),
-		Previous: fmt.Sprintf("%.2f", aovPrev),
+		Current:  strconv.FormatFloat(aovCur, 'f', 2, 64),
+		Previous: strconv.FormatFloat(aovPrev, 'f', 2, 64),
 		Pct:      pctChange(aovCur, aovPrev),
 	}
 }

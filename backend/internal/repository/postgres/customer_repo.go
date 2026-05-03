@@ -22,10 +22,10 @@ func NewCustomerRepo(db *sql.DB) repository.CustomerRepository {
 // Segment thresholds. VIP triggers on either spend or order count, whichever
 // the seller hits first. Inactive is a recency rule independent of value.
 const (
-	vipMinSpentBDT     = 10000
-	vipMinOrders       = 5
-	inactiveAfterDays  = 90
-	newWithinDays      = 30
+	// vipMinSpentBDT     = 10000
+	// vipMinOrders       = 5
+	// inactiveAfterDays  = 90
+	// newWithinDays      = 30
 	defaultListLimit   = 50
 	maxListLimit       = 200
 	maxNoteLength      = 1000
