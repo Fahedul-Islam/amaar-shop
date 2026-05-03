@@ -145,11 +145,13 @@ func seedShopWithDelivery(t *testing.T, shopRepo *mockShopRepo, deliveryRepo *mo
 	shop := mustCreateShop(t, shopRepo, ownerID, slug)
 	threshold := "1000.00"
 	deliveryRepo.settings[shop.ID] = &domain.DeliverySettings{
-		ShopID:               shop.ID,
-		CODEnabled:           true,
-		DeliveryCharge:       "60.00",
+		ShopID:                shop.ID,
+		CODEnabled:            true,
+		DeliveryCharge:        "60.00",
 		FreeDeliveryThreshold: &threshold,
-		DeliveryAreas:        []string{"Dhaka", "Chittagong"},
+		DeliveryZones: []domain.DeliveryZone{
+			{Division: "Dhaka", DeliveryCharge: "60.00"},
+		},
 	}
 	return shop
 }
@@ -177,10 +179,11 @@ func TestPlaceOrder_Success(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop.ID, "T-Shirt", "450.00", 10)
 
 	order, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test User",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "123 Street",
-		DeliveryArea:    "Dhaka",
+		CustomerName:     "Test User",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "123 Street",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{
 			{ProductID: p.ID, Quantity: 2},
 		},
@@ -217,11 +220,12 @@ func TestPlaceOrder_FreeDeliveryAboveThreshold(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop.ID, "Expensive Item", "1200.00", 5)
 
 	order, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test User",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "123 Street",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		CustomerName:     "Test User",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "123 Street",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -241,10 +245,11 @@ func TestPlaceOrder_TotalCalculation_MultipleItems(t *testing.T) {
 	p2 := seedProduct(t, prodRepo, shop.ID, "Item B", "250.50", 5)
 
 	order, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test User",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "123 Street",
-		DeliveryArea:    "Dhaka",
+		CustomerName:     "Test User",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "123 Street",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
 		Items: []OrderItemInput{
 			{ProductID: p1.ID, Quantity: 3}, // 300.00
 			{ProductID: p2.ID, Quantity: 2}, // 501.00
@@ -272,11 +277,12 @@ func TestPlaceOrder_CODDisabled(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 10)
 
 	_, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		CustomerName:     "Test",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "Addr",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 	if err != domain.ErrCheckoutDisabled {
 		t.Errorf("expected ErrCheckoutDisabled, got %v", err)
@@ -291,31 +297,15 @@ func TestPlaceOrder_SuspendedShop(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 10)
 
 	_, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		CustomerName:     "Test",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "Addr",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 	if err != domain.ErrShopNotFound {
 		t.Errorf("expected ErrShopNotFound, got %v", err)
-	}
-}
-
-func TestPlaceOrder_InvalidDeliveryArea(t *testing.T) {
-	svc, shopRepo, deliveryRepo, prodRepo, _ := newTestOrderService(t)
-	shop := seedShopWithDelivery(t, shopRepo, deliveryRepo, "user-1", "my-shop")
-	p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 10)
-
-	_, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Rajshahi", // not in delivery areas
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
-	})
-	if err != domain.ErrInvalidDeliveryArea {
-		t.Errorf("expected ErrInvalidDeliveryArea, got %v", err)
 	}
 }
 
@@ -325,11 +315,12 @@ func TestPlaceOrder_InsufficientStock(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 2)
 
 	_, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 5}},
+		CustomerName:     "Test",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "Addr",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 5}},
 	})
 	if err != domain.ErrInsufficientStock {
 		t.Errorf("expected ErrInsufficientStock, got %v", err)
@@ -343,11 +334,12 @@ func TestPlaceOrder_InactiveProduct(t *testing.T) {
 	p.IsActive = false
 
 	_, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		CustomerName:     "Test",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "Addr",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 	if err != domain.ErrProductNotFound {
 		t.Errorf("expected ErrProductNotFound, got %v", err)
@@ -361,11 +353,12 @@ func TestPlaceOrder_CrossShopProduct(t *testing.T) {
 	p := seedProduct(t, prodRepo, shop2.ID, "Other Shop Product", "100.00", 10)
 
 	_, err := svc.PlaceOrder(context.Background(), "shop-one", PlaceOrderInput{
-		CustomerName:    "Test",
-		CustomerPhone:   "01712345678",
-		DeliveryAddress: "Addr",
-		DeliveryArea:    "Dhaka",
-		Items:           []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		CustomerName:     "Test",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "Addr",
+		DeliveryDivision: "Dhaka",
+		DeliveryDistrict: "Dhaka",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 	})
 	if err != domain.ErrProductNotFound {
 		t.Errorf("expected ErrProductNotFound for cross-shop product, got %v", err)
@@ -406,7 +399,7 @@ func TestUpdateOrderStatus_ValidTransitions(t *testing.T) {
 
 			order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 				CustomerName: "Test", CustomerPhone: "01712345678",
-				DeliveryAddress: "Addr", DeliveryArea: "Dhaka",
+				DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
 				Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
 			})
 

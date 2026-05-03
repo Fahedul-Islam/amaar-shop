@@ -21,7 +21,8 @@ func NewOrderRepo(db *sql.DB) repository.OrderRepository {
 
 // orderColumns is the shared SELECT list for order queries.
 const orderColumns = `o.id, o.shop_id, o.customer_name, o.customer_phone, o.delivery_address,
-	o.delivery_area, COALESCE(o.note, ''), o.subtotal_bdt, o.delivery_charge_bdt,
+	COALESCE(o.delivery_division, ''), COALESCE(o.delivery_district, ''),
+	COALESCE(o.delivery_area, ''), COALESCE(o.note, ''), o.subtotal_bdt, o.delivery_charge_bdt,
 	o.total_bdt, o.status, o.advance_payment_required,
 	o.advance_payment_received, o.cancelled_reason, o.created_at, o.updated_at`
 
@@ -30,7 +31,7 @@ func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
 	o := &domain.Order{}
 	err := scanner.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone, &o.DeliveryAddress,
-		&o.DeliveryArea, &o.Note, &o.SubtotalBDT, &o.DeliveryChargeBDT,
+		&o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note, &o.SubtotalBDT, &o.DeliveryChargeBDT,
 		&o.TotalBDT, &o.Status, &o.AdvancePaymentRequired,
 		&o.AdvancePaymentReceived, &o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
 	)
@@ -51,12 +52,13 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO orders
 		   (shop_id, customer_name, customer_phone, delivery_address,
-		    delivery_area, note, subtotal_bdt, delivery_charge_bdt, total_bdt,
-		    advance_payment_required)
-		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7::numeric, $8::numeric, $9::numeric, $10)
+		    delivery_division, delivery_district, delivery_area,
+		    note, subtotal_bdt, delivery_charge_bdt, total_bdt, advance_payment_required)
+		 VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),$9::numeric,$10::numeric,$11::numeric,$12)
 		 RETURNING id, status, advance_payment_received, created_at, updated_at`,
 		order.ShopID, order.CustomerName, order.CustomerPhone, order.DeliveryAddress,
-		order.DeliveryArea, order.Note, order.SubtotalBDT, order.DeliveryChargeBDT,
+		order.DeliveryDivision, order.DeliveryDistrict, order.DeliveryArea,
+		order.Note, order.SubtotalBDT, order.DeliveryChargeBDT,
 		order.TotalBDT, order.AdvancePaymentRequired,
 	).Scan(&order.ID, &order.Status, &order.AdvancePaymentReceived, &order.CreatedAt, &order.UpdatedAt)
 	if err != nil {
@@ -176,7 +178,8 @@ func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUser
 		   AND shops.owner_user_id = $3
 		   AND orders.id = $4
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -186,7 +189,7 @@ func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUser
 	o := &domain.Order{}
 	err := row.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
 		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
@@ -217,7 +220,8 @@ func (r *orderRepo) cancelWithStockRestore(ctx context.Context, ownerUserID, ord
 		   AND shops.owner_user_id = $2
 		   AND orders.id = $3
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -227,7 +231,7 @@ func (r *orderRepo) cancelWithStockRestore(ctx context.Context, ownerUserID, ord
 	o := &domain.Order{}
 	err = row.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
 		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
@@ -278,7 +282,8 @@ func (r *orderRepo) RestoreCancelledOrder(ctx context.Context, ownerUserID, orde
 		   AND orders.id = $2
 		   AND orders.status = 'cancelled'
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -288,7 +293,7 @@ func (r *orderRepo) RestoreCancelledOrder(ctx context.Context, ownerUserID, orde
 	o := &domain.Order{}
 	err = row.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
 		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
@@ -334,7 +339,8 @@ func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, cus
 		   AND customer_phone = $4
 		   AND status = 'pending'
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -344,7 +350,7 @@ func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, cus
 	o := &domain.Order{}
 	err = row.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
 		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
@@ -385,7 +391,8 @@ func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderI
 		   AND shops.owner_user_id = $1
 		   AND orders.id = $2
 		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, orders.delivery_area, COALESCE(orders.note, ''),
+		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
 		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
 		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
@@ -395,7 +402,7 @@ func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderI
 	o := &domain.Order{}
 	err := row.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryArea, &o.Note,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
 		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,

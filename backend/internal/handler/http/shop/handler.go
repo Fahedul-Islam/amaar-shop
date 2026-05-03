@@ -8,8 +8,8 @@ import (
 
 // Handler implements the /api/shops/* endpoints defined in docs/API.md.
 type Handler struct {
-	svc       Service
-	cfg   *config.Config
+	svc Service
+	cfg *config.Config
 }
 
 // NewHandler constructs a Handler from any type satisfying the Service interface.
@@ -60,6 +60,15 @@ func toPublicShopDTO(s *domain.Shop) dto.PublicShopDTO {
 }
 
 func toDeliverySettingsDTO(ds *domain.DeliverySettings) dto.DeliverySettingsDTO {
+	zones := make([]dto.DeliveryZoneDTO, 0, len(ds.DeliveryZones))
+	for _, z := range ds.DeliveryZones {
+		zones = append(zones, dto.DeliveryZoneDTO{
+			ID:             z.ID,
+			Division:       z.Division,
+			DeliveryCharge: z.DeliveryCharge,
+		})
+	}
+
 	return dto.DeliverySettingsDTO{
 		ShopID:                     ds.ShopID,
 		CODEnabled:                 ds.CODEnabled,
@@ -67,18 +76,27 @@ func toDeliverySettingsDTO(ds *domain.DeliverySettings) dto.DeliverySettingsDTO 
 		FreeDeliveryThreshold:      ds.FreeDeliveryThreshold,
 		AdvancePaymentRequired:     ds.AdvancePaymentRequired,
 		AdvancePaymentInstructions: ds.AdvancePaymentInstructions,
-		DeliveryAreas:              ds.DeliveryAreas,
+		DeliveryZones:              zones,
 		UpdatedAt:                  ds.UpdatedAt,
 	}
 }
 
 func toPublicDeliverySettingsDTO(ds *domain.DeliverySettings) dto.PublicDeliverySettingsDTO {
+	zones := make([]dto.DeliveryZoneDTO, 0, len(ds.DeliveryZones))
+	for _, z := range ds.DeliveryZones {
+		zones = append(zones, dto.DeliveryZoneDTO{
+			ID:             z.ID,
+			Division:       z.Division,
+			DeliveryCharge: z.DeliveryCharge,
+		})
+	}
+
 	return dto.PublicDeliverySettingsDTO{
 		CODEnabled:                 ds.CODEnabled,
 		DeliveryCharge:             ds.DeliveryCharge,
 		FreeDeliveryThreshold:      ds.FreeDeliveryThreshold,
 		AdvancePaymentRequired:     ds.AdvancePaymentRequired,
 		AdvancePaymentInstructions: ds.AdvancePaymentInstructions,
-		DeliveryAreas:              ds.DeliveryAreas,
+		DeliveryZones:              zones,
 	}
 }

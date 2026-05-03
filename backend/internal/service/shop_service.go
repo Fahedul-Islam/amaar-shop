@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -49,8 +50,8 @@ func (s *ShopService) CreateShop(ctx context.Context, ownerUserID, name, slug, d
 	defaults := &domain.DeliverySettings{
 		ShopID:         shop.ID,
 		CODEnabled:     true,
-		DeliveryCharge: "0.00",
-		DeliveryAreas:  []string{},
+		DeliveryCharge: "60.00",
+		DeliveryZones:  []domain.DeliveryZone{},
 	}
 	if err := s.delivery.Upsert(ctx, defaults); err != nil {
 		return nil, err
@@ -160,9 +161,17 @@ func (s *ShopService) UpdateDeliverySettings(ctx context.Context, ownerUserID st
 		}
 	}
 
-	// Validate delivery areas non-empty when COD enabled
-	if settings.CODEnabled && len(settings.DeliveryAreas) == 0 {
-		return nil, domain.ErrDeliveryAreasRequired
+	// Validate every zone.
+	for i := range settings.DeliveryZones {
+		z := &settings.DeliveryZones[i]
+		z.Division = strings.TrimSpace(z.Division)
+		if !domain.AllowedDivisions[z.Division] {
+			return nil, domain.ErrInvalidDivision
+		}
+		c, err := strconv.ParseFloat(z.DeliveryCharge, 64)
+		if err != nil || c < 0 {
+			return nil, domain.ErrInvalidDeliveryCharge
+		}
 	}
 
 	settings.ShopID = shop.ID

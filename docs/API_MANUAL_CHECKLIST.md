@@ -315,7 +315,10 @@ Expected output:
     "free_delivery_threshold": "500.00",
     "advance_payment_required": false,
     "advance_payment_instructions": "",
-    "delivery_areas": ["Dhaka", "Chittagong"],
+    "delivery_zones": [
+      { "id": "uuid", "division": "Dhaka", "delivery_charge": "60.00" },
+      { "id": "uuid", "division": "Chattogram", "delivery_charge": "80.00" }
+    ],
     "updated_at": "2025-01-01T00:00:00Z"
   }
 }
@@ -334,7 +337,10 @@ Request body:
   "free_delivery_threshold": "500.00",
   "advance_payment_required": false,
   "advance_payment_instructions": "Pay via bKash to 01712345678",
-  "delivery_areas": ["Dhaka", "Chittagong"]
+  "delivery_zones": [
+    { "division": "Dhaka", "delivery_charge": "60.00" },
+    { "division": "Chattogram", "delivery_charge": "80.00" }
+  ]
 }
 ```
 
@@ -378,7 +384,10 @@ Expected output:
     "free_delivery_threshold": "500.00",
     "advance_payment_required": false,
     "advance_payment_instructions": "",
-    "delivery_areas": ["Dhaka", "Chittagong"]
+    "delivery_zones": [
+      { "id": "uuid", "division": "Dhaka", "delivery_charge": "60.00" },
+      { "id": "uuid", "division": "Chattogram", "delivery_charge": "80.00" }
+    ]
   }
 }
 ```

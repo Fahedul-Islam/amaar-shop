@@ -21,72 +21,88 @@ Every query for tenant-scoped data (categories, products, orders, order_items, p
 
 ### users
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| email | citext | UNIQUE NOT NULL |
-| password_hash | text | NOT NULL |
-| is_admin | boolean | DEFAULT false |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
-| updated_at | timestamptz | NOT NULL DEFAULT now() |
+| Column        | Type        | Constraints                   |
+| ------------- | ----------- | ----------------------------- |
+| id            | uuid        | PK, DEFAULT gen_random_uuid() |
+| email         | citext      | UNIQUE NOT NULL               |
+| password_hash | text        | NOT NULL                      |
+| is_admin      | boolean     | DEFAULT false                 |
+| created_at    | timestamptz | NOT NULL DEFAULT now()        |
+| updated_at    | timestamptz | NOT NULL DEFAULT now()        |
 
 **Sample row:**
+
 ```json
-{"id": "a1b2c3...", "email": "seller@example.com", "is_admin": false}
+{ "id": "a1b2c3...", "email": "seller@example.com", "is_admin": false }
 ```
 
 ---
 
 ### shops
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| owner_user_id | uuid | UNIQUE NOT NULL, FK → users ON DELETE CASCADE |
-| slug | citext | UNIQUE NOT NULL, CHECK (length 3-40, lowercase alphanumeric + hyphens) |
-| name | text | NOT NULL |
-| description | text | |
-| logo_url | text | |
-| banner_url | text | |
-| contact_phone | text | |
-| is_suspended | boolean | DEFAULT false |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
-| updated_at | timestamptz | NOT NULL DEFAULT now() |
+| Column        | Type        | Constraints                                                            |
+| ------------- | ----------- | ---------------------------------------------------------------------- |
+| id            | uuid        | PK, DEFAULT gen_random_uuid()                                          |
+| owner_user_id | uuid        | UNIQUE NOT NULL, FK → users ON DELETE CASCADE                          |
+| slug          | citext      | UNIQUE NOT NULL, CHECK (length 3-40, lowercase alphanumeric + hyphens) |
+| name          | text        | NOT NULL                                                               |
+| description   | text        |                                                                        |
+| logo_url      | text        |                                                                        |
+| banner_url    | text        |                                                                        |
+| contact_phone | text        |                                                                        |
+| is_suspended  | boolean     | DEFAULT false                                                          |
+| created_at    | timestamptz | NOT NULL DEFAULT now()                                                 |
+| updated_at    | timestamptz | NOT NULL DEFAULT now()                                                 |
 
 **Indexes:** UNIQUE on `owner_user_id` (one shop per user in MVP), UNIQUE on `slug`.
 
 **Sample row:**
+
 ```json
-{"id": "...", "slug": "demo-shop", "name": "Demo Shop", "is_suspended": false}
+{ "id": "...", "slug": "demo-shop", "name": "Demo Shop", "is_suspended": false }
 ```
 
 ---
 
 ### shop_delivery_settings
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| shop_id | uuid | PK, FK → shops ON DELETE CASCADE |
-| cod_enabled | boolean | DEFAULT true |
-| delivery_charge | numeric(10,2) | DEFAULT 0, CHECK >= 0 |
-| free_delivery_threshold | numeric(10,2) | NULLABLE, CHECK > delivery_charge when not null |
-| advance_payment_required | boolean | DEFAULT false |
-| advance_payment_instructions | text | |
-| delivery_areas | text[] | DEFAULT '{}' |
-| updated_at | timestamptz | NOT NULL DEFAULT now() |
+| Column                       | Type          | Constraints                                     |
+| ---------------------------- | ------------- | ----------------------------------------------- |
+| shop_id                      | uuid          | PK, FK → shops ON DELETE CASCADE                |
+| cod_enabled                  | boolean       | DEFAULT true                                    |
+| delivery_charge              | numeric(10,2) | DEFAULT 0, CHECK >= 0                           |
+| free_delivery_threshold      | numeric(10,2) | NULLABLE, CHECK > delivery_charge when not null |
+| advance_payment_required     | boolean       | DEFAULT false                                   |
+| advance_payment_instructions | text          |                                                 |
+| updated_at                   | timestamptz   | NOT NULL DEFAULT now()                          |
 
 One row per shop. Created automatically on shop creation.
+Per-division zones live in `shop_delivery_zones`.
+
+---
+
+### shop_delivery_zones
+
+| Column          | Type          | Constraints                            |
+| --------------- | ------------- | -------------------------------------- |
+| id              | uuid          | PK, DEFAULT gen_random_uuid()          |
+| shop_id         | uuid          | NOT NULL, FK → shops ON DELETE CASCADE |
+| division        | text          | NOT NULL                               |
+| delivery_charge | numeric(10,2) | NOT NULL, CHECK >= 0                   |
+| created_at      | timestamptz   | NOT NULL DEFAULT now()                 |
+
+**Indexes:** UNIQUE on `(shop_id, division)`. Index on `shop_id`.
 
 ---
 
 ### categories
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| shop_id | uuid | NOT NULL, FK → shops ON DELETE CASCADE |
-| name | text | NOT NULL |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
+| Column     | Type        | Constraints                            |
+| ---------- | ----------- | -------------------------------------- |
+| id         | uuid        | PK, DEFAULT gen_random_uuid()          |
+| shop_id    | uuid        | NOT NULL, FK → shops ON DELETE CASCADE |
+| name       | text        | NOT NULL                               |
+| created_at | timestamptz | NOT NULL DEFAULT now()                 |
 
 **Indexes:** UNIQUE on `(shop_id, lower(name))`. Index on `shop_id`.
 
@@ -94,21 +110,22 @@ One row per shop. Created automatically on shop creation.
 
 ### products
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| shop_id | uuid | NOT NULL, FK → shops ON DELETE CASCADE |
-| category_id | uuid | NULLABLE, FK → categories ON DELETE SET NULL |
-| name | text | NOT NULL |
-| description | text | |
-| price_bdt | numeric(10,2) | NOT NULL, CHECK > 0 |
-| stock | integer | NOT NULL DEFAULT 0, CHECK >= 0 |
-| is_active | boolean | DEFAULT true |
-| is_archived | boolean | DEFAULT false |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
-| updated_at | timestamptz | NOT NULL DEFAULT now() |
+| Column      | Type          | Constraints                                  |
+| ----------- | ------------- | -------------------------------------------- |
+| id          | uuid          | PK, DEFAULT gen_random_uuid()                |
+| shop_id     | uuid          | NOT NULL, FK → shops ON DELETE CASCADE       |
+| category_id | uuid          | NULLABLE, FK → categories ON DELETE SET NULL |
+| name        | text          | NOT NULL                                     |
+| description | text          |                                              |
+| price_bdt   | numeric(10,2) | NOT NULL, CHECK > 0                          |
+| stock       | integer       | NOT NULL DEFAULT 0, CHECK >= 0               |
+| is_active   | boolean       | DEFAULT true                                 |
+| is_archived | boolean       | DEFAULT false                                |
+| created_at  | timestamptz   | NOT NULL DEFAULT now()                       |
+| updated_at  | timestamptz   | NOT NULL DEFAULT now()                       |
 
 **Indexes:**
+
 - `(shop_id, is_active, is_archived)`
 - `(shop_id, category_id)`
 - `(shop_id)` WHERE `is_archived = false`
@@ -118,13 +135,13 @@ One row per shop. Created automatically on shop creation.
 
 ### product_images
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| product_id | uuid | NOT NULL, FK → products ON DELETE CASCADE |
-| url | text | NOT NULL |
-| sort_order | integer | DEFAULT 0 |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
+| Column     | Type        | Constraints                               |
+| ---------- | ----------- | ----------------------------------------- |
+| id         | uuid        | PK, DEFAULT gen_random_uuid()             |
+| product_id | uuid        | NOT NULL, FK → products ON DELETE CASCADE |
+| url        | text        | NOT NULL                                  |
+| sort_order | integer     | DEFAULT 0                                 |
+| created_at | timestamptz | NOT NULL DEFAULT now()                    |
 
 **Indexes:** `(product_id, sort_order)`.
 Max 5 images per product — enforced at app level.
@@ -133,15 +150,15 @@ Max 5 images per product — enforced at app level.
 
 ### product_variants
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| product_id | uuid | NOT NULL, FK → products ON DELETE CASCADE |
-| name | text | NOT NULL |
-| sku | text | |
-| price_override | numeric(10,2) | NULLABLE, CHECK >= 0 |
-| stock | integer | NOT NULL DEFAULT 0, CHECK >= 0 |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
+| Column         | Type          | Constraints                               |
+| -------------- | ------------- | ----------------------------------------- |
+| id             | uuid          | PK, DEFAULT gen_random_uuid()             |
+| product_id     | uuid          | NOT NULL, FK → products ON DELETE CASCADE |
+| name           | text          | NOT NULL                                  |
+| sku            | text          |                                           |
+| price_override | numeric(10,2) | NULLABLE, CHECK >= 0                      |
+| stock          | integer       | NOT NULL DEFAULT 0, CHECK >= 0            |
+| created_at     | timestamptz   | NOT NULL DEFAULT now()                    |
 
 Table exists from day one even though UI doesn't expose variants in MVP — prevents schema churn later.
 
@@ -149,26 +166,29 @@ Table exists from day one even though UI doesn't expose variants in MVP — prev
 
 ### orders
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| shop_id | uuid | NOT NULL, FK → shops ON DELETE RESTRICT |
-| customer_name | text | NOT NULL |
-| customer_phone | text | NOT NULL |
-| delivery_address | text | NOT NULL |
-| delivery_area | text | NOT NULL |
-| note | text | |
-| subtotal_bdt | numeric(10,2) | NOT NULL |
-| delivery_charge_bdt | numeric(10,2) | NOT NULL DEFAULT 0 |
-| total_bdt | numeric(10,2) | NOT NULL |
-| status | text | NOT NULL, CHECK IN ('pending','confirmed','shipped','delivered','cancelled'), DEFAULT 'pending' |
-| advance_payment_required | boolean | DEFAULT false |
-| advance_payment_received | boolean | DEFAULT false |
-| cancelled_reason | text | |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
-| updated_at | timestamptz | NOT NULL DEFAULT now() |
+| Column                   | Type          | Constraints                                                                                     |
+| ------------------------ | ------------- | ----------------------------------------------------------------------------------------------- |
+| id                       | uuid          | PK, DEFAULT gen_random_uuid()                                                                   |
+| shop_id                  | uuid          | NOT NULL, FK → shops ON DELETE RESTRICT                                                         |
+| customer_name            | text          | NOT NULL                                                                                        |
+| customer_phone           | text          | NOT NULL                                                                                        |
+| delivery_address         | text          | NOT NULL                                                                                        |
+| delivery_division        | text          | NOT NULL DEFAULT ''                                                                             |
+| delivery_district        | text          | NOT NULL DEFAULT ''                                                                             |
+| delivery_area            | text          | NULLABLE (legacy derived)                                                                       |
+| note                     | text          |                                                                                                 |
+| subtotal_bdt             | numeric(10,2) | NOT NULL                                                                                        |
+| delivery_charge_bdt      | numeric(10,2) | NOT NULL DEFAULT 0                                                                              |
+| total_bdt                | numeric(10,2) | NOT NULL                                                                                        |
+| status                   | text          | NOT NULL, CHECK IN ('pending','confirmed','shipped','delivered','cancelled'), DEFAULT 'pending' |
+| advance_payment_required | boolean       | DEFAULT false                                                                                   |
+| advance_payment_received | boolean       | DEFAULT false                                                                                   |
+| cancelled_reason         | text          |                                                                                                 |
+| created_at               | timestamptz   | NOT NULL DEFAULT now()                                                                          |
+| updated_at               | timestamptz   | NOT NULL DEFAULT now()                                                                          |
 
 **Indexes:**
+
 - `(shop_id, status, created_at DESC)`
 - `(shop_id, customer_phone)`
 - `(created_at DESC)`
@@ -177,16 +197,16 @@ Table exists from day one even though UI doesn't expose variants in MVP — prev
 
 ### order_items
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | uuid | PK, DEFAULT gen_random_uuid() |
-| order_id | uuid | NOT NULL, FK → orders ON DELETE CASCADE |
-| product_id | uuid | NOT NULL, FK → products ON DELETE RESTRICT |
-| product_name_snapshot | text | NOT NULL |
-| unit_price_snapshot_bdt | numeric(10,2) | NOT NULL |
-| quantity | integer | NOT NULL, CHECK > 0 |
-| line_total_bdt | numeric(10,2) | NOT NULL |
-| created_at | timestamptz | NOT NULL DEFAULT now() |
+| Column                  | Type          | Constraints                                |
+| ----------------------- | ------------- | ------------------------------------------ |
+| id                      | uuid          | PK, DEFAULT gen_random_uuid()              |
+| order_id                | uuid          | NOT NULL, FK → orders ON DELETE CASCADE    |
+| product_id              | uuid          | NOT NULL, FK → products ON DELETE RESTRICT |
+| product_name_snapshot   | text          | NOT NULL                                   |
+| unit_price_snapshot_bdt | numeric(10,2) | NOT NULL                                   |
+| quantity                | integer       | NOT NULL, CHECK > 0                        |
+| line_total_bdt          | numeric(10,2) | NOT NULL                                   |
+| created_at              | timestamptz   | NOT NULL DEFAULT now()                     |
 
 Product name and price are **snapshotted** at order time so future edits don't mutate history.
 
@@ -200,6 +220,7 @@ Product name and price are **snapshotted** at order time so future edits don't m
 erDiagram
     users ||--o| shops : "owns (1:1)"
     shops ||--|| shop_delivery_settings : "has settings"
+    shops ||--o{ shop_delivery_zones : "has zones"
     shops ||--o{ categories : "has"
     shops ||--o{ products : "has"
     shops ||--o{ orders : "receives"
@@ -239,8 +260,15 @@ erDiagram
         numeric free_delivery_threshold
         bool advance_payment_required
         text advance_payment_instructions
-        text_arr delivery_areas
         timestamptz updated_at
+    }
+
+    shop_delivery_zones {
+        uuid id PK
+        uuid shop_id FK
+        text division
+        numeric delivery_charge
+        timestamptz created_at
     }
 
     categories {
@@ -288,6 +316,8 @@ erDiagram
         text customer_name
         text customer_phone
         text delivery_address
+        text delivery_division
+        text delivery_district
         text delivery_area
         text note
         numeric subtotal_bdt

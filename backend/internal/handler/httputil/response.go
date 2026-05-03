@@ -58,7 +58,7 @@ var domainErrorMap = []struct {
 	// Delivery settings
 	{domain.ErrInvalidDeliveryCharge, http.StatusBadRequest, "validation_error"},
 	{domain.ErrInvalidThreshold, http.StatusBadRequest, "validation_error"},
-	{domain.ErrDeliveryAreasRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidDivision, http.StatusBadRequest, "validation_error"},
 	// Categories
 	{domain.ErrCategoryNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrCategoryNotInShop, http.StatusUnprocessableEntity, "category_not_in_shop"},
@@ -74,7 +74,6 @@ var domainErrorMap = []struct {
 	{domain.ErrCheckoutDisabled, http.StatusUnprocessableEntity, "checkout_disabled"},
 	{domain.ErrInvalidStatusTransition, http.StatusUnprocessableEntity, "invalid_status_transition"},
 	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
-	{domain.ErrInvalidDeliveryArea, http.StatusBadRequest, "validation_error"},
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
 	// Reviews
 	{domain.ErrReviewNotFound, http.StatusNotFound, "not_found"},
@@ -152,19 +151,18 @@ func GetIDParam(r *http.Request, name string) string {
 	return r.PathValue(name)
 }
 
-
 func DecodeJSONBody(r *http.Request, dst interface{}) error {
-    if r.Body == nil {
-        return errors.New("request body is required")
-    }
-    defer r.Body.Close()
+	if r.Body == nil {
+		return errors.New("request body is required")
+	}
+	defer r.Body.Close()
 
-    decoder := json.NewDecoder(r.Body)
-    decoder.DisallowUnknownFields()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
 
-    if err := decoder.Decode(dst); err != nil {
-        return err
-    }
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }

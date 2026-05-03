@@ -98,8 +98,6 @@ func (h *Handler) LookupOrders(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, out)
 }
 
-
-
 // --- helpers ---
 
 func toMarketplaceProductDTO(mp *domain.MarketplaceProduct) dto.MarketplaceProductDTO {
@@ -168,7 +166,8 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 		CustomerName:           o.CustomerName,
 		CustomerPhone:          o.CustomerPhone,
 		DeliveryAddress:        o.DeliveryAddress,
-		DeliveryArea:           o.DeliveryArea,
+		DeliveryDivision:       o.DeliveryDivision,
+		DeliveryDistrict:       o.DeliveryDistrict,
 		Note:                   o.Note,
 		SubtotalBDT:            o.SubtotalBDT,
 		DeliveryChargeBDT:      o.DeliveryChargeBDT,

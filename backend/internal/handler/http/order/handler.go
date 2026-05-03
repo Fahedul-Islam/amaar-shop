@@ -16,8 +16,6 @@ func NewHandler(svc Service, cfg *config.Config) *Handler {
 	return &Handler{svc: svc, cfg: cfg}
 }
 
-
-
 func toOrderDTO(o *domain.Order) dto.OrderDTO {
 	items := make([]dto.OrderItemDTO, 0, len(o.Items))
 	for _, it := range o.Items {
@@ -36,7 +34,8 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 		CustomerName:           o.CustomerName,
 		CustomerPhone:          o.CustomerPhone,
 		DeliveryAddress:        o.DeliveryAddress,
-		DeliveryArea:           o.DeliveryArea,
+		DeliveryDivision:       o.DeliveryDivision,
+		DeliveryDistrict:       o.DeliveryDistrict,
 		Note:                   o.Note,
 		SubtotalBDT:            o.SubtotalBDT,
 		DeliveryChargeBDT:      o.DeliveryChargeBDT,

@@ -13,12 +13,13 @@ import (
 
 // PlaceOrderInput carries the validated customer submission from the handler.
 type PlaceOrderInput struct {
-	CustomerName    string
-	CustomerPhone   string
-	DeliveryAddress string
-	DeliveryArea    string
-	Note            string
-	Items           []OrderItemInput
+	CustomerName     string
+	CustomerPhone    string
+	DeliveryAddress  string
+	DeliveryDivision string
+	DeliveryDistrict string
+	Note             string
+	Items            []OrderItemInput
 }
 
 type OrderItemInput struct {
@@ -82,18 +83,6 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		return nil, domain.ErrCheckoutDisabled
 	}
 
-	// Validate delivery area.
-	areaValid := false
-	for _, a := range ds.DeliveryAreas {
-		if a == in.DeliveryArea {
-			areaValid = true
-			break
-		}
-	}
-	if !areaValid {
-		return nil, domain.ErrInvalidDeliveryArea
-	}
-
 	// Build order items by looking up each product's current price and snapshotting it.
 	var subtotal float64
 	items := make([]domain.OrderItem, 0, len(in.Items))
@@ -122,8 +111,22 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		})
 	}
 
-	// Compute delivery charge: free if threshold is set and subtotal exceeds it.
+	// Per-division delivery charge with default fallback.
+	// Orders are accepted regardless of area.
 	deliveryCharge, _ := strconv.ParseFloat(ds.DeliveryCharge, 64)
+	division := strings.TrimSpace(in.DeliveryDivision)
+	if division != "" {
+		for _, z := range ds.DeliveryZones {
+			if strings.EqualFold(strings.TrimSpace(z.Division), division) {
+				if zoneFee, err := strconv.ParseFloat(z.DeliveryCharge, 64); err == nil {
+					deliveryCharge = zoneFee
+				}
+				break
+			}
+		}
+	}
+
+	// Free delivery when subtotal meets threshold.
 	if ds.FreeDeliveryThreshold != nil {
 		threshold, _ := strconv.ParseFloat(*ds.FreeDeliveryThreshold, 64)
 		if threshold > 0 && subtotal >= threshold {
@@ -133,12 +136,21 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 
 	total := subtotal + deliveryCharge
 
+	legacyArea := ""
+	if division != "" && in.DeliveryDistrict != "" {
+		legacyArea = fmt.Sprintf("%s, %s", strings.TrimSpace(in.DeliveryDistrict), division)
+	} else if division != "" {
+		legacyArea = division
+	}
+
 	order := &domain.Order{
 		ShopID:                 shop.ID,
 		CustomerName:           in.CustomerName,
 		CustomerPhone:          normalizePhone(in.CustomerPhone),
 		DeliveryAddress:        in.DeliveryAddress,
-		DeliveryArea:           in.DeliveryArea,
+		DeliveryDivision:       division,
+		DeliveryDistrict:       strings.TrimSpace(in.DeliveryDistrict),
+		DeliveryArea:           legacyArea,
 		Note:                   in.Note,
 		SubtotalBDT:            fmt.Sprintf("%.2f", subtotal),
 		DeliveryChargeBDT:      fmt.Sprintf("%.2f", deliveryCharge),

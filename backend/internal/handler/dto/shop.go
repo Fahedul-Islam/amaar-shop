@@ -19,14 +19,21 @@ type UpdateShopRequest struct {
 	ContactPhone *string `json:"contact_phone"`
 }
 
+// DeliveryZoneDTO defines a per-division delivery fee override.
+type DeliveryZoneDTO struct {
+	ID             string `json:"id"`
+	Division       string `json:"division"`
+	DeliveryCharge string `json:"delivery_charge"`
+}
+
 // UpdateDeliverySettingsRequest is the JSON body for PUT /api/shops/me/delivery-settings.
 type UpdateDeliverySettingsRequest struct {
-	CODEnabled                 bool     `json:"cod_enabled"`
-	DeliveryCharge             string   `json:"delivery_charge"`
-	FreeDeliveryThreshold      *string  `json:"free_delivery_threshold"`
-	AdvancePaymentRequired     bool     `json:"advance_payment_required"`
-	AdvancePaymentInstructions string   `json:"advance_payment_instructions"`
-	DeliveryAreas              []string `json:"delivery_areas"`
+	CODEnabled                 bool              `json:"cod_enabled"`
+	DeliveryCharge             string            `json:"delivery_charge"`
+	FreeDeliveryThreshold      *string           `json:"free_delivery_threshold"`
+	AdvancePaymentRequired     bool              `json:"advance_payment_required"`
+	AdvancePaymentInstructions string            `json:"advance_payment_instructions"`
+	DeliveryZones              []DeliveryZoneDTO `json:"delivery_zones"`
 }
 
 // --- Responses ---
@@ -61,24 +68,24 @@ type PublicShopDTO struct {
 
 // DeliverySettingsDTO is the delivery settings response.
 type DeliverySettingsDTO struct {
-	ShopID                     string   `json:"shop_id"`
-	CODEnabled                 bool     `json:"cod_enabled"`
-	DeliveryCharge             string   `json:"delivery_charge"`
-	FreeDeliveryThreshold      *string  `json:"free_delivery_threshold"`
-	AdvancePaymentRequired     bool     `json:"advance_payment_required"`
-	AdvancePaymentInstructions string   `json:"advance_payment_instructions"`
-	DeliveryAreas              []string `json:"delivery_areas"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	ShopID                     string            `json:"shop_id"`
+	CODEnabled                 bool              `json:"cod_enabled"`
+	DeliveryCharge             string            `json:"delivery_charge"`
+	FreeDeliveryThreshold      *string           `json:"free_delivery_threshold"`
+	AdvancePaymentRequired     bool              `json:"advance_payment_required"`
+	AdvancePaymentInstructions string            `json:"advance_payment_instructions"`
+	DeliveryZones              []DeliveryZoneDTO `json:"delivery_zones"`
+	UpdatedAt                  time.Time         `json:"updated_at"`
 }
 
 // PublicDeliverySettingsDTO excludes shop_id for the public endpoint.
 type PublicDeliverySettingsDTO struct {
-	CODEnabled                 bool     `json:"cod_enabled"`
-	DeliveryCharge             string   `json:"delivery_charge"`
-	FreeDeliveryThreshold      *string  `json:"free_delivery_threshold"`
-	AdvancePaymentRequired     bool     `json:"advance_payment_required"`
-	AdvancePaymentInstructions string   `json:"advance_payment_instructions"`
-	DeliveryAreas              []string `json:"delivery_areas"`
+	CODEnabled                 bool              `json:"cod_enabled"`
+	DeliveryCharge             string            `json:"delivery_charge"`
+	FreeDeliveryThreshold      *string           `json:"free_delivery_threshold"`
+	AdvancePaymentRequired     bool              `json:"advance_payment_required"`
+	AdvancePaymentInstructions string            `json:"advance_payment_instructions"`
+	DeliveryZones              []DeliveryZoneDTO `json:"delivery_zones"`
 }
 
 // SlugAvailableDTO is the response for GET /api/shops/check-slug.

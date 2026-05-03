@@ -28,7 +28,8 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	req.CustomerName = strings.TrimSpace(req.CustomerName)
 	req.CustomerPhone = strings.TrimSpace(req.CustomerPhone)
 	req.DeliveryAddress = strings.TrimSpace(req.DeliveryAddress)
-	req.DeliveryArea = strings.TrimSpace(req.DeliveryArea)
+	req.DeliveryDivision = strings.TrimSpace(req.DeliveryDivision)
+	req.DeliveryDistrict = strings.TrimSpace(req.DeliveryDistrict)
 	req.Note = strings.TrimSpace(req.Note)
 
 	if req.CustomerName == "" {
@@ -54,10 +55,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "delivery_address is required")
 		return
 	}
-	if req.DeliveryArea == "" {
-		httputil.WriteValidationError(w, "delivery_area is required")
-		return
-	}
+	// Division/District are optional — orders allowed regardless.
 	if len(req.Items) == 0 {
 		httputil.WriteValidationError(w, "items must not be empty")
 		return
@@ -82,12 +80,13 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.svc.PlaceOrder(r.Context(), slug, service.PlaceOrderInput{
-		CustomerName:    req.CustomerName,
-		CustomerPhone:   phone,
-		DeliveryAddress: req.DeliveryAddress,
-		DeliveryArea:    req.DeliveryArea,
-		Note:            req.Note,
-		Items:           items,
+		CustomerName:     req.CustomerName,
+		CustomerPhone:    phone,
+		DeliveryAddress:  req.DeliveryAddress,
+		DeliveryDivision: req.DeliveryDivision,
+		DeliveryDistrict: req.DeliveryDistrict,
+		Note:             req.Note,
+		Items:            items,
 	})
 	if err != nil {
 		httputil.WriteError(w, err)

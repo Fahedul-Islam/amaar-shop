@@ -24,11 +24,13 @@ All API endpoints are prefixed with `/api` except health checks.
 All responses use a consistent envelope:
 
 **Success:**
+
 ```json
 { "data": { ... } }
 ```
 
 **Success (list with pagination):**
+
 ```json
 {
   "data": [ ... ],
@@ -42,6 +44,7 @@ All responses use a consistent envelope:
 ```
 
 **Error:**
+
 ```json
 {
   "error": {
@@ -57,21 +60,21 @@ Paginated endpoints accept `page` (default 1) and `page_size` (default 20, max 1
 
 ### Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `validation_error` | 400 | Request body or query param failed validation |
-| `unauthorized` | 401 | Missing or invalid access token |
-| `forbidden` | 403 | Authenticated but not allowed (not owner / not admin) |
-| `not_found` | 404 | Resource does not exist (or shop is suspended for public endpoints) |
-| `slug_taken` | 409 | Slug is already in use by another shop |
-| `email_already_exists` | 409 | Email is already registered |
-| `shop_already_exists` | 409 | User already owns a shop |
-| `insufficient_stock` | 409 | One or more products lack sufficient stock for the order |
-| `invalid_status_transition` | 422 | Order status change is not allowed |
-| `checkout_disabled` | 422 | Shop has COD disabled and cannot accept orders |
-| `too_many_images` | 422 | Product already has the maximum 5 images |
-| `category_not_in_shop` | 422 | Category does not belong to the seller's shop |
-| `rate_limited` | 429 | Too many requests — try again later |
+| Code                        | HTTP Status | Description                                                         |
+| --------------------------- | ----------- | ------------------------------------------------------------------- |
+| `validation_error`          | 400         | Request body or query param failed validation                       |
+| `unauthorized`              | 401         | Missing or invalid access token                                     |
+| `forbidden`                 | 403         | Authenticated but not allowed (not owner / not admin)               |
+| `not_found`                 | 404         | Resource does not exist (or shop is suspended for public endpoints) |
+| `slug_taken`                | 409         | Slug is already in use by another shop                              |
+| `email_already_exists`      | 409         | Email is already registered                                         |
+| `shop_already_exists`       | 409         | User already owns a shop                                            |
+| `insufficient_stock`        | 409         | One or more products lack sufficient stock for the order            |
+| `invalid_status_transition` | 422         | Order status change is not allowed                                  |
+| `checkout_disabled`         | 422         | Shop has COD disabled and cannot accept orders                      |
+| `too_many_images`           | 422         | Product already has the maximum 5 images                            |
+| `category_not_in_shop`      | 422         | Category does not belong to the seller's shop                       |
+| `rate_limited`              | 429         | Too many requests — try again later                                 |
 
 ### Suspended-Shop Rule
 
@@ -97,6 +100,7 @@ Customer phone lookups normalize the input before comparing: strip spaces, handl
 > Returns service liveness status. No auth required.
 
 **Response `200`:**
+
 ```json
 { "status": "ok" }
 ```
@@ -108,11 +112,13 @@ Customer phone lookups normalize the input before comparing: strip spaces, handl
 > Returns service readiness status including database connectivity. No auth required.
 
 **Response `200`:**
+
 ```json
 { "status": "ready" }
 ```
 
 **Response `503`:**
+
 ```json
 { "status": "not_ready", "reason": "database unreachable" }
 ```
@@ -128,6 +134,7 @@ Customer phone lookups normalize the input before comparing: strip spaces, handl
 **Auth:** Public
 
 **Request body:**
+
 ```json
 {
   "email": "seller@example.com",
@@ -135,12 +142,13 @@ Customer phone lookups normalize the input before comparing: strip spaces, handl
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| email | string | Required, valid email format |
-| password | string | Required, min 8 characters |
+| Field    | Type   | Validation                   |
+| -------- | ------ | ---------------------------- |
+| email    | string | Required, valid email format |
+| password | string | Required, min 8 characters   |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -154,6 +162,7 @@ Customer phone lookups normalize the input before comparing: strip spaces, handl
   }
 }
 ```
+
 Refresh token is set as an httpOnly cookie.
 
 **Errors:** `validation_error`, `email_already_exists`, `rate_limited`
@@ -167,6 +176,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Public
 
 **Request body:**
+
 ```json
 {
   "email": "seller@example.com",
@@ -175,6 +185,7 @@ Refresh token is set as an httpOnly cookie.
 ```
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -188,6 +199,7 @@ Refresh token is set as an httpOnly cookie.
   }
 }
 ```
+
 Refresh token is set as an httpOnly cookie.
 
 **Errors:** `validation_error`, `unauthorized`, `rate_limited`
@@ -203,6 +215,7 @@ Refresh token is set as an httpOnly cookie.
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -224,6 +237,7 @@ Refresh token is set as an httpOnly cookie.
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -241,6 +255,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -265,6 +280,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "name": "My Shop",
@@ -274,14 +290,15 @@ Refresh token is set as an httpOnly cookie.
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| name | string | Required |
-| slug | string | Required, 3-40 chars, lowercase alphanumeric + hyphens |
-| description | string | Optional |
-| contact_phone | string | Optional |
+| Field         | Type   | Validation                                             |
+| ------------- | ------ | ------------------------------------------------------ |
+| name          | string | Required                                               |
+| slug          | string | Required, 3-40 chars, lowercase alphanumeric + hyphens |
+| description   | string | Optional                                               |
+| contact_phone | string | Optional                                               |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -311,6 +328,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -340,6 +358,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Request body (all fields optional):**
+
 ```json
 {
   "name": "Updated Name",
@@ -362,11 +381,12 @@ Refresh token is set as an httpOnly cookie.
 
 **Content-Type:** `multipart/form-data`
 
-| Field | Type | Validation |
-|-------|------|------------|
-| file | file | Required, JPEG/PNG/WebP, max 2 MB |
+| Field | Type | Validation                        |
+| ----- | ---- | --------------------------------- |
+| file  | file | Required, JPEG/PNG/WebP, max 2 MB |
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -387,11 +407,12 @@ Refresh token is set as an httpOnly cookie.
 
 **Content-Type:** `multipart/form-data`
 
-| Field | Type | Validation |
-|-------|------|------------|
-| file | file | Required, JPEG/PNG/WebP, max 2 MB |
+| Field | Type | Validation                        |
+| ----- | ---- | --------------------------------- |
+| file  | file | Required, JPEG/PNG/WebP, max 2 MB |
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -412,11 +433,12 @@ Refresh token is set as an httpOnly cookie.
 
 **Query params:**
 
-| Param | Type | Validation |
-|-------|------|------------|
-| slug | string | Required, 3-40 chars, lowercase alphanumeric + hyphens |
+| Param | Type   | Validation                                             |
+| ----- | ------ | ------------------------------------------------------ |
+| slug  | string | Required, 3-40 chars, lowercase alphanumeric + hyphens |
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -436,6 +458,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -445,7 +468,11 @@ Refresh token is set as an httpOnly cookie.
     "free_delivery_threshold": "500.00",
     "advance_payment_required": false,
     "advance_payment_instructions": "",
-    "delivery_areas": ["Dhaka", "Chittagong", "Sylhet"],
+    "delivery_zones": [
+      { "id": "uuid", "division": "Dhaka", "delivery_charge": "60.00" },
+      { "id": "uuid", "division": "Chattogram", "delivery_charge": "80.00" },
+      { "id": "uuid", "division": "Sylhet", "delivery_charge": "70.00" }
+    ],
     "updated_at": "2025-01-01T00:00:00Z"
   }
 }
@@ -462,6 +489,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "cod_enabled": true,
@@ -469,18 +497,21 @@ Refresh token is set as an httpOnly cookie.
   "free_delivery_threshold": "500.00",
   "advance_payment_required": false,
   "advance_payment_instructions": "Pay via bKash to 01712345678",
-  "delivery_areas": ["Dhaka", "Chittagong"]
+  "delivery_zones": [
+    { "division": "Dhaka", "delivery_charge": "60.00" },
+    { "division": "Chattogram", "delivery_charge": "80.00" }
+  ]
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| cod_enabled | boolean | Required |
-| delivery_charge | string (decimal) | Required, >= 0 |
-| free_delivery_threshold | string (decimal) or null | Optional, must be > delivery_charge when set |
-| advance_payment_required | boolean | Required |
-| advance_payment_instructions | string | Optional |
-| delivery_areas | string[] | Required when cod_enabled is true, non-empty |
+| Field                        | Type                     | Validation                                                                                              |
+| ---------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| cod_enabled                  | boolean                  | Required                                                                                                |
+| delivery_charge              | string (decimal)         | Required, >= 0                                                                                          |
+| free_delivery_threshold      | string (decimal) or null | Optional, must be > delivery_charge when set                                                            |
+| advance_payment_required     | boolean                  | Required                                                                                                |
+| advance_payment_instructions | string                   | Optional                                                                                                |
+| delivery_zones               | array                    | Optional; entries require `division` and `delivery_charge` (>= 0), division must be a valid BD division |
 
 **Response `200`:** Same shape as `GET /api/shops/me/delivery-settings`.
 
@@ -495,6 +526,7 @@ Refresh token is set as an httpOnly cookie.
 **Auth:** Public
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -522,6 +554,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Public
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -530,7 +563,10 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
     "free_delivery_threshold": "500.00",
     "advance_payment_required": false,
     "advance_payment_instructions": "",
-    "delivery_areas": ["Dhaka", "Chittagong"]
+    "delivery_zones": [
+      { "id": "uuid", "division": "Dhaka", "delivery_charge": "60.00" },
+      { "id": "uuid", "division": "Chattogram", "delivery_charge": "80.00" }
+    ]
   }
 }
 ```
@@ -548,6 +584,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -572,17 +609,19 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "name": "Electronics"
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| name | string | Required, unique per shop (case-insensitive) |
+| Field | Type   | Validation                                   |
+| ----- | ------ | -------------------------------------------- |
+| name  | string | Required, unique per shop (case-insensitive) |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -605,6 +644,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "name": "Updated Name"
@@ -637,16 +677,17 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 
 **Query params:**
 
-| Param | Type | Description |
-|-------|------|-------------|
-| q | string | Text search on product name (uses pg_trgm) |
-| category_id | uuid | Filter by category |
-| is_active | boolean | Filter by active status |
+| Param       | Type    | Description                                |
+| ----------- | ------- | ------------------------------------------ |
+| q           | string  | Text search on product name (uses pg_trgm) |
+| category_id | uuid    | Filter by category                         |
+| is_active   | boolean | Filter by active status                    |
 | is_archived | boolean | Filter by archived status (default: false) |
-| page | integer | Page number (default: 1) |
-| page_size | integer | Items per page (default: 20, max: 100) |
+| page        | integer | Page number (default: 1)                   |
+| page_size   | integer | Items per page (default: 20, max: 100)     |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -660,9 +701,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
       "stock": 25,
       "is_active": true,
       "is_archived": false,
-      "images": [
-        { "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }
-      ],
+      "images": [{ "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }],
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
     }
@@ -687,6 +726,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "name": "T-Shirt",
@@ -698,16 +738,17 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| name | string | Required |
-| description | string | Optional |
-| price_bdt | string (decimal) | Required, > 0 |
-| stock | integer | Required, >= 0 |
-| category_id | uuid or null | Optional, must belong to same shop |
-| is_active | boolean | Optional, default true |
+| Field       | Type             | Validation                         |
+| ----------- | ---------------- | ---------------------------------- |
+| name        | string           | Required                           |
+| description | string           | Optional                           |
+| price_bdt   | string (decimal) | Required, > 0                      |
+| stock       | integer          | Required, >= 0                     |
+| category_id | uuid or null     | Optional, must belong to same shop |
+| is_active   | boolean          | Optional, default true             |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -750,6 +791,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Request body (all fields optional):**
+
 ```json
 {
   "name": "Updated T-Shirt",
@@ -788,6 +830,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -809,11 +852,12 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 
 **Content-Type:** `multipart/form-data`
 
-| Field | Type | Validation |
-|-------|------|------------|
-| file | file | Required, JPEG/PNG/WebP, max 2 MB |
+| Field | Type | Validation                        |
+| ----- | ---- | --------------------------------- |
+| file  | file | Required, JPEG/PNG/WebP, max 2 MB |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -849,17 +893,19 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "image_ids": ["uuid-3", "uuid-1", "uuid-2"]
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
+| Field     | Type   | Validation                                            |
+| --------- | ------ | ----------------------------------------------------- |
 | image_ids | uuid[] | Required, must include all image IDs for this product |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -882,14 +928,15 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
 
 **Query params:**
 
-| Param | Type | Description |
-|-------|------|-------------|
-| q | string | Text search on product name |
-| category_id | uuid | Filter by category |
-| page | integer | Page number (default: 1) |
-| page_size | integer | Items per page (default: 20, max: 100) |
+| Param       | Type    | Description                            |
+| ----------- | ------- | -------------------------------------- |
+| q           | string  | Text search on product name            |
+| category_id | uuid    | Filter by category                     |
+| page        | integer | Page number (default: 1)               |
+| page_size   | integer | Items per page (default: 20, max: 100) |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -900,9 +947,7 @@ Note: `owner_user_id`, `is_suspended`, and admin-only fields are not exposed.
       "price_bdt": "450.00",
       "stock": 25,
       "category_id": "uuid",
-      "images": [
-        { "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }
-      ]
+      "images": [{ "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }]
     }
   ],
   "pagination": {
@@ -927,6 +972,7 @@ Only `is_active = true` and `is_archived = false` products are returned.
 **Auth:** Public
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -936,9 +982,7 @@ Only `is_active = true` and `is_archived = false` products are returned.
     "price_bdt": "450.00",
     "stock": 25,
     "category_id": "uuid",
-    "images": [
-      { "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }
-    ]
+    "images": [{ "id": "uuid", "url": "/uploads/img1.png", "sort_order": 0 }]
   }
 }
 ```
@@ -954,6 +998,7 @@ Only `is_active = true` and `is_archived = false` products are returned.
 **Auth:** Public
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -978,12 +1023,14 @@ Only `is_active = true` and `is_archived = false` products are returned.
 **Auth:** Public
 
 **Request body:**
+
 ```json
 {
   "customer_name": "Rahim Ahmed",
   "customer_phone": "01712345678",
   "delivery_address": "House 12, Road 5, Dhanmondi",
-  "delivery_area": "Dhaka",
+  "delivery_division": "Dhaka",
+  "delivery_district": "Dhaka",
   "note": "Please call before delivery",
   "items": [
     { "product_id": "uuid", "quantity": 2 },
@@ -992,18 +1039,20 @@ Only `is_active = true` and `is_archived = false` products are returned.
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| customer_name | string | Required |
-| customer_phone | string | Required, valid BD phone format |
-| delivery_address | string | Required |
-| delivery_area | string | Required, must be in shop's delivery_areas |
-| note | string | Optional |
-| items | array | Required, non-empty |
-| items[].product_id | uuid | Required, must be active in this shop |
-| items[].quantity | integer | Required, > 0 |
+| Field              | Type    | Validation                                          |
+| ------------------ | ------- | --------------------------------------------------- |
+| customer_name      | string  | Required                                            |
+| customer_phone     | string  | Required, valid BD phone format                     |
+| delivery_address   | string  | Required                                            |
+| delivery_division  | string  | Optional, must be a valid BD division when provided |
+| delivery_district  | string  | Optional                                            |
+| note               | string  | Optional                                            |
+| items              | array   | Required, non-empty                                 |
+| items[].product_id | uuid    | Required, must be active in this shop               |
+| items[].quantity   | integer | Required, > 0                                       |
 
 **Response `201`:**
+
 ```json
 {
   "data": {
@@ -1012,7 +1061,8 @@ Only `is_active = true` and `is_archived = false` products are returned.
     "customer_name": "Rahim Ahmed",
     "customer_phone": "01712345678",
     "delivery_address": "House 12, Road 5, Dhanmondi",
-    "delivery_area": "Dhaka",
+    "delivery_division": "Dhaka",
+    "delivery_district": "Dhaka",
     "note": "Please call before delivery",
     "subtotal_bdt": "1350.00",
     "delivery_charge_bdt": "60.00",
@@ -1056,11 +1106,12 @@ Only `is_active = true` and `is_archived = false` products are returned.
 
 **Query params:**
 
-| Param | Type | Validation |
-|-------|------|------------|
+| Param | Type   | Validation                                                           |
+| ----- | ------ | -------------------------------------------------------------------- |
 | phone | string | Required, matched using constant-time comparison after normalization |
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1098,16 +1149,17 @@ Only `is_active = true` and `is_archived = false` products are returned.
 
 **Query params:**
 
-| Param | Type | Description |
-|-------|------|-------------|
-| status | string | Filter by order status |
-| from | string (ISO date) | Orders created on or after this date |
-| to | string (ISO date) | Orders created on or before this date |
-| q | string | Search by customer phone |
-| page | integer | Page number (default: 1) |
-| page_size | integer | Items per page (default: 20, max: 100) |
+| Param     | Type              | Description                            |
+| --------- | ----------------- | -------------------------------------- |
+| status    | string            | Filter by order status                 |
+| from      | string (ISO date) | Orders created on or after this date   |
+| to        | string (ISO date) | Orders created on or before this date  |
+| q         | string            | Search by customer phone               |
+| page      | integer           | Page number (default: 1)               |
+| page_size | integer           | Items per page (default: 20, max: 100) |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -1115,7 +1167,8 @@ Only `is_active = true` and `is_archived = false` products are returned.
       "id": "uuid",
       "customer_name": "Rahim Ahmed",
       "customer_phone": "01712345678",
-      "delivery_area": "Dhaka",
+      "delivery_division": "Dhaka",
+      "delivery_district": "Dhaka",
       "subtotal_bdt": "1350.00",
       "delivery_charge_bdt": "60.00",
       "total_bdt": "1410.00",
@@ -1147,6 +1200,7 @@ Only `is_active = true` and `is_archived = false` products are returned.
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1155,7 +1209,8 @@ Only `is_active = true` and `is_archived = false` products are returned.
     "customer_name": "Rahim Ahmed",
     "customer_phone": "01712345678",
     "delivery_address": "House 12, Road 5, Dhanmondi",
-    "delivery_area": "Dhaka",
+    "delivery_division": "Dhaka",
+    "delivery_district": "Dhaka",
     "note": "Please call before delivery",
     "subtotal_bdt": "1350.00",
     "delivery_charge_bdt": "60.00",
@@ -1191,6 +1246,7 @@ Only `is_active = true` and `is_archived = false` products are returned.
 **Auth:** Seller
 
 **Request body:**
+
 ```json
 {
   "status": "confirmed",
@@ -1198,12 +1254,13 @@ Only `is_active = true` and `is_archived = false` products are returned.
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| status | string | Required, must be a valid next status |
-| cancelled_reason | string | Required when status is "cancelled" |
+| Field            | Type   | Validation                            |
+| ---------------- | ------ | ------------------------------------- |
+| status           | string | Required, must be a valid next status |
+| cancelled_reason | string | Required when status is "cancelled"   |
 
 **Valid status transitions:**
+
 ```
 pending     -> confirmed
 confirmed   -> shipped
@@ -1214,6 +1271,7 @@ shipped     -> cancelled
 ```
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1237,6 +1295,7 @@ shipped     -> cancelled
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1260,6 +1319,7 @@ shipped     -> cancelled
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1283,12 +1343,13 @@ shipped     -> cancelled
 
 **Query params:**
 
-| Param | Type | Validation |
-|-------|------|------------|
-| from | string (ISO date) | Required |
-| to | string (ISO date) | Required, max 90-day range |
+| Param | Type              | Validation                 |
+| ----- | ----------------- | -------------------------- |
+| from  | string (ISO date) | Required                   |
+| to    | string (ISO date) | Required, max 90-day range |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -1317,6 +1378,7 @@ shipped     -> cancelled
 **Auth:** Seller
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -1343,6 +1405,7 @@ shipped     -> cancelled
 **Auth:** Seller
 
 **Response `200`:**
+
 - **Content-Type:** `image/png`
 - Body: PNG binary data
 
@@ -1360,12 +1423,13 @@ shipped     -> cancelled
 
 **Query params:**
 
-| Param | Type | Description |
-|-------|------|-------------|
-| page | integer | Page number (default: 1) |
+| Param     | Type    | Description                            |
+| --------- | ------- | -------------------------------------- |
+| page      | integer | Page number (default: 1)               |
 | page_size | integer | Items per page (default: 20, max: 100) |
 
 **Response `200`:**
+
 ```json
 {
   "data": [
@@ -1399,6 +1463,7 @@ shipped     -> cancelled
 **Auth:** Admin
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1433,6 +1498,7 @@ shipped     -> cancelled
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1456,6 +1522,7 @@ shipped     -> cancelled
 **Request body:** None
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -1477,6 +1544,7 @@ shipped     -> cancelled
 **Auth:** Admin
 
 **Response `200`:**
+
 ```json
 {
   "data": {

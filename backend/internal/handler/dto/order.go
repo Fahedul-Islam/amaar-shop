@@ -1,12 +1,13 @@
 package dto
 
 type PlaceOrderRequest struct {
-	CustomerName    string             `json:"customer_name"`
-	CustomerPhone   string             `json:"customer_phone"`
-	DeliveryAddress string             `json:"delivery_address"`
-	DeliveryArea    string             `json:"delivery_area"`
-	Note            string             `json:"note"`
-	Items           []OrderItemRequest `json:"items"`
+	CustomerName     string             `json:"customer_name"`
+	CustomerPhone    string             `json:"customer_phone"`
+	DeliveryAddress  string             `json:"delivery_address"`
+	DeliveryDivision string             `json:"delivery_division"`
+	DeliveryDistrict string             `json:"delivery_district"`
+	Note             string             `json:"note"`
+	Items            []OrderItemRequest `json:"items"`
 }
 
 type OrderItemRequest struct {
@@ -29,7 +30,8 @@ type OrderDTO struct {
 	CustomerName           string         `json:"customer_name"`
 	CustomerPhone          string         `json:"customer_phone"`
 	DeliveryAddress        string         `json:"delivery_address"`
-	DeliveryArea           string         `json:"delivery_area"`
+	DeliveryDivision       string         `json:"delivery_division"`
+	DeliveryDistrict       string         `json:"delivery_district"`
 	Note                   string         `json:"note"`
 	SubtotalBDT            string         `json:"subtotal_bdt"`
 	DeliveryChargeBDT      string         `json:"delivery_charge_bdt"`

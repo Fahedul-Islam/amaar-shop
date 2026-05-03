@@ -1,6 +1,6 @@
-import { publicFetch, publicFetchEnvelope } from './api';
-import type { PublicShop, PublicDeliverySettings } from './shopApi';
-import type { ProductImage, Pagination } from './productApi';
+import { publicFetch, publicFetchEnvelope } from "./api";
+import type { PublicShop, PublicDeliverySettings } from "./shopApi";
+import type { ProductImage, Pagination } from "./productApi";
 
 export interface PublicProduct {
   id: string;
@@ -41,7 +41,8 @@ export interface Order {
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
-  delivery_area: string;
+  delivery_division: string;
+  delivery_district: string;
   note: string;
   subtotal_bdt: string;
   delivery_charge_bdt: string;
@@ -59,7 +60,8 @@ export interface PlaceOrderInput {
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
-  delivery_area: string;
+  delivery_division: string;
+  delivery_district: string;
   note?: string;
   items: { product_id: string; quantity: number }[];
 }
@@ -68,23 +70,32 @@ export const getShop = (slug: string) =>
   publicFetch<PublicShop>(`/api/shops/by-slug/${encodeURIComponent(slug)}`);
 
 export const getDeliverySettings = (slug: string) =>
-  publicFetch<PublicDeliverySettings>(`/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`);
+  publicFetch<PublicDeliverySettings>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`,
+  );
 
 export const getCategories = (slug: string) =>
-  publicFetch<PublicCategory[]>(`/api/shops/by-slug/${encodeURIComponent(slug)}/categories`);
+  publicFetch<PublicCategory[]>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/categories`,
+  );
 
 export function getProducts(
   slug: string,
-  params: { q?: string; category_id?: string; page?: number; page_size?: number } = {},
+  params: {
+    q?: string;
+    category_id?: string;
+    page?: number;
+    page_size?: number;
+  } = {},
 ) {
   const qs = new URLSearchParams();
-  if (params.q) qs.set('q', params.q);
-  if (params.category_id) qs.set('category_id', params.category_id);
-  if (params.page) qs.set('page', String(params.page));
-  if (params.page_size) qs.set('page_size', String(params.page_size));
+  if (params.q) qs.set("q", params.q);
+  if (params.category_id) qs.set("category_id", params.category_id);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
   const q = qs.toString();
   return publicFetchEnvelope<PaginatedPublicProducts>(
-    `/api/shops/by-slug/${encodeURIComponent(slug)}/products${q ? `?${q}` : ''}`,
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/products${q ? `?${q}` : ""}`,
   );
 }
 
@@ -95,14 +106,18 @@ export const getProduct = (slug: string, productId: string) =>
 
 export const placeOrder = (slug: string, input: PlaceOrderInput) =>
   publicFetch<Order>(`/api/shops/by-slug/${encodeURIComponent(slug)}/orders`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(input),
   });
 
-export const lookupOrder = (slug: string, orderID: string, customerPhone: string) =>
+export const lookupOrder = (
+  slug: string,
+  orderID: string,
+  customerPhone: string,
+) =>
   publicFetch<Order>(
     `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/lookup`,
-    { method: 'POST', body: JSON.stringify({ customer_phone: customerPhone }) },
+    { method: "POST", body: JSON.stringify({ customer_phone: customerPhone }) },
   );
 
 export const buyerCancelOrder = (
@@ -114,7 +129,7 @@ export const buyerCancelOrder = (
   publicFetch<Order>(
     `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/cancel`,
     {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({
         customer_phone: customerPhone,
         cancellation_reason: cancellationReason,

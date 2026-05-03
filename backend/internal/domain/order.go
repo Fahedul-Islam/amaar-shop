@@ -12,6 +12,8 @@ type Order struct {
 	CustomerName           string      `json:"customer_name"`
 	CustomerPhone          string      `json:"customer_phone"`
 	DeliveryAddress        string      `json:"delivery_address"`
+	DeliveryDivision       string      `json:"delivery_division"`
+	DeliveryDistrict       string      `json:"delivery_district"`
 	DeliveryArea           string      `json:"delivery_area"`
 	Note                   string      `json:"note"`
 	SubtotalBDT            string      `json:"subtotal_bdt"`
@@ -42,15 +44,14 @@ var (
 	ErrCheckoutDisabled           = errors.New("shop is not currently taking orders")
 	ErrInvalidStatusTransition    = errors.New("invalid order status transition")
 	ErrOrderNotFound              = errors.New("order not found")
-	ErrInvalidDeliveryArea        = errors.New("delivery area is not served by this shop")
 	ErrCancellationReasonRequired = errors.New("cancellation reason is required")
 )
 
 var (
-	Cancelled="cancelled"
-	Confirmed="confirmed"
-	Delivered="delivered"
-	Pending="pending"
-	Returned="returned"
-	Shipped="shipped"
+	Cancelled = "cancelled"
+	Confirmed = "confirmed"
+	Delivered = "delivered"
+	Pending   = "pending"
+	Returned  = "returned"
+	Shipped   = "shipped"
 )

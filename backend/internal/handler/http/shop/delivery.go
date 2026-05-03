@@ -33,8 +33,17 @@ func (h *Handler) UpdateDeliverySettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.DeliveryAreas == nil {
-		req.DeliveryAreas = []string{}
+	if req.DeliveryZones == nil {
+		req.DeliveryZones = []dto.DeliveryZoneDTO{}
+	}
+
+	zones := make([]domain.DeliveryZone, 0, len(req.DeliveryZones))
+	for _, z := range req.DeliveryZones {
+		zones = append(zones, domain.DeliveryZone{
+			ID:             z.ID,
+			Division:       z.Division,
+			DeliveryCharge: z.DeliveryCharge,
+		})
 	}
 
 	ds := &domain.DeliverySettings{
@@ -43,7 +52,7 @@ func (h *Handler) UpdateDeliverySettings(w http.ResponseWriter, r *http.Request)
 		FreeDeliveryThreshold:      req.FreeDeliveryThreshold,
 		AdvancePaymentRequired:     req.AdvancePaymentRequired,
 		AdvancePaymentInstructions: req.AdvancePaymentInstructions,
-		DeliveryAreas:              req.DeliveryAreas,
+		DeliveryZones:              zones,
 	}
 
 	settings, err := h.svc.UpdateDeliverySettings(r.Context(), userID, ds)

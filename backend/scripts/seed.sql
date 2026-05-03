@@ -23,13 +23,19 @@ VALUES (
 ) ON CONFLICT (slug) DO NOTHING;
 
 -- Delivery settings
-INSERT INTO shop_delivery_settings (shop_id, cod_enabled, delivery_charge, delivery_areas)
+INSERT INTO shop_delivery_settings (shop_id, cod_enabled, delivery_charge)
 VALUES (
     'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
     true,
-    60.00,
-    ARRAY['Dhaka', 'Chittagong', 'Sylhet']
+    60.00
 ) ON CONFLICT (shop_id) DO NOTHING;
+
+-- Delivery zones
+INSERT INTO shop_delivery_zones (shop_id, division, delivery_charge) VALUES
+    ('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Dhaka', 60.00),
+    ('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Chattogram', 80.00),
+    ('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Sylhet', 70.00)
+ON CONFLICT (shop_id, division) DO NOTHING;
 
 -- Three categories
 INSERT INTO categories (id, shop_id, name) VALUES
@@ -59,10 +65,10 @@ INSERT INTO product_images (product_id, url, sort_order) VALUES
 ON CONFLICT DO NOTHING;
 
 -- Three sample orders in different statuses
-INSERT INTO orders (id, shop_id, customer_name, customer_phone, delivery_address, delivery_area, subtotal_bdt, delivery_charge_bdt, total_bdt, status) VALUES
-    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Rahim Uddin', '+8801711111111', '123 Dhanmondi, Road 5', 'Dhaka', 1650.00, 60.00, 1710.00, 'pending'),
-    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Fatima Begum', '+8801722222222', '45 Agrabad C/A', 'Chittagong', 3500.00, 60.00, 3560.00, 'confirmed'),
-    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Karim Ahmed', '+8801733333333', '78 Zindabazar', 'Sylhet', 800.00, 60.00, 860.00, 'delivered')
+INSERT INTO orders (id, shop_id, customer_name, customer_phone, delivery_address, delivery_division, delivery_district, delivery_area, subtotal_bdt, delivery_charge_bdt, total_bdt, status) VALUES
+    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Rahim Uddin', '+8801711111111', '123 Dhanmondi, Road 5', 'Dhaka', '', 'Dhaka', 1650.00, 60.00, 1710.00, 'pending'),
+    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Fatima Begum', '+8801722222222', '45 Agrabad C/A', 'Chattogram', '', 'Chattogram', 3500.00, 60.00, 3560.00, 'confirmed'),
+    ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Karim Ahmed', '+8801733333333', '78 Zindabazar', 'Sylhet', '', 'Sylhet', 800.00, 60.00, 860.00, 'delivered')
 ON CONFLICT DO NOTHING;
 
 -- Order items

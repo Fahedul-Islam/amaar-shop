@@ -82,7 +82,7 @@ func (r *adminRepo) fillAnalyticsHeadlines(ctx context.Context, days int, out *d
 	)
 
 	var (
-		gmvCur, gmvPrev    string
+		gmvCur, gmvPrev                                               string
 		ordersCur, ordersPrev, custCur, custPrev, shopsCur, shopsPrev int
 	)
 	if err := row.Scan(&gmvCur, &gmvPrev, &ordersCur, &ordersPrev,
@@ -324,10 +324,10 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 	)
 
 	var (
-		gmvCur, gmvPrev               string
-		ordersCur, ordersPrev         int
-		refundCur, refundPrev         string
-		collectedCur, collectedPrev   string
+		gmvCur, gmvPrev             string
+		ordersCur, ordersPrev       int
+		refundCur, refundPrev       string
+		collectedCur, collectedPrev string
 	)
 	if err := row.Scan(
 		&gmvCur, &gmvPrev,
@@ -614,4 +614,3 @@ func sign(f float64) float64 {
 	}
 	return 1
 }
-

@@ -4,19 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
-	"github.com/lib/pq"
 )
 
 type deliverySettingsRepo struct {
-	db database.DBTX
+	db  database.DBTX
+	raw *sql.DB
 }
 
-func NewDeliverySettingsRepo(db database.DBTX) repository.DeliverySettingsRepository {
-	return &deliverySettingsRepo{db: db}
+func NewDeliverySettingsRepo(db *sql.DB) repository.DeliverySettingsRepository {
+	return &deliverySettingsRepo{db: db, raw: db}
 }
 
 func (r *deliverySettingsRepo) Get(ctx context.Context, shopID string) (*domain.DeliverySettings, error) {
@@ -25,12 +26,11 @@ func (r *deliverySettingsRepo) Get(ctx context.Context, shopID string) (*domain.
 	err := r.db.QueryRowContext(ctx,
 		`SELECT shop_id, cod_enabled, delivery_charge::text, free_delivery_threshold::text,
 		        advance_payment_required, COALESCE(advance_payment_instructions,''),
-		        delivery_areas, updated_at
-		 FROM shop_delivery_settings WHERE shop_id = $1`, shopID,
+		        updated_at
+	 FROM shop_delivery_settings WHERE shop_id = $1`, shopID,
 	).Scan(
 		&ds.ShopID, &ds.CODEnabled, &ds.DeliveryCharge, &threshold,
-		&ds.AdvancePaymentRequired, &ds.AdvancePaymentInstructions,
-		pq.Array(&ds.DeliveryAreas), &ds.UpdatedAt,
+		&ds.AdvancePaymentRequired, &ds.AdvancePaymentInstructions, &ds.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrShopNotFound
@@ -41,34 +41,75 @@ func (r *deliverySettingsRepo) Get(ctx context.Context, shopID string) (*domain.
 	if threshold.Valid {
 		ds.FreeDeliveryThreshold = &threshold.String
 	}
-	if ds.DeliveryAreas == nil {
-		ds.DeliveryAreas = []string{}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, division, delivery_charge::text
+		 FROM shop_delivery_zones WHERE shop_id = $1 ORDER BY division`, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var z domain.DeliveryZone
+		if err := rows.Scan(&z.ID, &z.Division, &z.DeliveryCharge); err != nil {
+			return nil, err
+		}
+		ds.DeliveryZones = append(ds.DeliveryZones, z)
+	}
+	if ds.DeliveryZones == nil {
+		ds.DeliveryZones = []domain.DeliveryZone{}
 	}
 	return ds, nil
 }
 
 func (r *deliverySettingsRepo) Upsert(ctx context.Context, settings *domain.DeliverySettings) error {
+	tx, err := r.raw.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	var threshold *string
 	if settings.FreeDeliveryThreshold != nil && *settings.FreeDeliveryThreshold != "" {
 		threshold = settings.FreeDeliveryThreshold
 	}
 
-	err := r.db.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`INSERT INTO shop_delivery_settings
 		   (shop_id, cod_enabled, delivery_charge, free_delivery_threshold,
-		    advance_payment_required, advance_payment_instructions, delivery_areas)
-		 VALUES ($1, $2, $3::numeric, $4::numeric, $5, $6, $7)
+		    advance_payment_required, advance_payment_instructions)
+		 VALUES ($1, $2, $3::numeric, $4::numeric, $5, $6)
 		 ON CONFLICT (shop_id) DO UPDATE SET
 		   cod_enabled = EXCLUDED.cod_enabled,
 		   delivery_charge = EXCLUDED.delivery_charge,
 		   free_delivery_threshold = EXCLUDED.free_delivery_threshold,
 		   advance_payment_required = EXCLUDED.advance_payment_required,
-		   advance_payment_instructions = EXCLUDED.advance_payment_instructions,
-		   delivery_areas = EXCLUDED.delivery_areas
+		   advance_payment_instructions = EXCLUDED.advance_payment_instructions
 		 RETURNING updated_at`,
 		settings.ShopID, settings.CODEnabled, settings.DeliveryCharge, threshold,
 		settings.AdvancePaymentRequired, settings.AdvancePaymentInstructions,
-		pq.Array(settings.DeliveryAreas),
 	).Scan(&settings.UpdatedAt)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM shop_delivery_zones WHERE shop_id = $1`, settings.ShopID); err != nil {
+		return err
+	}
+
+	for i := range settings.DeliveryZones {
+		z := &settings.DeliveryZones[i]
+		err := tx.QueryRowContext(ctx,
+			`INSERT INTO shop_delivery_zones (shop_id, division, delivery_charge)
+			 VALUES ($1, $2, $3::numeric)
+			 RETURNING id`,
+			settings.ShopID, z.Division, z.DeliveryCharge,
+		).Scan(&z.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }

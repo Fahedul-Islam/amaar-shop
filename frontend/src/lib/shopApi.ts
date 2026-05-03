@@ -1,4 +1,4 @@
-import { apiFetch, publicFetch } from './api';
+import { apiFetch, publicFetch } from "./api";
 
 export interface Shop {
   id: string;
@@ -26,6 +26,12 @@ export interface PublicShop {
   rating_count: number;
 }
 
+export interface DeliveryZone {
+  id?: string;
+  division: string;
+  delivery_charge: string;
+}
+
 export interface DeliverySettings {
   shop_id: string;
   cod_enabled: boolean;
@@ -33,7 +39,7 @@ export interface DeliverySettings {
   free_delivery_threshold: string | null;
   advance_payment_required: boolean;
   advance_payment_instructions: string;
-  delivery_areas: string[];
+  delivery_zones: DeliveryZone[];
   updated_at: string;
 }
 
@@ -43,34 +49,50 @@ export interface PublicDeliverySettings {
   free_delivery_threshold: string | null;
   advance_payment_required: boolean;
   advance_payment_instructions: string;
-  delivery_areas: string[];
+  delivery_zones: DeliveryZone[];
 }
 
-export const createShop = (d: { name: string; slug: string; description?: string; contact_phone?: string }) =>
-  apiFetch<Shop>('/api/shops', { method: 'POST', body: JSON.stringify(d) });
+export const createShop = (d: {
+  name: string;
+  slug: string;
+  description?: string;
+  contact_phone?: string;
+}) => apiFetch<Shop>("/api/shops", { method: "POST", body: JSON.stringify(d) });
 
-export const getMyShop = () => apiFetch<Shop>('/api/shops/me');
+export const getMyShop = () => apiFetch<Shop>("/api/shops/me");
 
-export const updateMyShop = (d: { name?: string; description?: string; contact_phone?: string }) =>
-  apiFetch<Shop>('/api/shops/me', { method: 'PATCH', body: JSON.stringify(d) });
+export const updateMyShop = (d: {
+  name?: string;
+  description?: string;
+  contact_phone?: string;
+}) =>
+  apiFetch<Shop>("/api/shops/me", { method: "PATCH", body: JSON.stringify(d) });
 
 export function uploadLogo(file: File) {
   const form = new FormData();
-  form.append('file', file);
-  return apiFetch<{ url: string }>('/api/shops/me/logo', { method: 'POST', body: form });
+  form.append("file", file);
+  return apiFetch<{ url: string }>("/api/shops/me/logo", {
+    method: "POST",
+    body: form,
+  });
 }
 
 export function uploadBanner(file: File) {
   const form = new FormData();
-  form.append('file', file);
-  return apiFetch<{ url: string }>('/api/shops/me/banner', { method: 'POST', body: form });
+  form.append("file", file);
+  return apiFetch<{ url: string }>("/api/shops/me/banner", {
+    method: "POST",
+    body: form,
+  });
 }
 
 export const checkSlug = (slug: string) =>
-  apiFetch<{ available: boolean }>(`/api/shops/check-slug?slug=${encodeURIComponent(slug)}`);
+  apiFetch<{ available: boolean }>(
+    `/api/shops/check-slug?slug=${encodeURIComponent(slug)}`,
+  );
 
 export const getDeliverySettings = () =>
-  apiFetch<DeliverySettings>('/api/shops/me/delivery-settings');
+  apiFetch<DeliverySettings>("/api/shops/me/delivery-settings");
 
 export const updateDeliverySettings = (d: {
   cod_enabled: boolean;
@@ -78,11 +100,17 @@ export const updateDeliverySettings = (d: {
   free_delivery_threshold?: string | null;
   advance_payment_required: boolean;
   advance_payment_instructions?: string;
-  delivery_areas: string[];
-}) => apiFetch<DeliverySettings>('/api/shops/me/delivery-settings', { method: 'PUT', body: JSON.stringify(d) });
+  delivery_zones: DeliveryZone[];
+}) =>
+  apiFetch<DeliverySettings>("/api/shops/me/delivery-settings", {
+    method: "PUT",
+    body: JSON.stringify(d),
+  });
 
 export const getPublicShop = (slug: string) =>
   publicFetch<PublicShop>(`/api/shops/by-slug/${encodeURIComponent(slug)}`);
 
 export const getPublicDeliverySettings = (slug: string) =>
-  publicFetch<PublicDeliverySettings>(`/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`);
+  publicFetch<PublicDeliverySettings>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`,
+  );

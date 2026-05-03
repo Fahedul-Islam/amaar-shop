@@ -284,10 +284,13 @@ func TestUpdateDeliverySettings_Success(t *testing.T) {
 
 	threshold := "500.00"
 	ds := &domain.DeliverySettings{
-		CODEnabled:             true,
-		DeliveryCharge:         "60.00",
-		FreeDeliveryThreshold:  &threshold,
-		DeliveryAreas:          []string{"Dhaka", "Chittagong"},
+		CODEnabled:            true,
+		DeliveryCharge:        "60.00",
+		FreeDeliveryThreshold: &threshold,
+		DeliveryZones: []domain.DeliveryZone{
+			{Division: "Dhaka", DeliveryCharge: "60.00"},
+			{Division: "Chattogram", DeliveryCharge: "80.00"},
+		},
 	}
 
 	result, err := svc.UpdateDeliverySettings(context.Background(), "user-1", ds)
@@ -307,7 +310,9 @@ func TestUpdateDeliverySettings_InvalidCharge(t *testing.T) {
 	ds := &domain.DeliverySettings{
 		CODEnabled:     true,
 		DeliveryCharge: "-10.00",
-		DeliveryAreas:  []string{"Dhaka"},
+		DeliveryZones: []domain.DeliveryZone{
+			{Division: "Dhaka", DeliveryCharge: "60.00"},
+		},
 	}
 
 	_, err := svc.UpdateDeliverySettings(context.Background(), "user-1", ds)
@@ -326,7 +331,9 @@ func TestUpdateDeliverySettings_ThresholdBelowCharge(t *testing.T) {
 		CODEnabled:            true,
 		DeliveryCharge:        "60.00",
 		FreeDeliveryThreshold: &threshold,
-		DeliveryAreas:         []string{"Dhaka"},
+		DeliveryZones: []domain.DeliveryZone{
+			{Division: "Dhaka", DeliveryCharge: "60.00"},
+		},
 	}
 
 	_, err := svc.UpdateDeliverySettings(context.Background(), "user-1", ds)
@@ -335,7 +342,7 @@ func TestUpdateDeliverySettings_ThresholdBelowCharge(t *testing.T) {
 	}
 }
 
-func TestUpdateDeliverySettings_CODWithoutAreas(t *testing.T) {
+func TestUpdateDeliverySettings_AllowsEmptyZones(t *testing.T) {
 	svc, _, _ := newTestShopService()
 
 	_, _ = svc.CreateShop(context.Background(), "user-1", "Shop", "my-shop", "", "")
@@ -343,12 +350,11 @@ func TestUpdateDeliverySettings_CODWithoutAreas(t *testing.T) {
 	ds := &domain.DeliverySettings{
 		CODEnabled:     true,
 		DeliveryCharge: "60.00",
-		DeliveryAreas:  []string{},
+		DeliveryZones:  []domain.DeliveryZone{},
 	}
 
-	_, err := svc.UpdateDeliverySettings(context.Background(), "user-1", ds)
-	if err != domain.ErrDeliveryAreasRequired {
-		t.Errorf("expected ErrDeliveryAreasRequired, got %v", err)
+	if _, err := svc.UpdateDeliverySettings(context.Background(), "user-1", ds); err != nil {
+		t.Errorf("expected no error, got %v", err)
 	}
 }
 
