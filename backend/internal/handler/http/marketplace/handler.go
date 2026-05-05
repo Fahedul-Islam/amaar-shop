@@ -91,9 +91,13 @@ func (h *Handler) LookupOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := make([]dto.OrderDTO, 0, len(orders))
-	for _, o := range orders {
-		out = append(out, toOrderDTO(o))
+	out := make([]dto.MarketplaceOrderDTO, 0, len(orders))
+	for _, mo := range orders {
+		out = append(out, dto.MarketplaceOrderDTO{
+			OrderDTO: toOrderDTO(&mo.Order),
+			ShopName: mo.ShopName,
+			ShopSlug: mo.ShopSlug,
+		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, out)
 }

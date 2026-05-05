@@ -11,5 +11,5 @@ type Service interface {
 	ListProducts(ctx context.Context, filter domain.MarketplaceProductFilter) ([]*domain.MarketplaceProduct, int, error)
 	ListShops(ctx context.Context, query string, page, size int) ([]*domain.Shop, int, error)
 	ListCategories(ctx context.Context) ([]string, error)
-	LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.Order, error)
+	LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.MarketplaceOrder, error)
 }

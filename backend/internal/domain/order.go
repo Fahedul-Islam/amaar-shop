@@ -40,6 +40,14 @@ type OrderItem struct {
 	LineTotalBDT         string `json:"line_total_bdt"`
 }
 
+// MarketplaceOrder is an order with the originating shop's name and slug
+// attached, used for the cross-shop phone-lookup endpoint.
+type MarketplaceOrder struct {
+	Order
+	ShopName string `json:"shop_name"`
+	ShopSlug string `json:"shop_slug"`
+}
+
 var (
 	ErrCheckoutDisabled           = errors.New("shop is not currently taking orders")
 	ErrInvalidStatusTransition    = errors.New("invalid order status transition")

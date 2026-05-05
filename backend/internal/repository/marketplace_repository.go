@@ -19,6 +19,7 @@ type MarketplaceRepository interface {
 	// ListCategories returns distinct category names across all non-suspended shops.
 	ListCategories(ctx context.Context) ([]string, error)
 
-	// LookupOrdersByPhone returns all orders matching the given phone number across all shops.
-	LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.Order, error)
+	// LookupOrdersByPhone returns all orders matching the given phone number across all shops,
+	// each enriched with its shop's name and slug.
+	LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.MarketplaceOrder, error)
 }

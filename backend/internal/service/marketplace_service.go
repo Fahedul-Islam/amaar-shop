@@ -36,14 +36,18 @@ func (s *MarketplaceService) ListCategories(ctx context.Context) ([]string, erro
 	return s.marketplace.ListCategories(ctx)
 }
 
-func (s *MarketplaceService) LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.Order, error) {
+func (s *MarketplaceService) LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.MarketplaceOrder, error) {
 	phone = normalizePhone(phone)
 	orders, err := s.marketplace.LookupOrdersByPhone(ctx, phone)
 	if err != nil {
 		return nil, err
 	}
 	if len(orders) > 0 {
-		if err := s.orders.LoadItems(ctx, orders...); err != nil {
+		inner := make([]*domain.Order, len(orders))
+		for i, mo := range orders {
+			inner[i] = &mo.Order
+		}
+		if err := s.orders.LoadItems(ctx, inner...); err != nil {
 			return nil, err
 		}
 	}

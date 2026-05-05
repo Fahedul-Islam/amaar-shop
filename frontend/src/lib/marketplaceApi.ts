@@ -66,8 +66,13 @@ export function getMarketplaceShops(params: { q?: string; page?: number; page_si
 
 export const getMarketplaceCategories = () => publicFetch<string[]>('/api/marketplace/categories');
 
+export interface MarketplaceOrder extends Order {
+  shop_name: string;
+  shop_slug: string;
+}
+
 export const lookupOrdersByPhone = (phone: string) =>
-  publicFetch<Order[]>('/api/marketplace/orders/lookup', {
+  publicFetch<MarketplaceOrder[]>('/api/marketplace/orders/lookup', {
     method: 'POST',
     body: JSON.stringify({ phone }),
   });

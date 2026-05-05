@@ -290,11 +290,13 @@ func (r *marketplaceRepo) ListCategories(ctx context.Context) ([]string, error) 
 	return names, rows.Err()
 }
 
-// LookupOrdersByPhone returns all orders matching the given phone number across all shops.
-func (r *marketplaceRepo) LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.Order, error) {
+// LookupOrdersByPhone returns all orders matching the given phone number across all shops,
+// each enriched with its shop's name and slug.
+func (r *marketplaceRepo) LookupOrdersByPhone(ctx context.Context, phone string) ([]*domain.MarketplaceOrder, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+orderColumns+`
+		`SELECT `+orderColumns+`, s.name, s.slug
 		 FROM orders o
+		 JOIN shops s ON s.id = o.shop_id
 		 WHERE o.customer_phone = $1
 		 ORDER BY o.created_at DESC
 		 LIMIT 50`,
@@ -305,16 +307,20 @@ func (r *marketplaceRepo) LookupOrdersByPhone(ctx context.Context, phone string)
 	}
 	defer rows.Close()
 
-	var orders []*domain.Order
+	orders := []*domain.MarketplaceOrder{}
 	for rows.Next() {
-		o, err := scanOrder(rows)
+		mo := &domain.MarketplaceOrder{}
+		err := rows.Scan(
+			&mo.ID, &mo.ShopID, &mo.CustomerName, &mo.CustomerPhone, &mo.DeliveryAddress,
+			&mo.DeliveryDivision, &mo.DeliveryDistrict, &mo.DeliveryArea, &mo.Note, &mo.SubtotalBDT, &mo.DeliveryChargeBDT,
+			&mo.TotalBDT, &mo.Status, &mo.AdvancePaymentRequired,
+			&mo.AdvancePaymentReceived, &mo.CancelledReason, &mo.CreatedAt, &mo.UpdatedAt,
+			&mo.ShopName, &mo.ShopSlug,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("marketplace order scan: %w", err)
 		}
-		orders = append(orders, o)
-	}
-	if orders == nil {
-		orders = []*domain.Order{}
+		orders = append(orders, mo)
 	}
 	return orders, rows.Err()
 }

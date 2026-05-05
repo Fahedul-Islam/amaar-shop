@@ -1,38 +1,57 @@
 import Link from 'next/link';
+import { Logo } from '@/components/ui/Logo';
 
 export function MarketplaceFooter() {
   return (
-    <footer className="border-t border-stone-200 bg-white mt-12">
-      <div className="max-w-container mx-auto px-4 py-10 grid gap-8 md:grid-cols-4 text-sm">
-        <div>
-          <div className="font-semibold text-stone-900 mb-3">AmaarShop</div>
-          <p className="text-stone-500 leading-relaxed">A warmer marketplace for Bangladesh&rsquo;s small businesses.</p>
+    <footer className="border-t border-stone-200 bg-white mt-10">
+      <div className="max-w-container mx-auto px-4 pt-10 pb-6">
+        <div className="grid gap-8 md:grid-cols-[1.4fr_1fr_1fr_1fr] text-sm">
+          <div>
+            <Logo size={24} />
+            <p className="text-stone-500 leading-relaxed mt-3 max-w-[320px]">
+              A warmer marketplace for Bangladesh&rsquo;s small businesses. Cash on delivery available across the country.
+            </p>
+          </div>
+          <FooterCol title="Shop">
+            <FooterLink href="/">All products</FooterLink>
+            <FooterLink href="/shops">All shops</FooterLink>
+            <FooterLink href="/order-lookup">Track an order</FooterLink>
+          </FooterCol>
+          <FooterCol title="Sellers">
+            <FooterLink href="/signup">Start your shop</FooterLink>
+            <FooterLink href="/login">Seller sign in</FooterLink>
+          </FooterCol>
+          <FooterCol title="Support">
+            <li>
+              <a href="mailto:hello@amaar.shop" className="text-stone-500 hover:text-teal-600 transition-colors">
+                hello@amaar.shop
+              </a>
+            </li>
+          </FooterCol>
         </div>
-        <div>
-          <div className="font-medium text-stone-700 mb-3">Discover</div>
-          <ul className="space-y-2 text-stone-500">
-            <li><Link href="/" className="hover:text-teal-600">All products</Link></li>
-            <li><Link href="/shops" className="hover:text-teal-600">All shops</Link></li>
-            <li><Link href="/order-lookup" className="hover:text-teal-600">Track an order</Link></li>
-          </ul>
+        <div className="border-t border-stone-100 mt-10 pt-5 flex items-center justify-between text-xs text-stone-500">
+          <span>© AmaarShop · Made in Bangladesh</span>
         </div>
-        <div>
-          <div className="font-medium text-stone-700 mb-3">Sell</div>
-          <ul className="space-y-2 text-stone-500">
-            <li><Link href="/signup" className="hover:text-teal-600">Start your shop</Link></li>
-            <li><Link href="/login" className="hover:text-teal-600">Seller sign in</Link></li>
-          </ul>
-        </div>
-        <div>
-          <div className="font-medium text-stone-700 mb-3">Support</div>
-          <ul className="space-y-2 text-stone-500">
-            <li>hello@amaar.shop</li>
-          </ul>
-        </div>
-      </div>
-      <div className="border-t border-stone-100 py-4 text-center text-xs text-stone-500">
-        © AmaarShop
       </div>
     </footer>
+  );
+}
+
+function FooterCol({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="font-medium text-stone-900 mb-3">{title}</div>
+      <ul className="space-y-2">{children}</ul>
+    </div>
+  );
+}
+
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <li>
+      <Link href={href} className="text-stone-500 hover:text-teal-600 transition-colors">
+        {children}
+      </Link>
+    </li>
   );
 }

@@ -45,6 +45,14 @@ type OrderDTO struct {
 	UpdatedAt              string         `json:"updated_at"`
 }
 
+// MarketplaceOrderDTO is OrderDTO enriched with the originating shop's name and slug,
+// returned by the cross-shop phone-lookup endpoint.
+type MarketplaceOrderDTO struct {
+	OrderDTO
+	ShopName string `json:"shop_name"`
+	ShopSlug string `json:"shop_slug"`
+}
+
 // UpdateOrderStatusRequest is the body for POST /api/shops/me/orders/{id}/status.
 type UpdateOrderStatusRequest struct {
 	Status             string `json:"status"`

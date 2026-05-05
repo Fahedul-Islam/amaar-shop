@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useStorefront } from "../StorefrontShell";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -14,23 +15,33 @@ import { formatBDT, formatDateTime } from "@/lib/format";
 import type { Order } from "@/lib/storefrontApi";
 import { useI18n } from "@/hooks/useI18n";
 
-export default function StorefrontOrderLookup() {
+export default function StorefrontOrderLookupPage() {
+  return (
+    <Suspense>
+      <StorefrontOrderLookup />
+    </Suspense>
+  );
+}
+
+function StorefrontOrderLookup() {
   const { shop } = useStorefront();
   const { locale } = useI18n();
-  const [ref, setRef] = useState("");
-  const [phone, setPhone] = useState("");
+  const params = useSearchParams();
+  const initialRef = params.get("ref") ?? "";
+  const initialPhone = params.get("phone") ?? "";
+  const [ref, setRef] = useState(initialRef);
+  const [phone, setPhone] = useState(initialPhone);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const runLookup = async (refValue: string, phoneValue: string) => {
     setLoading(true);
     setError(null);
     try {
-      const o = await lookupOrder(shop.slug, ref.trim(), phone.trim());
+      const o = await lookupOrder(shop.slug, refValue, phoneValue);
       setOrder(o);
     } catch (err) {
       setOrder(null);
@@ -41,6 +52,23 @@ export default function StorefrontOrderLookup() {
       setLoading(false);
     }
   };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    runLookup(ref.trim(), phone.trim());
+  };
+
+  // Auto-submit when both ref + phone arrive via query params (deep-link from
+  // marketplace order-lookup). Only runs once per pair to avoid loops.
+  const autoLookedUp = useRef(false);
+  useEffect(() => {
+    if (autoLookedUp.current) return;
+    if (initialRef && initialPhone) {
+      autoLookedUp.current = true;
+      runLookup(initialRef.trim(), initialPhone.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRef, initialPhone]);
 
   const cancel = async () => {
     if (!order || !cancelReason.trim()) return;
