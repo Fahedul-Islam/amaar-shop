@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/Card";
 import { Badge, statusTone } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { IcChevR, IcDownload } from "@/components/icons/Icons";
+import { IcChevR } from "@/components/icons/Icons";
+import { ReportDownloadButton } from "@/components/ui/ReportDownloadButton";
 import { listOrders, prettyOrderStatus } from "@/lib/orderApi";
 import { formatBDT, formatDateTime } from "@/lib/format";
 import { useI18n } from "@/hooks/useI18n";
@@ -36,9 +36,8 @@ export default function OrdersPage() {
       listOrders({ status: tab === "All" ? undefined : tab, page_size: 100 }),
   });
 
-  // Build the export URL — passes through the active status tab so the PDF
-  // matches what the seller sees on screen.
-  const exportHref = `/api/shops/me/exports/orders.pdf${tab !== "All" ? `?status=${encodeURIComponent(tab)}` : ""}`;
+  // Pass the active status tab to the report so it matches the seller's view.
+  const reportExtraParams = tab !== "All" ? { status: tab } : undefined;
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7">
@@ -51,12 +50,12 @@ export default function OrdersPage() {
             Manage incoming orders across all zones.
           </p>
         </div>
-        <a href={exportHref} target="_blank" rel="noreferrer">
-          <Button variant="neutral" size="sm">
-            <IcDownload size={13} />
-            Download as PDF
-          </Button>
-        </a>
+        <ReportDownloadButton
+          endpoint="/api/shops/me/exports/orders.pdf"
+          filename="orders-report"
+          label="Download report"
+          extraParams={reportExtraParams}
+        />
       </div>
 
       <div className="flex gap-1.5 mb-4 overflow-auto no-scrollbar">

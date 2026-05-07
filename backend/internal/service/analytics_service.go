@@ -280,6 +280,27 @@ func (s *AnalyticsService) DashboardSummary(ctx context.Context, ownerUserID str
 	return s.analytics.DashboardSummary(ctx, shop.ID)
 }
 
+// OrderReport builds the analytics block for the seller's downloadable
+// order report. Not cached: report bodies are scoped to a user-chosen
+// window and the seller expects fresh numbers when they hit "download".
+func (s *AnalyticsService) OrderReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.OrderReport, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.analytics.OrderReport(ctx, shop.ID, from, to)
+}
+
+// ProductReport builds the analytics block for the seller's downloadable
+// product report.
+func (s *AnalyticsService) ProductReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.ProductReport, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.analytics.ProductReport(ctx, shop.ID, from, to)
+}
+
 // PopularProducts returns top products for the public storefront (no revenue data).
 func (s *AnalyticsService) PopularProducts(ctx context.Context, slug string) ([]domain.TopProduct, error) {
 	shop, err := s.shops.FindBySlug(ctx, slug)

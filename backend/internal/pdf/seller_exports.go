@@ -1,38 +1,50 @@
 package pdf
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 )
 
-// OrdersExportData is what BuildOrdersExport needs to render a seller orders PDF.
+// OrdersExportData drives BuildOrdersExport.
+//
+// Report is the optional analytics block; when present the PDF leads with
+// summary metrics, status breakdown, peak day, top products, and customer
+// trends, then prints the order-by-order table at the end. When nil the
+// PDF degrades to the plain order list (used by old callers / fallbacks).
 type OrdersExportData struct {
 	Shop   *domain.Shop
 	Orders []*domain.Order
-	From   time.Time // optional — left as zero value if not filtered
-	To     time.Time
-	Status string
+	Report *domain.OrderReport
+	Status string // optional status filter for footer description
 }
 
-// BuildOrdersExport renders a seller-facing list of orders. One row per order.
+// BuildOrdersExport renders a seller-facing order analytics PDF.
 func BuildOrdersExport(in OrdersExportData) ([]byte, error) {
 	d := New()
-	d.Header(in.Shop.Name, "Orders export")
-	d.H1("Orders")
+	d.Header(in.Shop.Name, "Order report")
+	d.H1("Order report")
 
-	// Filter description line so the seller knows what's in the file.
 	desc := "Showing all orders"
-	if !in.From.IsZero() && !in.To.IsZero() {
-		desc = "From " + in.From.Format("02 Jan 2006") + " to " + in.To.Format("02 Jan 2006")
+	if in.Report != nil {
+		desc = "Period: " + in.Report.From.Format("02 Jan 2006") + "  to  " + in.Report.To.Format("02 Jan 2006")
 	}
 	if in.Status != "" {
-		desc += "  ·  status: " + in.Status
+		desc += "  -  status: " + in.Status
 	}
-	desc += "  ·  " + strconv.Itoa(len(in.Orders)) + " row(s)"
 	d.Body(desc)
 	d.Spacer(2)
+
+	if in.Report != nil {
+		buildOrderAnalytics(d, in.Report)
+	}
+
+	// Detail table.
+	d.H2("Order list")
+	d.Body(strconv.Itoa(len(in.Orders)) + " orders shown")
+	d.Spacer(1)
 
 	rows := make([][]string, 0, len(in.Orders))
 	totalsBDT := 0.0
@@ -52,13 +64,13 @@ func BuildOrdersExport(in OrdersExportData) ([]byte, error) {
 		})
 	}
 	d.Table([]Column{
-		{Header: "Order",     Width: 22, Align: "L"},
-		{Header: "Date",      Width: 24, Align: "L"},
-		{Header: "Customer",  Width: 0,  Align: "L"},
-		{Header: "Phone",     Width: 28, Align: "L"},
-		{Header: "Area",      Width: 22, Align: "L"},
-		{Header: "Status",    Width: 22, Align: "L"},
-		{Header: "Total",     Width: 24, Align: "R"},
+		{Header: "Order", Width: 22, Align: "L"},
+		{Header: "Date", Width: 24, Align: "L"},
+		{Header: "Customer", Width: 0, Align: "L"},
+		{Header: "Phone", Width: 28, Align: "L"},
+		{Header: "Area", Width: 22, Align: "L"},
+		{Header: "Status", Width: 22, Align: "L"},
+		{Header: "Total", Width: 24, Align: "R"},
 	}, rows)
 
 	d.Spacer(4)
@@ -74,19 +86,162 @@ func BuildOrdersExport(in OrdersExportData) ([]byte, error) {
 	return d.Bytes()
 }
 
+// buildOrderAnalytics renders the analytics block at the top of the order PDF.
+func buildOrderAnalytics(d *Doc, r *domain.OrderReport) {
+	// Top KPI strip — four KV cells in a 2×2 grid via Table for alignment.
+	d.H2("Summary")
+	d.Table([]Column{
+		{Header: "Metric", Width: 70, Align: "L"},
+		{Header: "Value", Width: 0, Align: "R"},
+	}, [][]string{
+		{"Total orders", strconv.Itoa(r.TotalOrders)},
+		{"Net revenue (excl. cancelled)", "BDT " + r.TotalRevenueBDT},
+		{"Gross sales (incl. cancelled)", "BDT " + r.GrossSalesBDT},
+		{"Average order value", "BDT " + r.AOVBDT},
+	})
+	d.Spacer(3)
+
+	// Status breakdown.
+	d.H2("Order status breakdown")
+	statuses := []string{"pending", "confirmed", "shipped", "delivered", "cancelled", "returned"}
+	statusRows := make([][]string, 0, len(statuses))
+	for _, s := range statuses {
+		n := r.StatusCounts[s]
+		rev := r.StatusRevenueBDT[s]
+		if rev == "" {
+			rev = "0.00"
+		}
+		share := "—"
+		if r.TotalOrders > 0 {
+			share = fmt.Sprintf("%.1f%%", float64(n)/float64(r.TotalOrders)*100)
+		}
+		statusRows = append(statusRows, []string{
+			capitalize(s),
+			strconv.Itoa(n),
+			share,
+			"BDT " + rev,
+		})
+	}
+	d.Table([]Column{
+		{Header: "Status", Width: 0, Align: "L"},
+		{Header: "Orders", Width: 28, Align: "R"},
+		{Header: "Share", Width: 28, Align: "R"},
+		{Header: "Revenue", Width: 40, Align: "R"},
+	}, statusRows)
+	d.Spacer(3)
+
+	// Peak day.
+	if r.PeakDay.Date != "" {
+		d.H2("Peak day")
+		d.KV("Date", r.PeakDay.Date)
+		d.KV("Orders", strconv.Itoa(r.PeakDay.Orders))
+		d.KV("Revenue", "BDT "+r.PeakDay.RevenueBDT)
+		d.Spacer(3)
+	}
+
+	// Top products.
+	if len(r.TopProducts) > 0 {
+		d.H2("Most purchased products")
+		topRows := make([][]string, 0, len(r.TopProducts))
+		for i, p := range r.TopProducts {
+			topRows = append(topRows, []string{
+				strconv.Itoa(i + 1),
+				p.ProductName,
+				strconv.Itoa(p.TotalQuantity),
+				"BDT " + p.TotalRevenueBDT,
+			})
+		}
+		d.Table([]Column{
+			{Header: "#", Width: 12, Align: "L"},
+			{Header: "Product", Width: 0, Align: "L"},
+			{Header: "Units", Width: 24, Align: "R"},
+			{Header: "Revenue", Width: 40, Align: "R"},
+		}, topRows)
+		d.Spacer(3)
+	}
+
+	// Customer trends.
+	d.H2("Customer trends")
+	d.Table([]Column{
+		{Header: "Metric", Width: 70, Align: "L"},
+		{Header: "Value", Width: 0, Align: "R"},
+	}, [][]string{
+		{"Unique customers (in period)", strconv.Itoa(r.UniqueCustomers)},
+		{"Repeat customers (>1 order)", strconv.Itoa(r.RepeatCustomers)},
+		{"New customers (first-ever order)", strconv.Itoa(r.NewCustomerOrders)},
+	})
+	d.Spacer(2)
+
+	if len(r.TopCustomers) > 0 {
+		topCust := make([][]string, 0, len(r.TopCustomers))
+		for i, c := range r.TopCustomers {
+			topCust = append(topCust, []string{
+				strconv.Itoa(i + 1),
+				c.CustomerName,
+				c.CustomerPhone,
+				strconv.Itoa(c.Orders),
+				"BDT " + c.TotalBDT,
+			})
+		}
+		d.Table([]Column{
+			{Header: "#", Width: 12, Align: "L"},
+			{Header: "Customer", Width: 0, Align: "L"},
+			{Header: "Phone", Width: 32, Align: "L"},
+			{Header: "Orders", Width: 22, Align: "R"},
+			{Header: "Spend", Width: 36, Align: "R"},
+		}, topCust)
+		d.Spacer(3)
+	}
+
+	// Daily series — keep it compact (date + orders + revenue).
+	if len(r.Daily) > 0 {
+		d.H2("Daily trend")
+		drows := make([][]string, 0, len(r.Daily))
+		for _, day := range r.Daily {
+			drows = append(drows, []string{
+				day.Date,
+				strconv.Itoa(day.Orders),
+				"BDT " + day.RevenueBDT,
+			})
+		}
+		d.Table([]Column{
+			{Header: "Date", Width: 0, Align: "L"},
+			{Header: "Orders", Width: 30, Align: "R"},
+			{Header: "Revenue", Width: 50, Align: "R"},
+		}, drows)
+		d.Spacer(3)
+	}
+}
+
 // ProductsExportData drives BuildProductsExport.
 type ProductsExportData struct {
 	Shop     *domain.Shop
 	Products []*domain.Product
+	Report   *domain.ProductReport
 }
 
-// BuildProductsExport renders the seller's catalog as a PDF.
+// BuildProductsExport renders the seller's product analytics PDF.
 func BuildProductsExport(in ProductsExportData) ([]byte, error) {
 	d := New()
-	d.Header(in.Shop.Name, "Catalog export")
-	d.H1("Products")
-	d.Body(strconv.Itoa(len(in.Products)) + " products in this catalog (excluding archived).")
+	d.Header(in.Shop.Name, "Product report")
+	d.H1("Product report")
+
+	desc := "Catalog snapshot"
+	if in.Report != nil {
+		desc = "Sales window: " + in.Report.From.Format("02 Jan 2006") + "  to  " + in.Report.To.Format("02 Jan 2006") +
+			"   -   inventory as of " + time.Now().Format("02 Jan 2006, 15:04")
+	}
+	d.Body(desc)
 	d.Spacer(2)
+
+	if in.Report != nil {
+		buildProductAnalytics(d, in.Report)
+	}
+
+	// Full catalog table at the end.
+	d.H2("Catalog")
+	d.Body(strconv.Itoa(len(in.Products)) + " products listed (excluding archived)")
+	d.Spacer(1)
 
 	rows := make([][]string, 0, len(in.Products))
 	for _, p := range in.Products {
@@ -105,9 +260,9 @@ func BuildProductsExport(in ProductsExportData) ([]byte, error) {
 		})
 	}
 	d.Table([]Column{
-		{Header: "Product",    Width: 0,  Align: "L"},
-		{Header: "Price",      Width: 28, Align: "R"},
-		{Header: "Stock",      Width: 22, Align: "R"},
+		{Header: "Product", Width: 0, Align: "L"},
+		{Header: "Price", Width: 28, Align: "R"},
+		{Header: "Stock", Width: 22, Align: "R"},
 		{Header: "Visibility", Width: 24, Align: "L"},
 	}, rows)
 
@@ -116,4 +271,136 @@ func BuildProductsExport(in ProductsExportData) ([]byte, error) {
 		"Confidential — for "+in.Shop.Name+" only",
 	)
 	return d.Bytes()
+}
+
+// buildProductAnalytics renders the analytics block on the product PDF.
+func buildProductAnalytics(d *Doc, r *domain.ProductReport) {
+	// Catalog snapshot KPIs.
+	d.H2("Catalog snapshot")
+	d.Table([]Column{
+		{Header: "Metric", Width: 70, Align: "L"},
+		{Header: "Value", Width: 0, Align: "R"},
+	}, [][]string{
+		{"Active products", strconv.Itoa(r.TotalActiveProducts)},
+		{"Archived products", strconv.Itoa(r.TotalArchived)},
+		{"Total stock units (on hand)", strconv.Itoa(r.TotalStockUnits)},
+		{"Out of stock", strconv.Itoa(r.OutOfStockCount)},
+		{"Low stock (1-5 units)", strconv.Itoa(r.LowStockCount)},
+		{"Products added in period", strconv.Itoa(r.ProductsAddedInRange)},
+		{"Inventory turnover", fmt.Sprintf("%.2f%%", r.TurnoverPct)},
+	})
+	d.Spacer(3)
+
+	// Top sellers.
+	if len(r.TopSellers) > 0 {
+		d.H2("Best-selling products")
+		topRows := make([][]string, 0, len(r.TopSellers))
+		for i, p := range r.TopSellers {
+			cat := p.CategoryName
+			if cat == "" {
+				cat = "Uncategorized"
+			}
+			topRows = append(topRows, []string{
+				strconv.Itoa(i + 1),
+				p.ProductName,
+				cat,
+				strconv.Itoa(p.UnitsSold),
+				"BDT " + p.RevenueBDT,
+				strconv.Itoa(p.CurrentStock),
+			})
+		}
+		d.Table([]Column{
+			{Header: "#", Width: 10, Align: "L"},
+			{Header: "Product", Width: 0, Align: "L"},
+			{Header: "Category", Width: 36, Align: "L"},
+			{Header: "Sold", Width: 18, Align: "R"},
+			{Header: "Revenue", Width: 32, Align: "R"},
+			{Header: "Stock", Width: 18, Align: "R"},
+		}, topRows)
+		d.Spacer(3)
+	}
+
+	// Category breakdown.
+	if len(r.Categories) > 0 {
+		d.H2("Category breakdown")
+		catRows := make([][]string, 0, len(r.Categories))
+		for _, c := range r.Categories {
+			catRows = append(catRows, []string{
+				c.CategoryName,
+				strconv.Itoa(c.Products),
+				strconv.Itoa(c.UnitsSold),
+				"BDT " + c.RevenueBDT,
+			})
+		}
+		d.Table([]Column{
+			{Header: "Category", Width: 0, Align: "L"},
+			{Header: "Products", Width: 28, Align: "R"},
+			{Header: "Units sold", Width: 28, Align: "R"},
+			{Header: "Revenue", Width: 40, Align: "R"},
+		}, catRows)
+		d.Spacer(3)
+	}
+
+	// Inventory alerts.
+	if len(r.OutOfStock) > 0 {
+		d.H2("Out-of-stock alerts")
+		ooRows := make([][]string, 0, len(r.OutOfStock))
+		for _, p := range r.OutOfStock {
+			ooRows = append(ooRows, []string{p.Name, "BDT " + p.PriceBDT})
+		}
+		d.Table([]Column{
+			{Header: "Product", Width: 0, Align: "L"},
+			{Header: "Price", Width: 40, Align: "R"},
+		}, ooRows)
+		d.Spacer(3)
+	}
+	if len(r.LowStock) > 0 {
+		d.H2("Low-stock alerts (1-5 units)")
+		lsRows := make([][]string, 0, len(r.LowStock))
+		for _, p := range r.LowStock {
+			lsRows = append(lsRows, []string{
+				p.Name,
+				strconv.Itoa(p.Stock),
+				"BDT " + p.PriceBDT,
+			})
+		}
+		d.Table([]Column{
+			{Header: "Product", Width: 0, Align: "L"},
+			{Header: "Stock", Width: 20, Align: "R"},
+			{Header: "Price", Width: 40, Align: "R"},
+		}, lsRows)
+		d.Spacer(3)
+	}
+
+	// Zero-movement (active products that didn't sell at all in window).
+	if len(r.NoMovement) > 0 {
+		d.H2("No movement in period")
+		d.Body(strconv.Itoa(len(r.NoMovement)) + " active product(s) had zero sales in the selected period — consider promotion or repricing.")
+		d.Spacer(1)
+		// Cap the printed list at 20 — sellers don't need a wall of names.
+		max := len(r.NoMovement)
+		if max > 20 {
+			max = 20
+		}
+		nmRows := make([][]string, 0, max)
+		for i := 0; i < max; i++ {
+			p := r.NoMovement[i]
+			cat := p.CategoryName
+			if cat == "" {
+				cat = "Uncategorized"
+			}
+			nmRows = append(nmRows, []string{p.ProductName, cat, strconv.Itoa(p.CurrentStock), "BDT " + p.PriceBDT})
+		}
+		d.Table([]Column{
+			{Header: "Product", Width: 0, Align: "L"},
+			{Header: "Category", Width: 36, Align: "L"},
+			{Header: "Stock", Width: 20, Align: "R"},
+			{Header: "Price", Width: 32, Align: "R"},
+		}, nmRows)
+		if len(r.NoMovement) > max {
+			d.Spacer(1)
+			d.Body(fmt.Sprintf("(%d more not shown)", len(r.NoMovement)-max))
+		}
+		d.Spacer(3)
+	}
 }

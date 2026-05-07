@@ -136,7 +136,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	customerHandler := customer.NewHandler(customerSvc, cfg)
 	adminHandler := admin.NewHandler(adminSvc, reportSvc, cfg)
 	reportHandler := report.NewHandler(reportSvc)
-	invoiceHandler := invoice.NewHandler(orderSvc, shopSvc, productSvc, cfg)
+	invoiceHandler := invoice.NewHandler(orderSvc, shopSvc, productSvc, analyticsSvc, cfg)
 	billingHandler := billing.NewHandler(billingSvc, adminSvc, cfg)
 
 	// --- Router ---

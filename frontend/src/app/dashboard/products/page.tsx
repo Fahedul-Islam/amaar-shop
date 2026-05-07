@@ -7,7 +7,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Price } from '@/components/ui/Price';
 import { ProductImage, hueFromString } from '@/components/ui/ProductImage';
-import { IcPlus, IcSearch, IcChevR, IcDownload } from '@/components/icons/Icons';
+import { IcPlus, IcSearch, IcChevR } from '@/components/icons/Icons';
+import { ReportDownloadButton } from '@/components/ui/ReportDownloadButton';
 import { listProducts } from '@/lib/productApi';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -42,9 +43,11 @@ export default function ProductsPage() {
           <p className="text-stone-500 mt-1">{products.length} listed</p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/api/shops/me/exports/products.pdf" target="_blank" rel="noreferrer">
-            <Button variant="neutral"><IcDownload size={14} /> Download PDF</Button>
-          </a>
+          <ReportDownloadButton
+            endpoint="/api/shops/me/exports/products.pdf"
+            filename="products-report"
+            label="Download report"
+          />
           <Link href="/dashboard/products/new">
             <Button variant="primary"><IcPlus size={16} /> Add product</Button>
           </Link>

@@ -10,8 +10,10 @@ package invoice
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	"github.com/fhedul/amaarshop/backend/internal/domain"
@@ -20,11 +22,27 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/pdf"
 )
 
+var (
+	errBadRange    = errors.New("from date must be on or before to date")
+	errRangeTooBig = errors.New("date range must not exceed 366 days")
+)
+
+func errInvalidDate(field string) error {
+	return errors.New(field + " must be a valid YYYY-MM-DD date")
+}
+
 // OrderService is the slice of the order service this handler needs.
 type OrderService interface {
 	LookupForCustomer(ctx context.Context, slug, orderID, customerPhone string) (*domain.Order, error)
 	GetShopOrderByID(ctx context.Context, ownerID, orderID string) (*domain.Order, error)
 	GetShopOrders(ctx context.Context, ownerID, page, size, status, phone string) ([]*domain.Order, error)
+}
+
+// AnalyticsService is the slice of the analytics service used to build
+// the seller-side order/product report bodies.
+type AnalyticsService interface {
+	OrderReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.OrderReport, error)
+	ProductReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.ProductReport, error)
 }
 
 // ShopService is the slice of the shop service this handler needs.
@@ -40,14 +58,15 @@ type ProductService interface {
 }
 
 type Handler struct {
-	orders   OrderService
-	shops    ShopService
-	products ProductService
-	cfg      *config.Config
+	orders    OrderService
+	shops     ShopService
+	products  ProductService
+	analytics AnalyticsService
+	cfg       *config.Config
 }
 
-func NewHandler(orders OrderService, shops ShopService, products ProductService, cfg *config.Config) *Handler {
-	return &Handler{orders: orders, shops: shops, products: products, cfg: cfg}
+func NewHandler(orders OrderService, shops ShopService, products ProductService, analytics AnalyticsService, cfg *config.Config) *Handler {
+	return &Handler{orders: orders, shops: shops, products: products, analytics: analytics, cfg: cfg}
 }
 
 // RegisterRoutes mounts the invoice download endpoints.
@@ -139,23 +158,36 @@ func writePDFBytes(w http.ResponseWriter, filename string, bytes []byte) {
 	_, _ = w.Write(bytes)
 }
 
-// SellerOrdersExport emits a PDF of the seller's orders, optionally
-// filtered by ?status=&phone=&page=&page_size= (same params as the JSON list).
+// SellerOrdersExport emits the seller's order analytics PDF for the given
+// date range (?from=&to=, both YYYY-MM-DD). Defaults to last 30 days when
+// either bound is missing. Optional ?status= filter narrows the order list
+// printed at the bottom of the report.
 func (h *Handler) SellerOrdersExport(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 	q := r.URL.Query()
 
-	// Default to a generous page size — seller exports are usually "all of it".
-	size := q.Get("page_size")
-	if size == "" {
-		size = "500"
+	from, to, err := parseRange(q.Get("from"), q.Get("to"))
+	if err != nil {
+		httputil.WriteValidationError(w, err.Error())
+		return
 	}
 
-	orders, err := h.orders.GetShopOrders(r.Context(), ownerID, q.Get("page"), size, q.Get("status"), q.Get("phone"))
+	report, err := h.analytics.OrderReport(r.Context(), ownerID, from, to)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
 	}
+
+	// Order list — filtered by status if provided. We pull a generous page so
+	// the table reflects the full window; sellers rarely have >1000 orders/window.
+	orders, err := h.orders.GetShopOrders(r.Context(), ownerID, "", "1000", q.Get("status"), "")
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	// Trim to the date window.
+	orders = filterOrdersByRange(orders, from, to)
+
 	shop, err := h.shops.GetMyShop(r.Context(), ownerID)
 	if err != nil {
 		httputil.WriteError(w, err)
@@ -165,18 +197,35 @@ func (h *Handler) SellerOrdersExport(w http.ResponseWriter, r *http.Request) {
 	bytes, err := pdf.BuildOrdersExport(pdf.OrdersExportData{
 		Shop:   shop,
 		Orders: orders,
+		Report: report,
 		Status: q.Get("status"),
 	})
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
 	}
-	writePDFBytes(w, "orders-"+shop.Slug+".pdf", bytes)
+	writePDFBytes(w, "orders-"+shop.Slug+"-"+from.Format("20060102")+"-"+to.Format("20060102")+".pdf", bytes)
 }
 
-// SellerProductsExport emits a PDF of the seller's catalog (non-archived).
+// SellerProductsExport emits the seller's product analytics PDF for the given
+// date range (?from=&to=, YYYY-MM-DD). Inventory counts are point-in-time;
+// sales numbers are scoped to the window. Defaults to last 30 days.
 func (h *Handler) SellerProductsExport(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
+	q := r.URL.Query()
+
+	from, to, err := parseRange(q.Get("from"), q.Get("to"))
+	if err != nil {
+		httputil.WriteValidationError(w, err.Error())
+		return
+	}
+
+	report, err := h.analytics.ProductReport(r.Context(), ownerID, from, to)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
 	notArchived := false
 	products, _, err := h.products.ListProducts(r.Context(), ownerID, domain.ProductFilter{
 		IsArchived: &notArchived,
@@ -195,12 +244,56 @@ func (h *Handler) SellerProductsExport(w http.ResponseWriter, r *http.Request) {
 	bytes, err := pdf.BuildProductsExport(pdf.ProductsExportData{
 		Shop:     shop,
 		Products: products,
+		Report:   report,
 	})
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
 	}
-	writePDFBytes(w, "products-"+shop.Slug+".pdf", bytes)
+	writePDFBytes(w, "products-"+shop.Slug+"-"+from.Format("20060102")+"-"+to.Format("20060102")+".pdf", bytes)
+}
+
+// parseRange interprets the from/to query params as YYYY-MM-DD dates.
+// Either bound may be omitted; missing bounds default to a last-30-day window.
+// `from` must not be after `to`, and the window cannot exceed 366 days.
+func parseRange(fromS, toS string) (time.Time, time.Time, error) {
+	const layout = "2006-01-02"
+	now := time.Now().UTC()
+	to := now
+	from := now.AddDate(0, 0, -29)
+
+	if toS != "" {
+		t, err := time.Parse(layout, toS)
+		if err != nil {
+			return time.Time{}, time.Time{}, errInvalidDate("to")
+		}
+		to = t
+	}
+	if fromS != "" {
+		t, err := time.Parse(layout, fromS)
+		if err != nil {
+			return time.Time{}, time.Time{}, errInvalidDate("from")
+		}
+		from = t
+	}
+	if from.After(to) {
+		return time.Time{}, time.Time{}, errBadRange
+	}
+	if to.Sub(from).Hours() > 366*24 {
+		return time.Time{}, time.Time{}, errRangeTooBig
+	}
+	return from, to, nil
+}
+
+func filterOrdersByRange(orders []*domain.Order, from, to time.Time) []*domain.Order {
+	end := to.AddDate(0, 0, 1) // inclusive on `to`
+	out := make([]*domain.Order, 0, len(orders))
+	for _, o := range orders {
+		if (o.CreatedAt.Equal(from) || o.CreatedAt.After(from)) && o.CreatedAt.Before(end) {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 func shortRef(id string) string {

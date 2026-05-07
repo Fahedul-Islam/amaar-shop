@@ -24,4 +24,13 @@ type AnalyticsRepository interface {
 	// DashboardSummary returns the home-page action queue + cash flow snapshot
 	// in a single round-trip.
 	DashboardSummary(ctx context.Context, shopID string) (*domain.DashboardSummary, error)
+
+	// OrderReport aggregates order analytics for a date range — used by the
+	// seller's downloadable order report.
+	OrderReport(ctx context.Context, shopID string, from, to time.Time) (*domain.OrderReport, error)
+
+	// ProductReport aggregates product/inventory analytics for a date range.
+	// Inventory counts are point-in-time (right now); sales numbers are
+	// scoped to the window.
+	ProductReport(ctx context.Context, shopID string, from, to time.Time) (*domain.ProductReport, error)
 }
