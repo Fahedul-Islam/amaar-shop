@@ -66,12 +66,16 @@ export interface PlaceOrderInput {
   items: { product_id: string; quantity: number }[];
 }
 
-export const getShop = (slug: string) =>
-  publicFetch<PublicShop>(`/api/shops/by-slug/${encodeURIComponent(slug)}`);
+export const getShop = (slug: string, opts?: RequestInit) =>
+  publicFetch<PublicShop>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}`,
+    opts,
+  );
 
-export const getDeliverySettings = (slug: string) =>
+export const getDeliverySettings = (slug: string, opts?: RequestInit) =>
   publicFetch<PublicDeliverySettings>(
     `/api/shops/by-slug/${encodeURIComponent(slug)}/delivery-settings`,
+    opts,
   );
 
 export const getCategories = (slug: string) =>

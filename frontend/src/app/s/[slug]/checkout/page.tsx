@@ -27,9 +27,62 @@ export default function CheckoutPage() {
   const [ack, setAck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    phone?: string;
+    division?: string;
+    district?: string;
+    address?: string;
+  }>({});
   const deliveryZones = delivery?.delivery_zones ?? [];
 
+  // Matches the backend regex: BD numbers like 01XXXXXXXXX (also accepts +880/880 prefix).
+  const validatePhone = (p: string) => {
+    const trimmed = p.replace(/[\s-]/g, "");
+    return /^(?:\+?880|0)1[3-9]\d{8}$/.test(trimmed);
+  };
+
+  const fieldMessages = {
+    name_required:
+      locale === "bn" ? "অনুগ্রহ করে আপনার নাম লিখুন।" : "Please enter your full name.",
+    name_too_short: locale === "bn" ? "নামটি খুব ছোট।" : "Name is too short.",
+    phone_required:
+      locale === "bn" ? "অনুগ্রহ করে ফোন নম্বর লিখুন।" : "Please enter your phone number.",
+    phone_invalid:
+      locale === "bn"
+        ? "ফোন নম্বরটি সঠিক নয়। যেমন 01712345678।"
+        : "Phone number is invalid. Use a Bangladeshi number like 01712345678.",
+    division_required:
+      locale === "bn" ? "অনুগ্রহ করে বিভাগ বাছাই করুন।" : "Please select your division.",
+    district_required:
+      locale === "bn" ? "অনুগ্রহ করে জেলা বাছাই করুন।" : "Please select your district.",
+    address_required:
+      locale === "bn"
+        ? "অনুগ্রহ করে একটি বৈধ ডেলিভারি ঠিকানা লিখুন।"
+        : "Please enter a valid delivery address.",
+    address_too_short:
+      locale === "bn"
+        ? "ঠিকানাটি খুব ছোট — বাড়ি, রোড ও এলাকা লিখুন।"
+        : "Address looks too short — include house, road, and area.",
+  } as const;
+
+  const validate = () => {
+    const next: typeof fieldErrors = {};
+    if (!name.trim()) next.name = fieldMessages.name_required;
+    else if (name.trim().length < 2) next.name = fieldMessages.name_too_short;
+    if (!phone.trim()) next.phone = fieldMessages.phone_required;
+    else if (!validatePhone(phone)) next.phone = fieldMessages.phone_invalid;
+    if (!division) next.division = fieldMessages.division_required;
+    if (!district) next.district = fieldMessages.district_required;
+    if (!address.trim()) next.address = fieldMessages.address_required;
+    else if (address.trim().length < 8)
+      next.address = fieldMessages.address_too_short;
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   // Resolve fee: matched zone → its fee; otherwise default delivery_charge.
+  // Free delivery threshold wins regardless of zone.
   const deliveryCharge = useMemo(() => {
     if (!delivery) return 0;
     let fee = parseFloat(delivery.delivery_charge);
@@ -47,19 +100,36 @@ export default function CheckoutPage() {
     return Number.isFinite(fee) ? fee : 0;
   }, [delivery, deliveryZones, division, cart.subtotal]);
 
+  const matchedZone = division
+    ? deliveryZones.find((z) => z.division === division)
+    : undefined;
+  const freeFromThreshold =
+    !!delivery?.free_delivery_threshold &&
+    cart.subtotal >=
+      parseFloat(delivery.free_delivery_threshold ?? "0");
+
   const total = cart.subtotal + deliveryCharge;
 
+  // Only disable the submit button for things validate() can't tell the user
+  // about with an inline message — empty cart or missing advance-payment ack.
+  // Per-field problems are surfaced as inline errors when the user submits.
   const disabled =
     cart.items.length === 0 ||
-    !name.trim() ||
-    !phone.trim() ||
-    !address.trim() ||
-    !division ||
-    !district ||
     (delivery?.advance_payment_required && !ack);
+
+  // Map server-side per-field codes back onto the right inline field.
+  const fieldFromCode: Record<string, keyof typeof fieldErrors> = {
+    name_required: "name",
+    name_too_short: "name",
+    phone_required: "phone",
+    phone_invalid: "phone",
+    address_required: "address",
+    address_too_short: "address",
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -80,9 +150,17 @@ export default function CheckoutPage() {
         `/s/${shop.slug}/order-confirmed/${order.id}?phone=${encodeURIComponent(phone.trim())}`,
       );
     } catch (err) {
-      if (err instanceof ApiRequestError)
-        setError(t(`errors.${err.code}`, err.message));
-      else setError(t("errors.unknown"));
+      if (err instanceof ApiRequestError) {
+        const field = fieldFromCode[err.code];
+        if (field) {
+          // Prefer the localized message we already have for this code.
+          const msg =
+            (fieldMessages as Record<string, string>)[err.code] ?? err.message;
+          setFieldErrors((prev) => ({ ...prev, [field]: msg }));
+        } else {
+          setError(t(`errors.${err.code}`, err.message));
+        }
+      } else setError(t("errors.unknown"));
     } finally {
       setSubmitting(false);
     }
@@ -125,20 +203,39 @@ export default function CheckoutPage() {
               {locale === "bn" ? "যোগাযোগ" : "Contact details"}
             </h2>
             <div className="grid gap-3">
-              <Input
-                label={locale === "bn" ? "পুরো নাম" : "Full name"}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Rifat Ahmed"
-                required
-              />
-              <Input
-                label={locale === "bn" ? "ফোন নম্বর" : "Phone number"}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="01712 345 678"
-                required
-              />
+              <div>
+                <Input
+                  label={locale === "bn" ? "পুরো নাম" : "Full name"}
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (fieldErrors.name)
+                      setFieldErrors((p) => ({ ...p, name: undefined }));
+                  }}
+                  placeholder="Rifat Ahmed"
+                  aria-invalid={!!fieldErrors.name}
+                />
+                {fieldErrors.name && (
+                  <FieldError>{fieldErrors.name}</FieldError>
+                )}
+              </div>
+              <div>
+                <Input
+                  label={locale === "bn" ? "ফোন নম্বর" : "Phone number"}
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    if (fieldErrors.phone)
+                      setFieldErrors((p) => ({ ...p, phone: undefined }));
+                  }}
+                  placeholder="01712 345 678"
+                  inputMode="tel"
+                  aria-invalid={!!fieldErrors.phone}
+                />
+                {fieldErrors.phone && (
+                  <FieldError>{fieldErrors.phone}</FieldError>
+                )}
+              </div>
             </div>
           </Card>
 
@@ -163,9 +260,15 @@ export default function CheckoutPage() {
                   onChange={(e) => {
                     setDivision(e.target.value as Division);
                     setDistrict("");
+                    if (fieldErrors.division)
+                      setFieldErrors((p) => ({ ...p, division: undefined }));
                   }}
-                  className="w-full h-10 px-3 border border-stone-300 rounded-md text-sm bg-white"
-                  required
+                  className={`w-full h-10 px-3 border rounded-md text-sm bg-white ${
+                    fieldErrors.division
+                      ? "border-red-400"
+                      : "border-stone-300"
+                  }`}
+                  aria-invalid={!!fieldErrors.division}
                 >
                   <option value="">
                     {locale === "bn" ? "বিভাগ বাছাই করুন…" : "Select division…"}
@@ -176,6 +279,9 @@ export default function CheckoutPage() {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.division && (
+                  <FieldError>{fieldErrors.division}</FieldError>
+                )}
               </div>
 
               <div>
@@ -184,10 +290,18 @@ export default function CheckoutPage() {
                 </label>
                 <select
                   value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  className="w-full h-10 px-3 border border-stone-300 rounded-md text-sm bg-white disabled:bg-stone-50 disabled:text-stone-400"
+                  onChange={(e) => {
+                    setDistrict(e.target.value);
+                    if (fieldErrors.district)
+                      setFieldErrors((p) => ({ ...p, district: undefined }));
+                  }}
+                  className={`w-full h-10 px-3 border rounded-md text-sm bg-white disabled:bg-stone-50 disabled:text-stone-400 ${
+                    fieldErrors.district
+                      ? "border-red-400"
+                      : "border-stone-300"
+                  }`}
                   disabled={!division}
-                  required
+                  aria-invalid={!!fieldErrors.district}
                 >
                   <option value="">
                     {locale === "bn" ? "জেলা বাছাই করুন…" : "Select district…"}
@@ -199,6 +313,9 @@ export default function CheckoutPage() {
                       </option>
                     ))}
                 </select>
+                {fieldErrors.district && (
+                  <FieldError>{fieldErrors.district}</FieldError>
+                )}
               </div>
             </div>
 
@@ -210,18 +327,26 @@ export default function CheckoutPage() {
                     : "Detailed address (house, road, landmark)"
                 }
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) => {
+                  setAddress(e.target.value);
+                  if (fieldErrors.address)
+                    setFieldErrors((p) => ({ ...p, address: undefined }));
+                }}
                 placeholder={
                   locale === "bn"
                     ? "বাড়ি ৪২, রোড ১২, ধানমন্ডি"
                     : "House 42, Road 12, Dhanmondi"
                 }
-                required
+                aria-invalid={!!fieldErrors.address}
               />
+              {fieldErrors.address && (
+                <FieldError>{fieldErrors.address}</FieldError>
+              )}
             </div>
 
-            {/* Fee preview */}
-            {division && (
+            {/* Fee preview — shown immediately so the customer knows the cost
+                before filling everything out. Updates when division changes. */}
+            {delivery && (
               <div className="mt-3 text-xs text-stone-600 bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
                 {locale === "bn" ? "ডেলিভারি চার্জ" : "Delivery charge"}:{" "}
                 <span className="font-semibold text-stone-900">
@@ -231,11 +356,21 @@ export default function CheckoutPage() {
                       : "Free"
                     : formatBDT(deliveryCharge, locale)}
                 </span>
-                {!deliveryZones.some((z) => z.division === division) && (
-                  <span className="ml-2 text-stone-500">
-                    ({locale === "bn" ? "ডিফল্ট রেট" : "default rate"})
-                  </span>
-                )}
+                <span className="ml-2 text-stone-500">
+                  {freeFromThreshold
+                    ? locale === "bn"
+                      ? "(অর্ডার সীমা পূরণ হয়েছে)"
+                      : "(qualifies for free delivery)"
+                    : matchedZone
+                      ? `(${division})`
+                      : !division
+                        ? locale === "bn"
+                          ? "(ডিফল্ট রেট — এলাকা বাছাই করলে আপডেট হবে)"
+                          : "(default rate — updates when you pick an area)"
+                        : locale === "bn"
+                          ? "(ডিফল্ট রেট)"
+                          : "(default rate)"}
+                </span>
               </div>
             )}
           </Card>
@@ -340,5 +475,13 @@ export default function CheckoutPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+function FieldError({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs text-red-600 mt-1.5" role="alert">
+      {children}
+    </p>
   );
 }

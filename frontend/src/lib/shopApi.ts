@@ -34,6 +34,7 @@ export interface DeliveryZone {
 
 export interface DeliverySettings {
   shop_id: string;
+  is_configured: boolean;
   cod_enabled: boolean;
   delivery_charge: string;
   free_delivery_threshold: string | null;

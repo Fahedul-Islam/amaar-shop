@@ -59,6 +59,7 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidDeliveryCharge, http.StatusBadRequest, "validation_error"},
 	{domain.ErrInvalidThreshold, http.StatusBadRequest, "validation_error"},
 	{domain.ErrInvalidDivision, http.StatusBadRequest, "validation_error"},
+	{domain.ErrDeliveryNotConfigured, http.StatusUnprocessableEntity, "delivery_not_configured"},
 	// Categories
 	{domain.ErrCategoryNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrCategoryNotInShop, http.StatusUnprocessableEntity, "category_not_in_shop"},
@@ -105,6 +106,15 @@ func WriteError(w http.ResponseWriter, err error) {
 func WriteValidationError(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusBadRequest, errorResponse{
 		Error: errorBody{Code: "validation_error", Message: message},
+	})
+}
+
+// WriteFieldError writes a 400 validation error with a specific code so the
+// frontend can highlight the offending field. Use for per-field handler-level
+// validation where domain errors don't apply.
+func WriteFieldError(w http.ResponseWriter, code, message string) {
+	writeJSON(w, http.StatusBadRequest, errorResponse{
+		Error: errorBody{Code: code, Message: message},
 	})
 }
 

@@ -24,12 +24,12 @@ func (r *deliverySettingsRepo) Get(ctx context.Context, shopID string) (*domain.
 	ds := &domain.DeliverySettings{}
 	var threshold sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT shop_id, cod_enabled, delivery_charge::text, free_delivery_threshold::text,
+		`SELECT shop_id, is_configured, cod_enabled, delivery_charge::text, free_delivery_threshold::text,
 		        advance_payment_required, COALESCE(advance_payment_instructions,''),
 		        updated_at
 	 FROM shop_delivery_settings WHERE shop_id = $1`, shopID,
 	).Scan(
-		&ds.ShopID, &ds.CODEnabled, &ds.DeliveryCharge, &threshold,
+		&ds.ShopID, &ds.IsConfigured, &ds.CODEnabled, &ds.DeliveryCharge, &threshold,
 		&ds.AdvancePaymentRequired, &ds.AdvancePaymentInstructions, &ds.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -76,17 +76,18 @@ func (r *deliverySettingsRepo) Upsert(ctx context.Context, settings *domain.Deli
 
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO shop_delivery_settings
-		   (shop_id, cod_enabled, delivery_charge, free_delivery_threshold,
+		   (shop_id, is_configured, cod_enabled, delivery_charge, free_delivery_threshold,
 		    advance_payment_required, advance_payment_instructions)
-		 VALUES ($1, $2, $3::numeric, $4::numeric, $5, $6)
+		 VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6, $7)
 		 ON CONFLICT (shop_id) DO UPDATE SET
+		   is_configured = EXCLUDED.is_configured,
 		   cod_enabled = EXCLUDED.cod_enabled,
 		   delivery_charge = EXCLUDED.delivery_charge,
 		   free_delivery_threshold = EXCLUDED.free_delivery_threshold,
 		   advance_payment_required = EXCLUDED.advance_payment_required,
 		   advance_payment_instructions = EXCLUDED.advance_payment_instructions
 		 RETURNING updated_at`,
-		settings.ShopID, settings.CODEnabled, settings.DeliveryCharge, threshold,
+		settings.ShopID, settings.IsConfigured, settings.CODEnabled, settings.DeliveryCharge, threshold,
 		settings.AdvancePaymentRequired, settings.AdvancePaymentInstructions,
 	).Scan(&settings.UpdatedAt)
 	if err != nil {

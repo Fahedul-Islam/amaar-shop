@@ -89,7 +89,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, reviewRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
-	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, fileStore)
+	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
 	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)

@@ -33,17 +33,21 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	req.Note = strings.TrimSpace(req.Note)
 
 	if req.CustomerName == "" {
-		httputil.WriteValidationError(w, "customer_name is required")
+		httputil.WriteFieldError(w, "name_required", "Please enter your full name.")
+		return
+	}
+	if len(req.CustomerName) < 2 {
+		httputil.WriteFieldError(w, "name_too_short", "Name is too short.")
 		return
 	}
 	if req.CustomerPhone == "" {
-		httputil.WriteValidationError(w, "customer_phone is required")
+		httputil.WriteFieldError(w, "phone_required", "Please enter your phone number.")
 		return
 	}
 	// Normalize phone: strip spaces, dashes, and +880/880 prefix → 01XXXXXXXXX.
 	phone := strings.ReplaceAll(strings.ReplaceAll(req.CustomerPhone, " ", ""), "-", "")
 	if !bdPhoneRe.MatchString(phone) {
-		httputil.WriteValidationError(w, "customer_phone must be a valid BD phone number")
+		httputil.WriteFieldError(w, "phone_invalid", "Phone number is invalid. Use a Bangladeshi number like 01712345678.")
 		return
 	}
 	if strings.HasPrefix(phone, "+880") {
@@ -52,21 +56,25 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		phone = "0" + phone[3:]
 	}
 	if req.DeliveryAddress == "" {
-		httputil.WriteValidationError(w, "delivery_address is required")
+		httputil.WriteFieldError(w, "address_required", "Please enter a valid delivery address.")
+		return
+	}
+	if len(req.DeliveryAddress) < 8 {
+		httputil.WriteFieldError(w, "address_too_short", "Delivery address looks too short — include your house, road, and area.")
 		return
 	}
 	// Division/District are optional — orders allowed regardless.
 	if len(req.Items) == 0 {
-		httputil.WriteValidationError(w, "items must not be empty")
+		httputil.WriteFieldError(w, "items_required", "Your cart is empty.")
 		return
 	}
 	for _, it := range req.Items {
 		if it.ProductID == "" {
-			httputil.WriteValidationError(w, "items[].product_id is required")
+			httputil.WriteFieldError(w, "item_invalid", "One of the cart items is missing a product.")
 			return
 		}
 		if it.Quantity <= 0 {
-			httputil.WriteValidationError(w, "items[].quantity must be > 0")
+			httputil.WriteFieldError(w, "quantity_invalid", "Quantity must be at least 1.")
 			return
 		}
 	}

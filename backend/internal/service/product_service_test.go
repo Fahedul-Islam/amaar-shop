@@ -246,8 +246,20 @@ func newTestProductService(t *testing.T) (*ProductService, *mockShopRepo, *mockC
 	shopRepo := newMockShopRepo()
 	catRepo := newMockCategoryRepo()
 	prodRepo := newMockProductRepo(shopRepo)
+	deliveryRepo := newMockDeliveryRepo()
 	files := newMockFileStorage()
-	svc := NewProductService(shopRepo, catRepo, prodRepo, files)
+	// Auto-seed a configured delivery row for every shop these tests create so
+	// CreateProduct's "must configure delivery first" gate doesn't trip.
+	shopRepo.onCreate = func(shop *domain.Shop) {
+		deliveryRepo.settings[shop.ID] = &domain.DeliverySettings{
+			ShopID:         shop.ID,
+			IsConfigured:   true,
+			CODEnabled:     true,
+			DeliveryCharge: "60.00",
+			DeliveryZones:  []domain.DeliveryZone{},
+		}
+	}
+	svc := NewProductService(shopRepo, catRepo, prodRepo, deliveryRepo, files)
 	return svc, shopRepo, catRepo, prodRepo
 }
 
@@ -313,6 +325,30 @@ func TestProductCreate_InvalidStock(t *testing.T) {
 	})
 	if err != domain.ErrInvalidStock {
 		t.Errorf("expected ErrInvalidStock, got %v", err)
+	}
+}
+
+func TestProductCreate_BlockedWhenDeliveryNotConfigured(t *testing.T) {
+	shopRepo := newMockShopRepo()
+	catRepo := newMockCategoryRepo()
+	prodRepo := newMockProductRepo(shopRepo)
+	deliveryRepo := newMockDeliveryRepo()
+	files := newMockFileStorage()
+	// No onCreate hook → shops are created without a configured delivery row.
+	shopRepo.onCreate = func(shop *domain.Shop) {
+		deliveryRepo.settings[shop.ID] = &domain.DeliverySettings{
+			ShopID:       shop.ID,
+			IsConfigured: false,
+		}
+	}
+	svc := NewProductService(shopRepo, catRepo, prodRepo, deliveryRepo, files)
+	mustCreateShop(t, shopRepo, "user-1", "my-shop")
+
+	_, err := svc.CreateProduct(context.Background(), "user-1", CreateProductInput{
+		Name: "T-Shirt", PriceBDT: "10.00", Stock: 1, IsActive: true,
+	})
+	if err != domain.ErrDeliveryNotConfigured {
+		t.Errorf("expected ErrDeliveryNotConfigured, got %v", err)
 	}
 }
 

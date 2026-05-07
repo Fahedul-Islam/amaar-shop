@@ -14,8 +14,9 @@ import (
 // --- Mock repositories ---
 
 type mockShopRepo struct {
-	shops  map[string]*domain.Shop
-	nextID int
+	shops    map[string]*domain.Shop
+	nextID   int
+	onCreate func(*domain.Shop) // optional post-create hook used by tests to seed dependent state
 }
 
 func newMockShopRepo() *mockShopRepo {
@@ -34,6 +35,9 @@ func (m *mockShopRepo) Create(_ context.Context, shop *domain.Shop) error {
 	m.nextID++
 	shop.ID = fmt.Sprintf("shop-%d", m.nextID)
 	m.shops[shop.ID] = shop
+	if m.onCreate != nil {
+		m.onCreate(shop)
+	}
 	return nil
 }
 

@@ -46,9 +46,12 @@ func (s *ShopService) CreateShop(ctx context.Context, ownerUserID, name, slug, d
 		return nil, err
 	}
 
-	// Seed default delivery settings row.
+	// Seed default delivery settings row. is_configured stays false until the
+	// seller explicitly saves their delivery settings — product creation is
+	// blocked while it is false.
 	defaults := &domain.DeliverySettings{
 		ShopID:         shop.ID,
+		IsConfigured:   false,
 		CODEnabled:     true,
 		DeliveryCharge: "60.00",
 		DeliveryZones:  []domain.DeliveryZone{},
@@ -175,6 +178,7 @@ func (s *ShopService) UpdateDeliverySettings(ctx context.Context, ownerUserID st
 	}
 
 	settings.ShopID = shop.ID
+	settings.IsConfigured = true
 	if err := s.delivery.Upsert(ctx, settings); err != nil {
 		return nil, err
 	}

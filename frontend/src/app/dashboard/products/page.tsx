@@ -10,6 +10,7 @@ import { ProductImage, hueFromString } from '@/components/ui/ProductImage';
 import { IcPlus, IcSearch, IcChevR } from '@/components/icons/Icons';
 import { ReportDownloadButton } from '@/components/ui/ReportDownloadButton';
 import { listProducts } from '@/lib/productApi';
+import { getDeliverySettings } from '@/lib/shopApi';
 import { useI18n } from '@/hooks/useI18n';
 
 type StockFilter = 'all' | 'low' | 'out';
@@ -27,6 +28,14 @@ export default function ProductsPage() {
     queryKey: ['prods', q],
     queryFn: () => listProducts({ q: q || undefined, page_size: 100 }),
   });
+
+  const { data: delivery } = useQuery({
+    queryKey: ['delivery'],
+    queryFn: getDeliverySettings,
+  });
+  // While delivery is loading, optimistically allow the CTA — once we know,
+  // route the seller to set up delivery before they can add a product.
+  const deliveryReady = delivery === undefined || delivery.is_configured;
 
   const allProducts = data?.data ?? [];
   const products = allProducts.filter((p) => {
@@ -48,11 +57,39 @@ export default function ProductsPage() {
             filename="products-report"
             label="Download report"
           />
-          <Link href="/dashboard/products/new">
-            <Button variant="primary"><IcPlus size={16} /> Add product</Button>
-          </Link>
+          {deliveryReady ? (
+            <Link href="/dashboard/products/new">
+              <Button variant="primary"><IcPlus size={16} /> Add product</Button>
+            </Link>
+          ) : (
+            <Link href="/dashboard/settings/delivery">
+              <Button variant="primary">
+                <IcPlus size={16} /> Set up delivery to add products
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
+
+      {!deliveryReady && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3.5 flex gap-3 items-start">
+          <div className="text-amber-600 text-xl leading-none mt-0.5">⚠️</div>
+          <div className="flex-1">
+            <div className="font-semibold text-amber-900">
+              Configure your delivery settings before adding products.
+            </div>
+            <div className="text-sm text-amber-800 mt-0.5">
+              Customers need a delivery charge to place an order. It only takes a minute.
+            </div>
+          </div>
+          <Link
+            href="/dashboard/settings/delivery"
+            className="self-center text-sm font-semibold text-teal-700 hover:text-teal-800 whitespace-nowrap"
+          >
+            Set up delivery →
+          </Link>
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden" hover={false}>
         <div className="px-4 py-3 border-b border-stone-200 flex gap-3 items-center">

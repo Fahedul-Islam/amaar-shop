@@ -82,24 +82,41 @@ export default function ShopLandingPage() {
     });
 
     const charge = parseFloat(delivery.delivery_charge ?? "0");
+    const zoneFees = (delivery.delivery_zones ?? [])
+      .map((z) => parseFloat(z.delivery_charge))
+      .filter((n) => Number.isFinite(n));
+    const hasZones = zoneFees.length > 0;
+    const positiveFees = [
+      ...(charge > 0 ? [charge] : []),
+      ...zoneFees.filter((n) => n > 0),
+    ];
+    const allFees = [charge, ...zoneFees];
+    const maxFee = allFees.length > 0 ? Math.max(...allFees) : 0;
+
+    let chargeValue: string;
+    let chargeSub: string;
+    if (maxFee === 0) {
+      chargeValue = locale === "bn" ? "ফ্রি" : "Free";
+      chargeSub = locale === "bn" ? "সব অর্ডারে" : "On all orders";
+    } else if (hasZones && positiveFees.length > 0) {
+      // Mixed setup (e.g. zone fee but free elsewhere, or fees vary by area).
+      // Lead with the lowest *paid* fee so we don't broadcast "৳0".
+      const minPaid = Math.min(...positiveFees);
+      chargeValue =
+        locale === "bn"
+          ? `${formatBDT(minPaid, locale)} থেকে`
+          : `From ${formatBDT(minPaid, locale)}`;
+      chargeSub = locale === "bn" ? "এলাকা অনুযায়ী" : "Varies by area";
+    } else {
+      chargeValue = formatBDT(charge, locale);
+      chargeSub = locale === "bn" ? "স্ট্যান্ডার্ড রেট" : "Standard rate";
+    }
     cells.push({
       icon: <IcTruck size={16} />,
       color: "teal",
       label: locale === "bn" ? "ডেলিভারি চার্জ" : "Delivery charge",
-      value:
-        charge > 0
-          ? formatBDT(charge, locale)
-          : locale === "bn"
-            ? "ফ্রি"
-            : "Free",
-      sub:
-        charge > 0
-          ? locale === "bn"
-            ? "স্ট্যান্ডার্ড রেট"
-            : "Standard rate"
-          : locale === "bn"
-            ? "সব অর্ডারে"
-            : "On all orders",
+      value: chargeValue,
+      sub: chargeSub,
     });
 
     const threshold = parseFloat(delivery.free_delivery_threshold ?? "0");

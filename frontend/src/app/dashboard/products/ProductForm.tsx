@@ -19,6 +19,7 @@ import {
   uploadProductImage,
   type ProductImage as ProductImageT,
 } from '@/lib/productApi';
+import { getDeliverySettings } from '@/lib/shopApi';
 import { ApiRequestError } from '@/lib/api';
 
 interface Props {
@@ -41,6 +42,19 @@ export default function ProductFormPage({ mode, productId }: Props) {
     queryKey: ['cats'],
     queryFn: listCategories,
   });
+
+  const { data: delivery } = useQuery({
+    queryKey: ['delivery'],
+    queryFn: getDeliverySettings,
+  });
+  const deliveryConfigured = delivery?.is_configured ?? true;
+  const blockNew = !isEdit && delivery !== undefined && !deliveryConfigured;
+
+  // If a seller bookmarks /products/new and hits it without configuring delivery,
+  // route them to the settings page so they can't get stuck on a blocked form.
+  useEffect(() => {
+    if (blockNew) router.replace('/dashboard/settings/delivery');
+  }, [blockNew, router]);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -89,6 +103,10 @@ export default function ProductFormPage({ mode, productId }: Props) {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (blockNew) {
+      setError('Please configure your delivery settings before adding products.');
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload = {
@@ -159,7 +177,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
             <span className="text-xs px-2 py-1 rounded bg-stone-100 text-stone-600 self-center">Archived</span>
           )}
           {isEdit && <Button variant="ghost" onClick={del}>Delete</Button>}
-          <Button variant="primary" onClick={save} disabled={saving}>
+          <Button variant="primary" onClick={save} disabled={saving || blockNew}>
             {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create product'}
           </Button>
         </div>
@@ -242,23 +260,55 @@ export default function ProductFormPage({ mode, productId }: Props) {
             </div>
           </Card>
 
-          <Card className="p-5 grid gap-3.5" hover={false}>
-            <h3 className="text-sm font-semibold">Per-product delivery charge (optional)</h3>
-            <p className="text-xs text-stone-500 -mt-2">Leave blank to use shop-wide delivery charge.</p>
-            <div className="grid gap-3.5 md:grid-cols-2">
-              <Input
-                name="delivery_charge_dhaka"
-                label="Inside Dhaka (৳)"
-                value={chargeDhaka}
-                onChange={(e) => setChargeDhaka(e.target.value)}
-              />
-              <Input
-                name="delivery_charge_outside"
-                label="Outside Dhaka (৳)"
-                value={chargeOutside}
-                onChange={(e) => setChargeOutside(e.target.value)}
-              />
+          <Card className="p-5" hover={false}>
+            <div className="flex items-baseline justify-between mb-3">
+              <h3 className="text-sm font-semibold">Delivery</h3>
+              <Link
+                href="/dashboard/settings/delivery"
+                className="text-xs font-medium text-teal-700 hover:text-teal-800"
+              >
+                Edit
+              </Link>
             </div>
+            <p className="text-xs text-stone-500 mb-3">
+              All products use your shop&apos;s delivery settings.
+            </p>
+            {delivery ? (
+              <ul className="text-sm grid gap-1.5">
+                {(delivery.delivery_zones ?? []).map((z) => (
+                  <li
+                    key={`${z.division}-${z.id ?? ''}`}
+                    className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-stone-50 border border-stone-100"
+                  >
+                    <span className="text-stone-700">{z.division}</span>
+                    <span className="font-semibold text-stone-900">
+                      ৳{Number(z.delivery_charge).toFixed(0)}
+                    </span>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-stone-50 border border-stone-100">
+                  <span className="text-stone-600">All other areas</span>
+                  <span className="font-semibold text-stone-900">
+                    {parseFloat(delivery.delivery_charge) > 0
+                      ? `৳${Number(delivery.delivery_charge).toFixed(0)}`
+                      : 'Free'}
+                  </span>
+                </li>
+                {delivery.free_delivery_threshold && (
+                  <li className="text-xs text-stone-500 px-1 pt-1">
+                    Free delivery on orders above ৳
+                    {Number(delivery.free_delivery_threshold).toFixed(0)}
+                  </li>
+                )}
+                {delivery.advance_payment_required && (
+                  <li className="text-xs text-stone-500 px-1">
+                    Advance payment required at checkout
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <div className="text-xs text-stone-400">Loading…</div>
+            )}
           </Card>
         </div>
 

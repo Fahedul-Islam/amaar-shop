@@ -69,6 +69,7 @@ type PublicShopDTO struct {
 // DeliverySettingsDTO is the delivery settings response.
 type DeliverySettingsDTO struct {
 	ShopID                     string            `json:"shop_id"`
+	IsConfigured               bool              `json:"is_configured"`
 	CODEnabled                 bool              `json:"cod_enabled"`
 	DeliveryCharge             string            `json:"delivery_charge"`
 	FreeDeliveryThreshold      *string           `json:"free_delivery_threshold"`

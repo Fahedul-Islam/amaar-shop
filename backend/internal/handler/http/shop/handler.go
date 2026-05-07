@@ -71,6 +71,7 @@ func toDeliverySettingsDTO(ds *domain.DeliverySettings) dto.DeliverySettingsDTO 
 
 	return dto.DeliverySettingsDTO{
 		ShopID:                     ds.ShopID,
+		IsConfigured:               ds.IsConfigured,
 		CODEnabled:                 ds.CODEnabled,
 		DeliveryCharge:             ds.DeliveryCharge,
 		FreeDeliveryThreshold:      ds.FreeDeliveryThreshold,

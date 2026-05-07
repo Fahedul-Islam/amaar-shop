@@ -51,6 +51,7 @@ type ProductService struct {
 	shops      repository.ShopRepository
 	categories repository.CategoryRepository
 	products   repository.ProductRepository
+	delivery   repository.DeliverySettingsRepository
 	files      storage.FileStorage
 }
 
@@ -58,12 +59,14 @@ func NewProductService(
 	shops repository.ShopRepository,
 	categories repository.CategoryRepository,
 	products repository.ProductRepository,
+	delivery repository.DeliverySettingsRepository,
 	files storage.FileStorage,
 ) *ProductService {
 	return &ProductService{
 		shops:      shops,
 		categories: categories,
 		products:   products,
+		delivery:   delivery,
 		files:      files,
 	}
 }
@@ -124,6 +127,14 @@ func (s *ProductService) CreateProduct(ctx context.Context, ownerUserID string, 
 	shop, err := s.resolveShop(ctx, ownerUserID)
 	if err != nil {
 		return nil, err
+	}
+	// Sellers must configure delivery settings before publishing products.
+	ds, err := s.delivery.Get(ctx, shop.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ds.IsConfigured {
+		return nil, domain.ErrDeliveryNotConfigured
 	}
 	if err := s.verifyCategoryInShop(ctx, in.CategoryID, shop.ID); err != nil {
 		return nil, err

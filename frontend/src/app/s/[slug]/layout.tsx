@@ -3,6 +3,12 @@ import { StorefrontShell } from './StorefrontShell';
 import { getShop, getDeliverySettings } from '@/lib/storefrontApi';
 import type { PublicShop, PublicDeliverySettings } from '@/lib/shopApi';
 
+// Storefront context is fetched server-side. Without opting out of the cache,
+// Next.js's App Router serves stale shop/delivery data after the seller edits
+// settings, which made checkout silently fall back to "Free delivery" even
+// when the seller had configured zones.
+export const dynamic = 'force-dynamic';
+
 export default async function StorefrontLayout({
   params,
   children,
@@ -13,8 +19,10 @@ export default async function StorefrontLayout({
   let shop: PublicShop | null = null;
   let delivery: PublicDeliverySettings | null = null;
   try {
-    shop = await getShop(params.slug);
-    delivery = await getDeliverySettings(params.slug).catch(() => null);
+    shop = await getShop(params.slug, { cache: 'no-store' });
+    delivery = await getDeliverySettings(params.slug, {
+      cache: 'no-store',
+    }).catch(() => null);
   } catch {
     shop = null;
   }
