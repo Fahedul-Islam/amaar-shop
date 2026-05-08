@@ -63,12 +63,15 @@ export default function OrderDetailPage() {
     return methods.find((m) => m.id === order.advance_payment_method_id) ?? null;
   }, [order, methods]);
 
-  const advancePaid =
-    order?.advance_payment_required && order.advance_payment_received;
-  const advancePending =
-    order?.advance_payment_required && !order.advance_payment_received;
-  const proofSubmitted =
-    order?.advance_payment_required && !!order.advance_payment_receipt;
+  const advancePaid = !!(
+    order?.advance_payment_required && order.advance_payment_received
+  );
+  const advancePending = !!(
+    order?.advance_payment_required && !order.advance_payment_received
+  );
+  const proofSubmitted = !!(
+    order?.advance_payment_required && order.advance_payment_receipt
+  );
 
   const updateStatus = async (status: string) => {
     if (!order) return;
@@ -301,8 +304,8 @@ export default function OrderDetailPage() {
               advanceAmount={advanceAmount}
               balanceDue={balanceDue}
               advancePending={advancePending}
-              advancePaid={advancePaid ?? false}
-              proofSubmitted={proofSubmitted ?? false}
+              advancePaid={advancePaid}
+              proofSubmitted={proofSubmitted}
               copied={copied}
               copy={copy}
               onMarkReceived={markPayment}
@@ -387,10 +390,7 @@ export default function OrderDetailPage() {
       {/* ── Sticky action bar ──────────────────────────────────── */}
       {(actions.length > 0 || undoTo) && (
         <div className="sticky bottom-0 bg-white border-t border-stone-200 px-6 md:px-8 py-3.5 flex items-center gap-3 flex-wrap z-20 shadow-[0_-4px_24px_-8px_rgba(28,25,23,0.08)]">
-          <NextStepHint
-            order={order}
-            advancePending={advancePending ?? false}
-          />
+          <NextStepHint order={order} advancePending={advancePending} />
           <div className="ml-auto flex items-center gap-2 flex-wrap">
             {undoTo && (
               <button
