@@ -88,13 +88,16 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.svc.PlaceOrder(r.Context(), slug, service.PlaceOrderInput{
-		CustomerName:     req.CustomerName,
-		CustomerPhone:    phone,
-		DeliveryAddress:  req.DeliveryAddress,
-		DeliveryDivision: req.DeliveryDivision,
-		DeliveryDistrict: req.DeliveryDistrict,
-		Note:             req.Note,
-		Items:            items,
+		CustomerName:           req.CustomerName,
+		CustomerPhone:          phone,
+		DeliveryAddress:        req.DeliveryAddress,
+		DeliveryDivision:       req.DeliveryDivision,
+		DeliveryDistrict:       req.DeliveryDistrict,
+		Note:                   req.Note,
+		Items:                  items,
+		AdvancePaymentMethodID: strings.TrimSpace(req.AdvancePaymentMethodID),
+		AdvancePaymentTxnRef:   strings.TrimSpace(req.AdvancePaymentTxnRef),
+		AdvancePaymentReceipt:  strings.TrimSpace(req.AdvancePaymentReceipt),
 	})
 	if err != nil {
 		httputil.WriteError(w, err)

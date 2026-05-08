@@ -106,11 +106,22 @@ func (h *Handler) BuyerCancelOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // MarkAdvanceReceived handles POST /api/shops/me/orders/{id}/advance-received.
+// Body may set {"received": false} to undo an earlier confirmation.
 func (h *Handler) MarkAdvanceReceived(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 	orderID := httputil.GetIDParam(r, "id")
 
-	order, err := h.svc.MarkAdvanceReceived(r.Context(), ownerID, orderID)
+	// Default to true so empty/missing body keeps the existing
+	// "click to confirm" semantics.
+	received := true
+	if r.ContentLength > 0 {
+		var req dto.MarkAdvanceReceivedRequest
+		if err := httputil.DecodeJSONBody(r, &req); err == nil {
+			received = req.Received
+		}
+	}
+
+	order, err := h.svc.MarkAdvanceReceived(r.Context(), ownerID, orderID, received)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return

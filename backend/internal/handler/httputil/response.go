@@ -4,6 +4,7 @@ package httputil
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
@@ -76,6 +77,15 @@ var domainErrorMap = []struct {
 	{domain.ErrInvalidStatusTransition, http.StatusUnprocessableEntity, "invalid_status_transition"},
 	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrAdvancePaymentRequired, http.StatusUnprocessableEntity, "advance_payment_required"},
+	{domain.ErrOrderLocked, http.StatusUnprocessableEntity, "order_locked"},
+	// Payment methods
+	{domain.ErrPaymentMethodNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrPaymentMethodNotInShop, http.StatusUnprocessableEntity, "payment_method_invalid"},
+	{domain.ErrInvalidMethodType, http.StatusBadRequest, "validation_error"},
+	{domain.ErrBankFieldsRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrMobileFieldsRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidMBNumberType, http.StatusBadRequest, "validation_error"},
 	// Reviews
 	{domain.ErrReviewNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrReviewAlreadyExists, http.StatusConflict, "review_already_exists"},
@@ -86,7 +96,10 @@ var domainErrorMap = []struct {
 }
 
 // WriteError maps a domain error to the appropriate HTTP error response.
-// If the error is not a known domain error, it returns 500 Internal Server Error.
+// Unmapped errors are logged at ERROR with the full message and surfaced to
+// the client as a 500 with the underlying message so frontend devs and
+// testers can debug without reading server logs. Sentinel domain errors
+// remain user-friendly.
 func WriteError(w http.ResponseWriter, err error) {
 	for _, mapping := range domainErrorMap {
 		if errors.Is(err, mapping.err) {
@@ -97,8 +110,11 @@ func WriteError(w http.ResponseWriter, err error) {
 		}
 	}
 
+	// Unmapped error — log it so it appears in backend logs alongside the
+	// request line, and echo the underlying message in the response.
+	slog.Error("unhandled error in handler", "error", err.Error())
 	writeJSON(w, http.StatusInternalServerError, errorResponse{
-		Error: errorBody{Code: "internal_error", Message: "an unexpected error occurred"},
+		Error: errorBody{Code: "internal_error", Message: err.Error()},
 	})
 }
 

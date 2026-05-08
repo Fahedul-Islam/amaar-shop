@@ -8,6 +8,11 @@ type PlaceOrderRequest struct {
 	DeliveryDistrict string             `json:"delivery_district"`
 	Note             string             `json:"note"`
 	Items            []OrderItemRequest `json:"items"`
+
+	// Optional. Required when the shop's delivery settings demand advance proof.
+	AdvancePaymentMethodID string `json:"advance_payment_method_id"`
+	AdvancePaymentTxnRef   string `json:"advance_payment_txn_ref"`
+	AdvancePaymentReceipt  string `json:"advance_payment_receipt"`
 }
 
 type OrderItemRequest struct {
@@ -25,24 +30,28 @@ type OrderItemDTO struct {
 }
 
 type OrderDTO struct {
-	ID                     string         `json:"id"`
-	ShopID                 string         `json:"shop_id"`
-	CustomerName           string         `json:"customer_name"`
-	CustomerPhone          string         `json:"customer_phone"`
-	DeliveryAddress        string         `json:"delivery_address"`
-	DeliveryDivision       string         `json:"delivery_division"`
-	DeliveryDistrict       string         `json:"delivery_district"`
-	Note                   string         `json:"note"`
-	SubtotalBDT            string         `json:"subtotal_bdt"`
-	DeliveryChargeBDT      string         `json:"delivery_charge_bdt"`
-	TotalBDT               string         `json:"total_bdt"`
-	Status                 string         `json:"status"`
-	AdvancePaymentRequired bool           `json:"advance_payment_required"`
-	AdvancePaymentReceived bool           `json:"advance_payment_received"`
-	CancelledReason        *string        `json:"cancelled_reason"`
-	Items                  []OrderItemDTO `json:"items"`
-	CreatedAt              string         `json:"created_at"`
-	UpdatedAt              string         `json:"updated_at"`
+	ID                        string         `json:"id"`
+	ShopID                    string         `json:"shop_id"`
+	CustomerName              string         `json:"customer_name"`
+	CustomerPhone             string         `json:"customer_phone"`
+	DeliveryAddress           string         `json:"delivery_address"`
+	DeliveryDivision          string         `json:"delivery_division"`
+	DeliveryDistrict          string         `json:"delivery_district"`
+	Note                      string         `json:"note"`
+	SubtotalBDT               string         `json:"subtotal_bdt"`
+	DeliveryChargeBDT         string         `json:"delivery_charge_bdt"`
+	TotalBDT                  string         `json:"total_bdt"`
+	Status                    string         `json:"status"`
+	AdvancePaymentRequired    bool           `json:"advance_payment_required"`
+	AdvancePaymentReceived    bool           `json:"advance_payment_received"`
+	AdvancePaymentMethodID    *string        `json:"advance_payment_method_id,omitempty"`
+	AdvancePaymentTxnRef      string         `json:"advance_payment_txn_ref,omitempty"`
+	AdvancePaymentReceipt     string         `json:"advance_payment_receipt,omitempty"`
+	AdvancePaymentSubmittedAt *string        `json:"advance_payment_submitted_at,omitempty"`
+	CancelledReason           *string        `json:"cancelled_reason"`
+	Items                     []OrderItemDTO `json:"items"`
+	CreatedAt                 string         `json:"created_at"`
+	UpdatedAt                 string         `json:"updated_at"`
 }
 
 // MarketplaceOrderDTO is OrderDTO enriched with the originating shop's name and slug,

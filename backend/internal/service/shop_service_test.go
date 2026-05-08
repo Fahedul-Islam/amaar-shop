@@ -119,6 +119,12 @@ func (m *mockFileStorage) Save(_ io.Reader, prefix, filename string) (string, er
 	return url, nil
 }
 
+func (m *mockFileStorage) SaveReceipt(_ io.Reader, filename string) (string, error) {
+	url := "/uploads/receipt-test" + filename
+	m.saved[filename] = url
+	return url, nil
+}
+
 type mockReviewRepo struct{}
 
 func (m *mockReviewRepo) Create(_ context.Context, _ *domain.Review) error { return nil }

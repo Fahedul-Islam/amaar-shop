@@ -22,6 +22,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/paymentmethod"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
@@ -84,13 +85,15 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	feePaymentRepo := postgres.NewFeePaymentRepo(db)
 	feeRuleRepo := postgres.NewFeeRuleRepo(db)
 	feeSubmissionRepo := postgres.NewFeeSubmissionRepo(db)
+	paymentMethodRepo := postgres.NewPaymentMethodRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, reviewRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
-	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo)
+	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo, paymentMethodRepo)
+	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
@@ -128,7 +131,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	shopHandler := shop.NewHandler(shopSvc, cfg)
 	categoryHandler := category.NewHandler(categorySvc, cfg)
 	productHandler := product.NewHandler(productSvc, cfg, visitWorker)
-	orderHandler := order.NewHandler(orderSvc, cfg)
+	orderHandler := order.NewHandler(orderSvc, cfg, fileStore)
+	paymentMethodHandler := paymentmethod.NewHandler(paymentMethodSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
@@ -148,6 +152,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		CategoryHandler:    categoryHandler,
 		ProductHandler:     productHandler,
 		OrderHandler:       orderHandler,
+		PaymentMethodHandler: paymentMethodHandler,
 		AnalyticsHandler:   analyticsHandler,
 		MarketplaceHandler: marketplaceHandler,
 		ReviewHandler:      reviewHandler,

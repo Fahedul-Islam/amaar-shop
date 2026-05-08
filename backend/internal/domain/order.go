@@ -22,10 +22,15 @@ type Order struct {
 	Status                 string      `json:"status"`
 	AdvancePaymentRequired bool        `json:"advance_payment_required"`
 	AdvancePaymentReceived bool        `json:"advance_payment_received"`
-	CancelledReason        *string     `json:"cancelled_reason"`
-	Items                  []OrderItem `json:"items"`
-	CreatedAt              time.Time   `json:"created_at"`
-	UpdatedAt              time.Time   `json:"updated_at"`
+	// Buyer-submitted advance-payment proof. Nil/empty until submitted.
+	AdvancePaymentMethodID    *string    `json:"advance_payment_method_id,omitempty"`
+	AdvancePaymentTxnRef      string     `json:"advance_payment_txn_ref,omitempty"`
+	AdvancePaymentReceipt     string     `json:"advance_payment_receipt,omitempty"`
+	AdvancePaymentSubmittedAt *time.Time `json:"advance_payment_submitted_at,omitempty"`
+	CancelledReason           *string    `json:"cancelled_reason"`
+	Items                     []OrderItem `json:"items"`
+	CreatedAt                 time.Time   `json:"created_at"`
+	UpdatedAt                 time.Time   `json:"updated_at"`
 }
 
 // OrderItem is a single line item within an order. Prices are snapshotted

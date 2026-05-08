@@ -14,6 +14,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders", h.PlaceOrder)
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders/{id}/cancel", h.BuyerCancelOrder)
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders/{id}/lookup", h.CustomerLookupOrder)
+	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders/{id}/advance-proof", h.SubmitAdvanceProof)
+	mux.HandleFunc("PATCH /api/shops/by-slug/{slug}/orders/{id}", h.BuyerEditOrder)
+	mux.HandleFunc("POST /api/shops/by-slug/{slug}/receipt-upload", h.UploadReceipt)
 
 	// Seller endpoints (authenticated)
 	mux.HandleFunc("GET /api/shops/me/orders", auth.Then(h.ListOfOrders))

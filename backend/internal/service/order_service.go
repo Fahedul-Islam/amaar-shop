@@ -20,6 +20,32 @@ type PlaceOrderInput struct {
 	DeliveryDistrict string
 	Note             string
 	Items            []OrderItemInput
+
+	// Advance-payment proof: only consulted when the shop's delivery
+	// settings have AdvancePaymentRequired = true. All three fields are
+	// required together when the shop demands proof.
+	AdvancePaymentMethodID string
+	AdvancePaymentTxnRef   string
+	AdvancePaymentReceipt  string
+}
+
+// SubmitAdvanceProofInput is the buyer-facing payload for submitting or
+// editing advance-payment proof on a still-pending order.
+type SubmitAdvanceProofInput struct {
+	CustomerPhone   string
+	PaymentMethodID string
+	TxnRef          string
+	Receipt         string
+}
+
+// BuyerEditOrderInput is the buyer-facing payload for editing delivery
+// details before the seller confirms the order.
+type BuyerEditOrderInput struct {
+	CustomerPhone    string
+	DeliveryAddress  string
+	DeliveryDivision string
+	DeliveryDistrict string
+	Note             string
 }
 
 type OrderItemInput struct {
@@ -46,6 +72,7 @@ type OrderService struct {
 	delivery repository.DeliverySettingsRepository
 	products repository.ProductRepository
 	orders   repository.OrderRepository
+	methods  repository.PaymentMethodRepository
 }
 
 func NewOrderService(
@@ -53,12 +80,14 @@ func NewOrderService(
 	delivery repository.DeliverySettingsRepository,
 	products repository.ProductRepository,
 	orders repository.OrderRepository,
+	methods repository.PaymentMethodRepository,
 ) *OrderService {
 	return &OrderService{
 		shops:    shops,
 		delivery: delivery,
 		products: products,
 		orders:   orders,
+		methods:  methods,
 	}
 }
 
@@ -81,6 +110,25 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	}
 	if !ds.CODEnabled {
 		return nil, domain.ErrCheckoutDisabled
+	}
+
+	// When the shop demands an advance delivery fee, the buyer must submit
+	// proof along with the order. We require all three fields together —
+	// chosen method + txn ref + receipt path — and verify the method
+	// belongs to this shop.
+	var verifiedMethodID *string
+	if ds.AdvancePaymentRequired {
+		if in.AdvancePaymentMethodID == "" || in.AdvancePaymentTxnRef == "" || in.AdvancePaymentReceipt == "" {
+			return nil, domain.ErrAdvancePaymentRequired
+		}
+		method, err := s.methods.Get(ctx, in.AdvancePaymentMethodID)
+		if err != nil {
+			return nil, err
+		}
+		if method.ShopID != shop.ID || !method.IsActive {
+			return nil, domain.ErrPaymentMethodNotInShop
+		}
+		verifiedMethodID = &method.ID
 	}
 
 	// Build order items by looking up each product's current price and snapshotting it.
@@ -157,6 +205,11 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		TotalBDT:               fmt.Sprintf("%.2f", total),
 		AdvancePaymentRequired: ds.AdvancePaymentRequired,
 		Items:                  items,
+	}
+	if verifiedMethodID != nil {
+		order.AdvancePaymentMethodID = verifiedMethodID
+		order.AdvancePaymentTxnRef = strings.TrimSpace(in.AdvancePaymentTxnRef)
+		order.AdvancePaymentReceipt = strings.TrimSpace(in.AdvancePaymentReceipt)
 	}
 
 	if err := s.orders.PlaceOrder(ctx, order); err != nil {
@@ -253,9 +306,67 @@ func (s *OrderService) BuyerCancelOrder(ctx context.Context, slug, orderID, cust
 	return order, nil
 }
 
-// MarkAdvanceReceived marks an order's advance payment as received.
-func (s *OrderService) MarkAdvanceReceived(ctx context.Context, ownerID, orderID string) (*domain.Order, error) {
-	order, err := s.orders.MarkAdvanceReceived(ctx, ownerID, orderID)
+// MarkAdvanceReceived sets advance_payment_received to received. Sellers
+// pass false to undo a premature confirmation while the order is still
+// pending.
+func (s *OrderService) MarkAdvanceReceived(ctx context.Context, ownerID, orderID string, received bool) (*domain.Order, error) {
+	order, err := s.orders.MarkAdvanceReceived(ctx, ownerID, orderID, received)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+// SubmitAdvanceProof persists buyer-submitted advance-payment proof on a
+// still-pending order. The buyer authenticates via their phone number plus
+// the order ID. Verifies the chosen method belongs to the shop and is active.
+func (s *OrderService) SubmitAdvanceProof(ctx context.Context, slug, orderID string, in SubmitAdvanceProofInput) (*domain.Order, error) {
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	method, err := s.methods.Get(ctx, in.PaymentMethodID)
+	if err != nil {
+		return nil, err
+	}
+	if method.ShopID != shop.ID || !method.IsActive {
+		return nil, domain.ErrPaymentMethodNotInShop
+	}
+
+	phone := normalizePhone(in.CustomerPhone)
+	order, err := s.orders.SubmitAdvanceProof(
+		ctx, shop.ID, orderID, phone, in.PaymentMethodID,
+		strings.TrimSpace(in.TxnRef), strings.TrimSpace(in.Receipt),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+// BuyerEditOrder lets the buyer change delivery address/note on a still-pending
+// order before the seller has confirmed.
+func (s *OrderService) BuyerEditOrder(ctx context.Context, slug, orderID string, in BuyerEditOrderInput) (*domain.Order, error) {
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	phone := normalizePhone(in.CustomerPhone)
+	address := strings.TrimSpace(in.DeliveryAddress)
+
+	order, err := s.orders.UpdateBuyerEditableFields(ctx, shop.ID, orderID, phone, repository.BuyerEditableFields{
+		DeliveryAddress:  address,
+		DeliveryDivision: strings.TrimSpace(in.DeliveryDivision),
+		DeliveryDistrict: strings.TrimSpace(in.DeliveryDistrict),
+		Note:             strings.TrimSpace(in.Note),
+	})
 	if err != nil {
 		return nil, err
 	}

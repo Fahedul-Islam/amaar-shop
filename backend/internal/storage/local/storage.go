@@ -62,3 +62,39 @@ func (s *Storage) Save(r io.Reader, prefix, filename string) (string, error) {
 
 	return "/uploads/" + safeName, nil
 }
+
+// SaveReceipt accepts image (jpg/png/webp) or PDF files up to 5 MB.
+// Used for advance-fee payment receipt uploads.
+func (s *Storage) SaveReceipt(r io.Reader, filename string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".pdf" {
+		return "", storage.ErrInvalidFileType
+	}
+
+	randBytes := make([]byte, 8)
+	if _, err := rand.Read(randBytes); err != nil {
+		return "", fmt.Errorf("generating random name: %w", err)
+	}
+	safeName := fmt.Sprintf("receipt-%s%s", hex.EncodeToString(randBytes), ext)
+
+	dst, err := os.Create(filepath.Join(s.dir, safeName))
+	if err != nil {
+		return "", fmt.Errorf("creating file: %w", err)
+	}
+	defer dst.Close()
+
+	const maxSize = 5 << 20 // 5 MB
+	limited := io.LimitReader(r, maxSize+1)
+
+	n, err := io.Copy(dst, limited)
+	if err != nil {
+		os.Remove(dst.Name())
+		return "", fmt.Errorf("writing file: %w", err)
+	}
+	if n > maxSize {
+		os.Remove(dst.Name())
+		return "", storage.ErrFileTooLarge
+	}
+
+	return "/uploads/" + safeName, nil
+}

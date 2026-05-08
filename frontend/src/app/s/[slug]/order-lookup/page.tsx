@@ -14,6 +14,10 @@ import { ApiRequestError } from "@/lib/api";
 import { formatBDT, formatDateTime } from "@/lib/format";
 import type { Order } from "@/lib/storefrontApi";
 import { useI18n } from "@/hooks/useI18n";
+import {
+  EditAdvancePayment,
+  EditDeliveryDetails,
+} from "./EditableSections";
 
 export default function StorefrontOrderLookupPage() {
   return (
@@ -246,6 +250,36 @@ function StorefrontOrderLookup() {
               </div>
             </Card>
           )}
+
+          {order.status === "pending" && !order.advance_payment_received && (
+            <div className="mt-4 px-4 py-3 rounded-md bg-blue-50 border border-blue-200 text-[13px] text-blue-900">
+              {locale === "bn"
+                ? "বিক্রেতা কনফার্ম করার আগ পর্যন্ত আপনি ডেলিভারি বিবরণ ও পেমেন্ট প্রমাণ পরিবর্তন করতে পারবেন।"
+                : "You can update your delivery details and payment proof until the seller confirms this order."}
+            </div>
+          )}
+
+          {order.status === "pending" && !order.advance_payment_received && (
+            <EditDeliveryDetails
+              shopSlug={shop.slug}
+              order={order}
+              customerPhone={phone.trim()}
+              locale={locale === "bn" ? "bn" : "en"}
+              onSaved={setOrder}
+            />
+          )}
+
+          {order.advance_payment_required &&
+            order.status === "pending" &&
+            !order.advance_payment_received && (
+              <EditAdvancePayment
+                shopSlug={shop.slug}
+                order={order}
+                customerPhone={phone.trim()}
+                locale={locale === "bn" ? "bn" : "en"}
+                onSaved={setOrder}
+              />
+            )}
 
           {(order.status === "pending" || order.status === "confirmed") && (
             <Card className="p-5 mt-4" hover={false}>

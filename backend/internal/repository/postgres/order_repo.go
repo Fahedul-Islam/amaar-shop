@@ -24,17 +24,68 @@ const orderColumns = `o.id, o.shop_id, o.customer_name, o.customer_phone, o.deli
 	COALESCE(o.delivery_division, ''), COALESCE(o.delivery_district, ''),
 	COALESCE(o.delivery_area, ''), COALESCE(o.note, ''), o.subtotal_bdt, o.delivery_charge_bdt,
 	o.total_bdt, o.status, o.advance_payment_required,
-	o.advance_payment_received, o.cancelled_reason, o.created_at, o.updated_at`
+	o.advance_payment_received,
+	o.advance_payment_method_id, COALESCE(o.advance_payment_txn_ref,''), COALESCE(o.advance_payment_receipt,''),
+	o.advance_payment_submitted_at,
+	o.cancelled_reason, o.created_at, o.updated_at`
 
 // scanOrder scans a row into a domain.Order matching orderColumns.
 func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
 	o := &domain.Order{}
+	var methodID sql.NullString
+	var submittedAt sql.NullTime
 	err := scanner.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone, &o.DeliveryAddress,
 		&o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note, &o.SubtotalBDT, &o.DeliveryChargeBDT,
 		&o.TotalBDT, &o.Status, &o.AdvancePaymentRequired,
-		&o.AdvancePaymentReceived, &o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+		&o.AdvancePaymentReceived,
+		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
+		&submittedAt,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
 	)
+	if methodID.Valid {
+		s := methodID.String
+		o.AdvancePaymentMethodID = &s
+	}
+	if submittedAt.Valid {
+		t := submittedAt.Time
+		o.AdvancePaymentSubmittedAt = &t
+	}
+	return o, err
+}
+
+// orderReturning returns the column list for RETURNING clauses on UPDATE.
+const orderReturning = `orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
+	orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
+	COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
+	orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
+	orders.status, orders.advance_payment_required, orders.advance_payment_received,
+	orders.advance_payment_method_id, COALESCE(orders.advance_payment_txn_ref,''), COALESCE(orders.advance_payment_receipt,''),
+	orders.advance_payment_submitted_at,
+	orders.cancelled_reason, orders.created_at, orders.updated_at`
+
+// scanOrderUpdate scans an UPDATE..RETURNING row matching orderReturning.
+func scanOrderUpdate(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
+	o := &domain.Order{}
+	var methodID sql.NullString
+	var submittedAt sql.NullTime
+	err := scanner.Scan(
+		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
+		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
+		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
+		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
+		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
+		&submittedAt,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+	)
+	if methodID.Valid {
+		s := methodID.String
+		o.AdvancePaymentMethodID = &s
+	}
+	if submittedAt.Valid {
+		t := submittedAt.Time
+		o.AdvancePaymentSubmittedAt = &t
+	}
 	return o, err
 }
 
@@ -48,18 +99,32 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 	}
 	defer tx.Rollback()
 
-	// Insert order header.
+	// Insert order header. When advance-payment proof is included on the
+	// initial submission, persist it atomically so we never have a window
+	// where the order exists without proof.
+	var methodID *string
+	if order.AdvancePaymentMethodID != nil && *order.AdvancePaymentMethodID != "" {
+		methodID = order.AdvancePaymentMethodID
+	}
+	// $13 needs an explicit ::uuid cast: pq sends untyped NULL when methodID
+	// is nil, and Postgres can't infer the column type because $13 is also
+	// referenced inside the CASE clause below.
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO orders
 		   (shop_id, customer_name, customer_phone, delivery_address,
 		    delivery_division, delivery_district, delivery_area,
-		    note, subtotal_bdt, delivery_charge_bdt, total_bdt, advance_payment_required)
-		 VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),$9::numeric,$10::numeric,$11::numeric,$12)
+		    note, subtotal_bdt, delivery_charge_bdt, total_bdt, advance_payment_required,
+		    advance_payment_method_id, advance_payment_txn_ref, advance_payment_receipt,
+		    advance_payment_submitted_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),$9::numeric,$10::numeric,$11::numeric,$12,
+		         $13::uuid, NULLIF($14,''), NULLIF($15,''),
+		         CASE WHEN NULLIF($14,'') IS NOT NULL OR $13::uuid IS NOT NULL THEN now() ELSE NULL END)
 		 RETURNING id, status, advance_payment_received, created_at, updated_at`,
 		order.ShopID, order.CustomerName, order.CustomerPhone, order.DeliveryAddress,
 		order.DeliveryDivision, order.DeliveryDistrict, order.DeliveryArea,
 		order.Note, order.SubtotalBDT, order.DeliveryChargeBDT,
 		order.TotalBDT, order.AdvancePaymentRequired,
+		methodID, order.AdvancePaymentTxnRef, order.AdvancePaymentReceipt,
 	).Scan(&order.ID, &order.Status, &order.AdvancePaymentReceived, &order.CreatedAt, &order.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
@@ -177,23 +242,10 @@ func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUser
 		 WHERE shops.id = orders.shop_id
 		   AND shops.owner_user_id = $3
 		   AND orders.id = $4
-		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
-		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
-		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
-		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		 RETURNING `+orderReturning,
 		status, cancelledReason, ownerUserID, orderID,
 	)
-
-	o := &domain.Order{}
-	err := row.Scan(
-		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
-		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
-	)
+	o, err := scanOrderUpdate(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
@@ -219,23 +271,10 @@ func (r *orderRepo) cancelWithStockRestore(ctx context.Context, ownerUserID, ord
 		 WHERE shops.id = orders.shop_id
 		   AND shops.owner_user_id = $2
 		   AND orders.id = $3
-		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
-		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
-		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
-		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		 RETURNING `+orderReturning,
 		cancelledReason, ownerUserID, orderID,
 	)
-
-	o := &domain.Order{}
-	err = row.Scan(
-		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
-		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
-	)
+	o, err := scanOrderUpdate(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
@@ -281,23 +320,10 @@ func (r *orderRepo) RestoreCancelledOrder(ctx context.Context, ownerUserID, orde
 		   AND shops.owner_user_id = $1
 		   AND orders.id = $2
 		   AND orders.status = 'cancelled'
-		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
-		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
-		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
-		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		 RETURNING `+orderReturning,
 		ownerUserID, orderID,
 	)
-
-	o := &domain.Order{}
-	err = row.Scan(
-		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
-		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
-	)
+	o, err := scanOrderUpdate(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
@@ -338,23 +364,10 @@ func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, cus
 		   AND id::text LIKE lower($3) || '%'
 		   AND customer_phone = $4
 		   AND status = 'pending'
-		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
-		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
-		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
-		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
+		 RETURNING `+orderReturning,
 		cancelledReason, shopID, orderID, customerPhone,
 	)
-
-	o := &domain.Order{}
-	err = row.Scan(
-		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
-		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
-	)
+	o, err := scanOrderUpdate(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
@@ -381,37 +394,111 @@ func (r *orderRepo) CancelOrderByBuyer(ctx context.Context, shopID, orderID, cus
 	return o, nil
 }
 
-// MarkAdvanceReceived sets advance_payment_received = true.
-func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error) {
+// MarkAdvanceReceived flips advance_payment_received to the given value.
+// Sellers may toggle it back to false to undo a premature confirmation.
+func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string, received bool) (*domain.Order, error) {
 	row := r.db.QueryRowContext(ctx,
 		`UPDATE orders
-		 SET advance_payment_received = true
+		 SET advance_payment_received = $1
 		 FROM shops
 		 WHERE shops.id = orders.shop_id
-		   AND shops.owner_user_id = $1
-		   AND orders.id = $2
-		 RETURNING orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
-		   orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
-		   COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
-		   orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-		   orders.status, orders.advance_payment_required, orders.advance_payment_received,
-		   orders.cancelled_reason, orders.created_at, orders.updated_at`,
-		ownerUserID, orderID,
+		   AND shops.owner_user_id = $2
+		   AND orders.id = $3
+		 RETURNING `+orderReturning,
+		received, ownerUserID, orderID,
 	)
-
-	o := &domain.Order{}
-	err := row.Scan(
-		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
-		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
-		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
-	)
+	o, err := scanOrderUpdate(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrOrderNotFound
 		}
 		return nil, fmt.Errorf("mark advance received: %w", err)
+	}
+	return o, nil
+}
+
+// SubmitAdvanceProof persists buyer-submitted advance-payment proof on a
+// still-pending order. The order is matched by (shop, id-prefix, phone) so
+// the buyer never needs auth, only their phone number that travelled with
+// the order. ErrOrderLocked when the seller has already confirmed receipt.
+func (r *orderRepo) SubmitAdvanceProof(ctx context.Context, shopID, orderID, customerPhone, methodID, txnRef, receipt string) (*domain.Order, error) {
+	var nullableMethod *string
+	if methodID != "" {
+		nullableMethod = &methodID
+	}
+	row := r.db.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET advance_payment_method_id = $1,
+		     advance_payment_txn_ref = NULLIF($2,''),
+		     advance_payment_receipt = NULLIF($3,''),
+		     advance_payment_submitted_at = now()
+		 WHERE shop_id = $4
+		   AND id::text LIKE lower($5) || '%'
+		   AND customer_phone = $6
+		   AND status = 'pending'
+		   AND advance_payment_received = false
+		 RETURNING `+orderReturning,
+		nullableMethod, txnRef, receipt, shopID, orderID, customerPhone,
+	)
+	o, err := scanOrderUpdate(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Distinguish "no such order" from "order is locked": fetch
+			// the order without the gating filters and report the more
+			// useful error.
+			existing, lookupErr := r.FindByIDAndPhone(ctx, shopID, orderID, customerPhone)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if existing.Status != "pending" || existing.AdvancePaymentReceived {
+				return nil, domain.ErrOrderLocked
+			}
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("submit advance proof: %w", err)
+	}
+	return o, nil
+}
+
+// UpdateBuyerEditableFields lets a buyer fix delivery details before the
+// seller confirms the order.
+func (r *orderRepo) UpdateBuyerEditableFields(ctx context.Context, shopID, orderID, customerPhone string, fields repository.BuyerEditableFields) (*domain.Order, error) {
+	legacyArea := ""
+	if fields.DeliveryDivision != "" && fields.DeliveryDistrict != "" {
+		legacyArea = fields.DeliveryDistrict + ", " + fields.DeliveryDivision
+	} else if fields.DeliveryDivision != "" {
+		legacyArea = fields.DeliveryDivision
+	}
+
+	row := r.db.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET delivery_address = $1,
+		     delivery_division = NULLIF($2,''),
+		     delivery_district = NULLIF($3,''),
+		     delivery_area = $4,
+		     note = NULLIF($5,'')
+		 WHERE shop_id = $6
+		   AND id::text LIKE lower($7) || '%'
+		   AND customer_phone = $8
+		   AND status = 'pending'
+		   AND advance_payment_received = false
+		 RETURNING `+orderReturning,
+		fields.DeliveryAddress, fields.DeliveryDivision, fields.DeliveryDistrict, legacyArea, fields.Note,
+		shopID, orderID, customerPhone,
+	)
+	o, err := scanOrderUpdate(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			existing, lookupErr := r.FindByIDAndPhone(ctx, shopID, orderID, customerPhone)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if existing.Status != "pending" || existing.AdvancePaymentReceived {
+				return nil, domain.ErrOrderLocked
+			}
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("update buyer editable fields: %w", err)
 	}
 	return o, nil
 }

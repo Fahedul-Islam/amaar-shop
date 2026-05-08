@@ -4,16 +4,18 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/dto"
+	"github.com/fhedul/amaarshop/backend/internal/storage"
 )
 
 // Handler implements the public order endpoint.
 type Handler struct {
-	svc Service
-	cfg *config.Config
+	svc       Service
+	cfg       *config.Config
+	fileStore storage.FileStorage
 }
 
-func NewHandler(svc Service, cfg *config.Config) *Handler {
-	return &Handler{svc: svc, cfg: cfg}
+func NewHandler(svc Service, cfg *config.Config, fileStore storage.FileStorage) *Handler {
+	return &Handler{svc: svc, cfg: cfg, fileStore: fileStore}
 }
 
 func toOrderDTO(o *domain.Order) dto.OrderDTO {
@@ -28,7 +30,7 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 			LineTotalBDT:         it.LineTotalBDT,
 		})
 	}
-	return dto.OrderDTO{
+	d := dto.OrderDTO{
 		ID:                     o.ID,
 		ShopID:                 o.ShopID,
 		CustomerName:           o.CustomerName,
@@ -43,9 +45,17 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 		Status:                 o.Status,
 		AdvancePaymentRequired: o.AdvancePaymentRequired,
 		AdvancePaymentReceived: o.AdvancePaymentReceived,
+		AdvancePaymentMethodID: o.AdvancePaymentMethodID,
+		AdvancePaymentTxnRef:   o.AdvancePaymentTxnRef,
+		AdvancePaymentReceipt:  o.AdvancePaymentReceipt,
 		CancelledReason:        o.CancelledReason,
 		Items:                  items,
 		CreatedAt:              o.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:              o.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
+	if o.AdvancePaymentSubmittedAt != nil {
+		s := o.AdvancePaymentSubmittedAt.Format("2006-01-02T15:04:05Z07:00")
+		d.AdvancePaymentSubmittedAt = &s
+	}
+	return d
 }

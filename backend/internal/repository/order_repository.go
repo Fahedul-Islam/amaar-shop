@@ -6,6 +6,15 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 )
 
+// BuyerEditableFields carries the mutable subset of order fields that a
+// buyer may change while their order is still pending and unconfirmed.
+type BuyerEditableFields struct {
+	DeliveryAddress  string
+	DeliveryDivision string
+	DeliveryDistrict string
+	Note             string
+}
+
 // OrderRepository defines persistence operations for orders.
 // PlaceOrder is transactional: it inserts the order + items and decrements
 // product stock atomically so no over-sell can occur.
@@ -33,8 +42,17 @@ type OrderRepository interface {
 	// Stock is restored in the same transaction.
 	CancelOrderByBuyer(ctx context.Context, shopID, orderID, customerPhone, cancelledReason string) (*domain.Order, error)
 
-	// MarkAdvanceReceived sets advance_payment_received = true on the order.
-	MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error)
+	// MarkAdvanceReceived sets advance_payment_received to received on the order.
+	MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string, received bool) (*domain.Order, error)
+
+	// SubmitAdvanceProof persists the buyer's advance-payment proof on a
+	// pending order. Returns ErrOrderLocked if the seller has already
+	// confirmed receipt.
+	SubmitAdvanceProof(ctx context.Context, shopID, orderID, customerPhone, methodID, txnRef, receipt string) (*domain.Order, error)
+
+	// UpdateBuyerEditableFields updates address/note/phone on a still-pending
+	// order. Returns ErrOrderLocked if seller has confirmed.
+	UpdateBuyerEditableFields(ctx context.Context, shopID, orderID, customerPhone string, fields BuyerEditableFields) (*domain.Order, error)
 
 	// FindByIDAndPhone returns an order for the given shop + order ID + customer phone.
 	// Used for customer-facing order lookup.

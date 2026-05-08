@@ -50,6 +50,10 @@ export interface Order {
   status: string;
   advance_payment_required: boolean;
   advance_payment_received: boolean;
+  advance_payment_method_id?: string | null;
+  advance_payment_txn_ref?: string;
+  advance_payment_receipt?: string;
+  advance_payment_submitted_at?: string;
   cancelled_reason: string | null;
   items: OrderItem[];
   created_at: string;
@@ -64,6 +68,26 @@ export interface PlaceOrderInput {
   delivery_district: string;
   note?: string;
   items: { product_id: string; quantity: number }[];
+
+  // Required when the shop's delivery settings demand advance fee proof.
+  advance_payment_method_id?: string;
+  advance_payment_txn_ref?: string;
+  advance_payment_receipt?: string;
+}
+
+export interface SubmitAdvanceProofInput {
+  customer_phone: string;
+  payment_method_id: string;
+  txn_ref: string;
+  receipt: string;
+}
+
+export interface BuyerEditOrderInput {
+  customer_phone: string;
+  delivery_address: string;
+  delivery_division?: string;
+  delivery_district?: string;
+  note?: string;
 }
 
 export const getShop = (slug: string, opts?: RequestInit) =>
@@ -139,4 +163,24 @@ export const buyerCancelOrder = (
         cancellation_reason: cancellationReason,
       }),
     },
+  );
+
+export const submitAdvanceProof = (
+  slug: string,
+  orderID: string,
+  input: SubmitAdvanceProofInput,
+) =>
+  publicFetch<Order>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}/advance-proof`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+
+export const buyerEditOrder = (
+  slug: string,
+  orderID: string,
+  input: BuyerEditOrderInput,
+) =>
+  publicFetch<Order>(
+    `/api/shops/by-slug/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderID)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
   );

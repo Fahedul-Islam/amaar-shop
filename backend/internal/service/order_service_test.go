@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
+	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // --- Mock order repository ---
@@ -98,12 +99,50 @@ func (m *mockOrderRepo) CancelOrderByBuyer(_ context.Context, shopID, orderID, c
 	return o, nil
 }
 
-func (m *mockOrderRepo) MarkAdvanceReceived(_ context.Context, ownerUserID, orderID string) (*domain.Order, error) {
+func (m *mockOrderRepo) MarkAdvanceReceived(_ context.Context, ownerUserID, orderID string, received bool) (*domain.Order, error) {
 	o, ok := m.orders[orderID]
 	if !ok {
 		return nil, domain.ErrOrderNotFound
 	}
-	o.AdvancePaymentReceived = true
+	o.AdvancePaymentReceived = received
+	return o, nil
+}
+
+func (m *mockOrderRepo) SubmitAdvanceProof(_ context.Context, shopID, orderID, customerPhone, methodID, txnRef, receipt string) (*domain.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return nil, domain.ErrOrderNotFound
+	}
+	if o.CustomerPhone != customerPhone {
+		return nil, domain.ErrOrderNotFound
+	}
+	if o.Status != "pending" || o.AdvancePaymentReceived {
+		return nil, domain.ErrOrderLocked
+	}
+	if methodID != "" {
+		mid := methodID
+		o.AdvancePaymentMethodID = &mid
+	}
+	o.AdvancePaymentTxnRef = txnRef
+	o.AdvancePaymentReceipt = receipt
+	return o, nil
+}
+
+func (m *mockOrderRepo) UpdateBuyerEditableFields(_ context.Context, shopID, orderID, customerPhone string, fields repository.BuyerEditableFields) (*domain.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return nil, domain.ErrOrderNotFound
+	}
+	if o.CustomerPhone != customerPhone {
+		return nil, domain.ErrOrderNotFound
+	}
+	if o.Status != "pending" || o.AdvancePaymentReceived {
+		return nil, domain.ErrOrderLocked
+	}
+	o.DeliveryAddress = fields.DeliveryAddress
+	o.DeliveryDivision = fields.DeliveryDivision
+	o.DeliveryDistrict = fields.DeliveryDistrict
+	o.Note = fields.Note
 	return o, nil
 }
 
@@ -128,6 +167,58 @@ func (m *mockOrderRepo) LoadItems(_ context.Context, orders ...*domain.Order) er
 	return nil
 }
 
+// --- Mock payment method repository ---
+
+type mockPaymentMethodRepo struct {
+	methods map[string]*domain.ShopPaymentMethod
+}
+
+func newMockPaymentMethodRepo() *mockPaymentMethodRepo {
+	return &mockPaymentMethodRepo{methods: make(map[string]*domain.ShopPaymentMethod)}
+}
+
+func (m *mockPaymentMethodRepo) List(_ context.Context, shopID string) ([]*domain.ShopPaymentMethod, error) {
+	out := []*domain.ShopPaymentMethod{}
+	for _, v := range m.methods {
+		if v.ShopID == shopID {
+			out = append(out, v)
+		}
+	}
+	return out, nil
+}
+func (m *mockPaymentMethodRepo) ListPublic(ctx context.Context, shopID string) ([]*domain.ShopPaymentMethod, error) {
+	return m.List(ctx, shopID)
+}
+func (m *mockPaymentMethodRepo) Get(_ context.Context, id string) (*domain.ShopPaymentMethod, error) {
+	v, ok := m.methods[id]
+	if !ok {
+		return nil, domain.ErrPaymentMethodNotFound
+	}
+	return v, nil
+}
+func (m *mockPaymentMethodRepo) Create(_ context.Context, p *domain.ShopPaymentMethod) error {
+	if p.ID == "" {
+		p.ID = fmt.Sprintf("pm-%d", len(m.methods)+1)
+	}
+	m.methods[p.ID] = p
+	return nil
+}
+func (m *mockPaymentMethodRepo) Update(_ context.Context, p *domain.ShopPaymentMethod) error {
+	if _, ok := m.methods[p.ID]; !ok {
+		return domain.ErrPaymentMethodNotFound
+	}
+	m.methods[p.ID] = p
+	return nil
+}
+func (m *mockPaymentMethodRepo) Delete(_ context.Context, shopID, id string) error {
+	v, ok := m.methods[id]
+	if !ok || v.ShopID != shopID {
+		return domain.ErrPaymentMethodNotFound
+	}
+	delete(m.methods, id)
+	return nil
+}
+
 // --- Test helpers ---
 
 func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliveryRepo, *mockProductRepo, *mockOrderRepo) {
@@ -136,7 +227,8 @@ func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliv
 	deliveryRepo := newMockDeliveryRepo()
 	prodRepo := newMockProductRepo(shopRepo)
 	orderRepo := newMockOrderRepo()
-	svc := NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo)
+	pmRepo := newMockPaymentMethodRepo()
+	svc := NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo, pmRepo)
 	return svc, shopRepo, deliveryRepo, prodRepo, orderRepo
 }
 
@@ -456,19 +548,45 @@ func TestMarkAdvanceReceived_Success(t *testing.T) {
 	deliveryRepo.settings[shop.ID].AdvancePaymentRequired = true
 	p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 10)
 
-	order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+	pm := seedPaymentMethod(t, svc, shop.ID)
+
+	order, err := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
 		CustomerName: "Test", CustomerPhone: "01712345678",
 		DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
-		Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		Items:                  []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		AdvancePaymentMethodID: pm.ID,
+		AdvancePaymentTxnRef:   "TX123",
+		AdvancePaymentReceipt:  "/uploads/receipt-1.png",
 	})
+	if err != nil {
+		t.Fatalf("unexpected place error: %v", err)
+	}
 
-	updated, err := svc.MarkAdvanceReceived(context.Background(), "user-1", order.ID)
+	updated, err := svc.MarkAdvanceReceived(context.Background(), "user-1", order.ID, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !updated.AdvancePaymentReceived {
 		t.Error("expected AdvancePaymentReceived to be true")
 	}
+}
+
+// seedPaymentMethod inserts an active mobile-banking payment method directly
+// via the service's underlying repo so order tests can reference a valid ID.
+func seedPaymentMethod(t *testing.T, svc *OrderService, shopID string) *domain.ShopPaymentMethod {
+	t.Helper()
+	pm := &domain.ShopPaymentMethod{
+		ShopID:       shopID,
+		MethodType:   domain.PaymentMethodTypeMobile,
+		IsActive:     true,
+		MBProvider:   "bkash",
+		MBPhone:      "01700000000",
+		MBNumberType: domain.MBNumberTypePersonal,
+	}
+	if err := svc.methods.Create(context.Background(), pm); err != nil {
+		t.Fatalf("seed payment method: %v", err)
+	}
+	return pm
 }
 
 // --- Tests: LookupForCustomer ---

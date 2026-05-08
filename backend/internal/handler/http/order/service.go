@@ -25,9 +25,15 @@ type Service interface {
 	// BuyerCancelOrder lets a buyer cancel their pending order with a reason.
 	BuyerCancelOrder(ctx context.Context, slug, orderID, customerPhone, cancellationReason string) (*domain.Order, error)
 
-	// MarkAdvanceReceived marks advance payment as received on an order.
-	MarkAdvanceReceived(ctx context.Context, ownerID, orderID string) (*domain.Order, error)
+	// MarkAdvanceReceived marks advance payment as received (or unreceived) on an order.
+	MarkAdvanceReceived(ctx context.Context, ownerID, orderID string, received bool) (*domain.Order, error)
 
 	// LookupForCustomer looks up an order by ID + phone for the customer.
 	LookupForCustomer(ctx context.Context, slug, orderID, customerPhone string) (*domain.Order, error)
+
+	// SubmitAdvanceProof attaches buyer-supplied advance-payment proof.
+	SubmitAdvanceProof(ctx context.Context, slug, orderID string, in service.SubmitAdvanceProofInput) (*domain.Order, error)
+
+	// BuyerEditOrder lets the buyer change pre-confirmation order details.
+	BuyerEditOrder(ctx context.Context, slug, orderID string, in service.BuyerEditOrderInput) (*domain.Order, error)
 }

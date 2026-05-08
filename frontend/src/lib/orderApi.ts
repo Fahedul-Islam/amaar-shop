@@ -43,5 +43,8 @@ export const updateOrderStatus = (id: string, status: string, cancellation_reaso
     body: JSON.stringify({ status, cancellation_reason }),
   });
 
-export const markAdvanceReceived = (id: string) =>
-  apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/advance-received`, { method: 'POST' });
+export const markAdvanceReceived = (id: string, received = true) =>
+  apiFetch<Order>(`/api/shops/me/orders/${encodeURIComponent(id)}/advance-received`, {
+    method: 'POST',
+    body: JSON.stringify({ received }),
+  });

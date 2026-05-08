@@ -22,6 +22,7 @@ import {
 import { ApiRequestError } from "@/lib/api";
 import { BD_DIVISIONS } from "@/lib/bdGeo";
 import { useShop } from "@/hooks/useShop";
+import PaymentMethods from "./PaymentMethods";
 
 interface FormState {
   charge: string;
@@ -372,15 +373,26 @@ export default function DeliverySettingsPage() {
           <div className="mt-2 px-4 py-4 bg-stone-50 border border-stone-200 rounded-[12px]">
             <Field
               label="Payment instructions"
-              hint="Shown to every customer at checkout when they choose advance payment."
+              hint="Shown to every customer at checkout. Add anything specific buyers should know."
             >
               <textarea
                 value={form.advanceText}
                 onChange={(e) => update("advanceText", e.target.value)}
-                placeholder="e.g. Send ৳200 advance to bKash 01712345678 before we confirm your order."
+                placeholder="e.g. Send the delivery fee in advance and upload the receipt before placing your order."
                 className="w-full min-h-[96px] px-3.5 py-3 bg-white border-[1.5px] border-stone-200 rounded-[10px] text-sm text-stone-900 placeholder-stone-400 leading-[1.5] resize-y hover:border-stone-300 focus:outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-100 transition-colors"
               />
             </Field>
+
+            <div className="mt-5 pt-4 border-t border-stone-200">
+              <div className="text-[13.5px] font-semibold text-stone-900 mb-1">
+                Accepted payment methods
+              </div>
+              <p className="text-[12.5px] text-stone-600 mb-3 leading-[1.5]">
+                Add the bank accounts and mobile-banking numbers buyers can
+                send the advance fee to. All active methods appear at checkout.
+              </p>
+              <PaymentMethods advanceEnabled={form.advance} />
+            </div>
           </div>
         )}
       </SCard>

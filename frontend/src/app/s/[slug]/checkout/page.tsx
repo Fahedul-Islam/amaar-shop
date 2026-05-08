@@ -12,6 +12,10 @@ import { placeOrder } from "@/lib/storefrontApi";
 import { ApiRequestError } from "@/lib/api";
 import { useI18n } from "@/hooks/useI18n";
 import { BD_DIVISIONS, BD_DISTRICTS, type Division } from "@/lib/bdGeo";
+import AdvancePaymentSection, {
+  emptyProof,
+  type AdvanceProofState,
+} from "./AdvancePaymentSection";
 
 export default function CheckoutPage() {
   const { shop, delivery, cart } = useStorefront();
@@ -24,7 +28,7 @@ export default function CheckoutPage() {
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
   const [note, setNote] = useState("");
-  const [ack, setAck] = useState(false);
+  const [proof, setProof] = useState<AdvanceProofState>(emptyProof);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
@@ -113,9 +117,15 @@ export default function CheckoutPage() {
   // Only disable the submit button for things validate() can't tell the user
   // about with an inline message — empty cart or missing advance-payment ack.
   // Per-field problems are surfaced as inline errors when the user submits.
+  const proofComplete =
+    !!proof.methodId &&
+    proof.txnRef.trim().length > 0 &&
+    !!proof.receiptUrl &&
+    proof.acknowledged;
+
   const disabled =
     cart.items.length === 0 ||
-    (delivery?.advance_payment_required && !ack);
+    (delivery?.advance_payment_required && !proofComplete);
 
   // Map server-side per-field codes back onto the right inline field.
   const fieldFromCode: Record<string, keyof typeof fieldErrors> = {
@@ -144,6 +154,13 @@ export default function CheckoutPage() {
           product_id: it.productId,
           quantity: it.quantity,
         })),
+        ...(delivery?.advance_payment_required
+          ? {
+              advance_payment_method_id: proof.methodId,
+              advance_payment_txn_ref: proof.txnRef.trim(),
+              advance_payment_receipt: proof.receiptUrl,
+            }
+          : {}),
       });
       cart.clearCart();
       router.push(
@@ -391,25 +408,13 @@ export default function CheckoutPage() {
 
           {/* Advance payment */}
           {delivery?.advance_payment_required && (
-            <Card className="p-5" hover={false}>
-              <h2 className="text-base font-semibold mb-2">
-                {locale === "bn" ? "অগ্রিম পেমেন্ট" : "Advance payment"}
-              </h2>
-              <p className="text-sm text-stone-600 mb-3 whitespace-pre-line">
-                {delivery.advance_payment_instructions}
-              </p>
-              <label className="flex items-start gap-2 text-sm text-stone-700">
-                <input
-                  type="checkbox"
-                  checked={ack}
-                  onChange={(e) => setAck(e.target.checked)}
-                  className="accent-teal-600 mt-1"
-                />
-                {locale === "bn"
-                  ? "আমি বুঝেছি যে অগ্রিম পেমেন্ট প্রয়োজন।"
-                  : "I understand advance payment is required."}
-              </label>
-            </Card>
+            <AdvancePaymentSection
+              shopSlug={shop.slug}
+              locale={locale === "bn" ? "bn" : "en"}
+              instructions={delivery.advance_payment_instructions}
+              value={proof}
+              onChange={setProof}
+            />
           )}
         </div>
 
