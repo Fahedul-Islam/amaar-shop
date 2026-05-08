@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/paymentmethod"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/reservation"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	visithandler "github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
@@ -40,10 +42,11 @@ import (
 // App holds the assembled application: the HTTP handler ready to serve,
 // and the database handle plus background workers for lifecycle management.
 type App struct {
-	Handler         http.Handler
-	DB              *sql.DB
-	VisitWorker     *visit.Worker
-	VisitAggregator *visit.Aggregator
+	Handler            http.Handler
+	DB                 *sql.DB
+	VisitWorker        *visit.Worker
+	VisitAggregator    *visit.Aggregator
+	ReservationSweeper *service.ReservationSweeper
 }
 
 // New builds the full dependency graph from config and returns a ready App.
@@ -86,14 +89,16 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	feeRuleRepo := postgres.NewFeeRuleRepo(db)
 	feeSubmissionRepo := postgres.NewFeeSubmissionRepo(db)
 	paymentMethodRepo := postgres.NewPaymentMethodRepo(db)
+	cartReservationRepo := postgres.NewCartReservationRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, reviewRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
-	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo, paymentMethodRepo)
+	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo, paymentMethodRepo, cartReservationRepo)
 	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
+	cartReservationSvc := service.NewCartReservationService(shopRepo, productRepo, cartReservationRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
@@ -126,6 +131,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	visitAggregator := visit.NewAggregator(visitRepo, log, 0, 30) // 00:30 UTC daily
 	visitAggregator.Start()
 
+	// Reservation sweeper expires holds past their TTL and restores stock.
+	// Runs once a minute — finer granularity isn't needed because the
+	// buyer already sees a client-side countdown.
+	reservationSweeper := service.NewReservationSweeper(cartReservationRepo, log, time.Minute)
+	reservationSweeper.Start()
+
 	// --- Handlers (depend only on service interfaces) ---
 	authHandler := auth.NewHandler(authSvc, cfg)
 	shopHandler := shop.NewHandler(shopSvc, cfg)
@@ -133,6 +144,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	productHandler := product.NewHandler(productSvc, cfg, visitWorker)
 	orderHandler := order.NewHandler(orderSvc, cfg, fileStore)
 	paymentMethodHandler := paymentmethod.NewHandler(paymentMethodSvc, cfg)
+	reservationHandler := reservation.NewHandler(cartReservationSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
@@ -153,6 +165,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		ProductHandler:     productHandler,
 		OrderHandler:       orderHandler,
 		PaymentMethodHandler: paymentMethodHandler,
+		ReservationHandler:   reservationHandler,
 		AnalyticsHandler:   analyticsHandler,
 		MarketplaceHandler: marketplaceHandler,
 		ReviewHandler:      reviewHandler,
@@ -167,15 +180,19 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	})
 
 	return &App{
-		Handler:         handler,
-		DB:              db,
-		VisitWorker:     visitWorker,
-		VisitAggregator: visitAggregator,
+		Handler:            handler,
+		DB:                 db,
+		VisitWorker:        visitWorker,
+		VisitAggregator:    visitAggregator,
+		ReservationSweeper: reservationSweeper,
 	}, nil
 }
 
 // Close shuts down background workers (draining in-flight visits) and the DB.
 func (a *App) Close() error {
+	if a.ReservationSweeper != nil {
+		a.ReservationSweeper.Stop()
+	}
 	if a.VisitAggregator != nil {
 		a.VisitAggregator.Stop()
 	}

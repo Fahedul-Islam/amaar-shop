@@ -6,6 +6,12 @@ import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { IcArrowLeft, IcCart } from '@/components/icons/Icons';
 import { CartDrawer } from './CartDrawer';
 import { useCart } from '@/hooks/useCart';
+import {
+  clearStoredReservation,
+  getReservation,
+  msUntilExpiry,
+  storedReservation,
+} from '@/lib/cartReservationApi';
 import { hueFromString } from '@/components/ui/ProductImage';
 import type { PublicShop, PublicDeliverySettings } from '@/lib/shopApi';
 import { useI18n } from '@/hooks/useI18n';
@@ -47,6 +53,49 @@ export function StorefrontShell({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setFollowing(localStorage.getItem(`follow:${shop.slug}`) === '1');
+  }, [shop.slug]);
+
+  // When a previously-active reservation has expired (or been
+  // consumed/cancelled), the held stock has already been released
+  // server-side. Clear the local cart so the badge doesn't keep
+  // showing items the buyer no longer has a hold on, and drop the
+  // stale reservation entry so the next checkout visit creates a
+  // fresh hold instead of trying to revive a dead one.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    (async () => {
+      const stored = storedReservation(shop.slug);
+      if (!stored) return;
+      // First, the easy case: client-side time has already run out.
+      if (
+        stored.status !== 'active' ||
+        msUntilExpiry(stored.expires_at) <= 0
+      ) {
+        clearStoredReservation(shop.slug);
+        cart.clearCart();
+        return;
+      }
+      // Otherwise verify with the server — the sweeper may have
+      // expired it even though our local clock isn't quite there yet.
+      try {
+        const fresh = await getReservation(shop.slug, stored.id);
+        if (cancelled) return;
+        if (fresh.status !== 'active') {
+          clearStoredReservation(shop.slug);
+          cart.clearCart();
+        }
+      } catch {
+        // 404/410 → reservation is gone or unrecoverable. Same cleanup.
+        if (cancelled) return;
+        clearStoredReservation(shop.slug);
+        cart.clearCart();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shop.slug]);
 
   const toggleFollow = () => {

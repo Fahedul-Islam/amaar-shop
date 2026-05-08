@@ -22,6 +22,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/paymentmethod"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/reservation"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
@@ -38,6 +39,7 @@ type RouterDeps struct {
 	ProductHandler     *product.Handler
 	OrderHandler         *order.Handler
 	PaymentMethodHandler *paymentmethod.Handler
+	ReservationHandler   *reservation.Handler
 	AnalyticsHandler   *analytics.Handler
 	MarketplaceHandler *marketplace.Handler
 	ReviewHandler      *review.Handler
@@ -65,6 +67,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.ProductHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.OrderHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.PaymentMethodHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.ReservationHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.AnalyticsHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.MarketplaceHandler.RegisterRoutes(mux)
 	deps.ReviewHandler.RegisterRoutes(mux, deps.Middleware)

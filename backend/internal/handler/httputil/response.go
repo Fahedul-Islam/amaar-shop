@@ -79,6 +79,11 @@ var domainErrorMap = []struct {
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
 	{domain.ErrAdvancePaymentRequired, http.StatusUnprocessableEntity, "advance_payment_required"},
 	{domain.ErrOrderLocked, http.StatusUnprocessableEntity, "order_locked"},
+	// Cart reservations
+	{domain.ErrReservationNotFound, http.StatusNotFound, "reservation_not_found"},
+	{domain.ErrReservationExpired, http.StatusGone, "reservation_expired"},
+	{domain.ErrReservationConsumed, http.StatusConflict, "reservation_consumed"},
+	{domain.ErrEmptyReservation, http.StatusBadRequest, "validation_error"},
 	// Payment methods
 	{domain.ErrPaymentMethodNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrPaymentMethodNotInShop, http.StatusUnprocessableEntity, "payment_method_invalid"},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -219,6 +220,75 @@ func (m *mockPaymentMethodRepo) Delete(_ context.Context, shopID, id string) err
 	return nil
 }
 
+// --- Mock cart reservation repository ---
+
+type mockCartReservationRepo struct {
+	reservations map[string]*domain.CartReservation
+}
+
+func newMockCartReservationRepo() *mockCartReservationRepo {
+	return &mockCartReservationRepo{
+		reservations: make(map[string]*domain.CartReservation),
+	}
+}
+
+func (m *mockCartReservationRepo) Create(_ context.Context, shopID string, expiresAt time.Time, items []repository.ReserveItemInput) (*domain.CartReservation, error) {
+	r := &domain.CartReservation{
+		ID:        fmt.Sprintf("res-%d", len(m.reservations)+1),
+		ShopID:    shopID,
+		Status:    domain.ReservationStatusActive,
+		ExpiresAt: expiresAt,
+	}
+	for _, it := range items {
+		r.Items = append(r.Items, domain.CartReservationItem{
+			ProductID: it.ProductID,
+			Quantity:  it.Quantity,
+		})
+	}
+	m.reservations[r.ID] = r
+	return r, nil
+}
+
+func (m *mockCartReservationRepo) Get(_ context.Context, shopID, id string) (*domain.CartReservation, error) {
+	r, ok := m.reservations[id]
+	if !ok || r.ShopID != shopID {
+		return nil, domain.ErrReservationNotFound
+	}
+	return r, nil
+}
+
+func (m *mockCartReservationRepo) Cancel(_ context.Context, shopID, id string) (*domain.CartReservation, error) {
+	r, ok := m.reservations[id]
+	if !ok || r.ShopID != shopID {
+		return nil, domain.ErrReservationNotFound
+	}
+	if r.Status == domain.ReservationStatusActive {
+		r.Status = domain.ReservationStatusCancelled
+	}
+	return r, nil
+}
+
+func (m *mockCartReservationRepo) AttachPhone(_ context.Context, id, phone string) error {
+	r, ok := m.reservations[id]
+	if !ok {
+		return nil
+	}
+	r.CustomerPhone = phone
+	return nil
+}
+
+func (m *mockCartReservationRepo) SweepExpired(_ context.Context) (int, error) {
+	n := 0
+	now := time.Now()
+	for _, r := range m.reservations {
+		if r.Status == domain.ReservationStatusActive && now.After(r.ExpiresAt) {
+			r.Status = domain.ReservationStatusExpired
+			n++
+		}
+	}
+	return n, nil
+}
+
 // --- Test helpers ---
 
 func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliveryRepo, *mockProductRepo, *mockOrderRepo) {
@@ -228,7 +298,8 @@ func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliv
 	prodRepo := newMockProductRepo(shopRepo)
 	orderRepo := newMockOrderRepo()
 	pmRepo := newMockPaymentMethodRepo()
-	svc := NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo, pmRepo)
+	resRepo := newMockCartReservationRepo()
+	svc := NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo, pmRepo, resRepo)
 	return svc, shopRepo, deliveryRepo, prodRepo, orderRepo
 }
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStorefront } from "../StorefrontShell";
@@ -12,6 +12,14 @@ import { placeOrder } from "@/lib/storefrontApi";
 import { ApiRequestError } from "@/lib/api";
 import { useI18n } from "@/hooks/useI18n";
 import { BD_DIVISIONS, BD_DISTRICTS, type Division } from "@/lib/bdGeo";
+import {
+  cancelReservation,
+  CartReservation,
+  clearStoredReservation,
+  ensureReservation,
+  msUntilExpiry,
+  pickUpReservation,
+} from "@/lib/cartReservationApi";
 import AdvancePaymentSection, {
   emptyProof,
   type AdvanceProofState,
@@ -39,6 +47,146 @@ export default function CheckoutPage() {
     address?: string;
   }>({});
   const deliveryZones = delivery?.delivery_zones ?? [];
+
+  // ── Reservation phase machine ──────────────────────────────────
+  // 'form'    — buyer is filling in name / phone / address. No stock
+  //             is held yet, so opening checkout costs nothing.
+  // 'payment' — buyer clicked "Pay delivery fee", we created a
+  //             reservation, the timer is ticking, and the advance-
+  //             payment proof section is visible. Stock is held.
+  //
+  // The reservation is created on the explicit "Pay delivery fee"
+  // click, never on mount, so the cart icon and visible stock only
+  // change once the buyer has actually committed to paying.
+  const [phase, setPhase] = useState<"form" | "payment">("form");
+  const [reservation, setReservation] = useState<CartReservation | null>(null);
+  const [reservationError, setReservationError] = useState<{
+    code: string;
+    msg: string;
+  } | null>(null);
+  const [reservationLoading, setReservationLoading] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+
+  // Stable fingerprint of cart contents so we can detect changes
+  // (e.g. buyer left, edited their cart, came back) without churning.
+  const cartFingerprint = useMemo(
+    () =>
+      cart.items
+        .slice()
+        .sort((a, b) => a.productId.localeCompare(b.productId))
+        .map((it) => `${it.productId}:${it.quantity}`)
+        .join(","),
+    [cart.items],
+  );
+  const cartReservationItems = useMemo(
+    () =>
+      cart.items.map((it) => ({
+        product_id: it.productId,
+        quantity: it.quantity,
+      })),
+    [cart.items],
+  );
+  const cartItemsRef = useRef(cartReservationItems);
+  cartItemsRef.current = cartReservationItems;
+
+  // Mount / cart-change pickup: only RESUME an existing matching
+  // hold (the buyer returning to a payment they started earlier).
+  // Never auto-create — that's what the "Pay delivery fee" button
+  // is for. If the stored hold is dead or doesn't match the cart,
+  // pickUpReservation cancels it server-side and clears local state.
+  useEffect(() => {
+    let cancelled = false;
+    if (cart.items.length === 0) {
+      setReservation(null);
+      setPhase("form");
+      return;
+    }
+    pickUpReservation(shop.slug, cartItemsRef.current)
+      .then((existing) => {
+        if (cancelled) return;
+        if (existing) {
+          setReservation(existing);
+          setPhase("payment");
+        } else {
+          setReservation(null);
+          setPhase("form");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReservation(null);
+        setPhase("form");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shop.slug, cartFingerprint, cart.items.length]);
+
+  // Tick the countdown every second so the UI reflects the remaining
+  // window. When time is up we flip secondsRemaining to 0 and rely on
+  // `expired` (derived) to lock the Place Order button.
+  useEffect(() => {
+    if (!reservation) {
+      setSecondsRemaining(0);
+      return;
+    }
+    function tick() {
+      setSecondsRemaining(
+        Math.max(0, Math.ceil(msUntilExpiry(reservation!.expires_at) / 1000)),
+      );
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [reservation]);
+
+  const expired =
+    !!reservation &&
+    secondsRemaining === 0 &&
+    reservation.status !== "consumed";
+
+  // "Pay delivery fee" — the explicit transition from form to payment.
+  // We validate the buyer-info form first (so they don't lock stock
+  // for an order they can't place), then create the hold.
+  async function startPayment() {
+    if (!validate()) return;
+    setReservationLoading(true);
+    setReservationError(null);
+    try {
+      const fresh = await ensureReservation(shop.slug, cartItemsRef.current);
+      setReservation(fresh);
+      setPhase("payment");
+    } catch (err) {
+      if (err instanceof ApiRequestError) {
+        setReservationError({ code: err.code, msg: err.message });
+      } else {
+        setReservationError({
+          code: "unknown",
+          msg: "Could not hold your cart — please try again.",
+        });
+      }
+    } finally {
+      setReservationLoading(false);
+    }
+  }
+
+  // "Edit details" / "Restart hold" — release the current hold so
+  // its stock goes back to other buyers immediately, and drop back
+  // to the form so the buyer can change anything they want.
+  async function backToForm() {
+    if (reservation?.id) {
+      try {
+        await cancelReservation(shop.slug, reservation.id);
+      } catch {
+        /* already non-active or vanished — fine */
+      }
+    }
+    clearStoredReservation(shop.slug);
+    setReservation(null);
+    setProof(emptyProof);
+    setPhase("form");
+    setReservationError(null);
+  }
 
   // Matches the backend regex: BD numbers like 01XXXXXXXXX (also accepts +880/880 prefix).
   const validatePhone = (p: string) => {
@@ -123,9 +271,18 @@ export default function CheckoutPage() {
     !!proof.receiptUrl &&
     proof.acknowledged;
 
+  // Place Order is only enabled when:
+  //   - cart isn't empty
+  //   - if the shop requires advance: we're past the form phase, the
+  //     buyer has filled in their proof, the timer hasn't run out, and
+  //     a reservation actually exists.
+  //   - if the shop doesn't require advance: nothing extra, the
+  //     legacy stock-decrement-at-place path handles it.
+  const advanceRequired = !!delivery?.advance_payment_required;
   const disabled =
     cart.items.length === 0 ||
-    (delivery?.advance_payment_required && !proofComplete);
+    (advanceRequired &&
+      (phase !== "payment" || !proofComplete || expired || !reservation));
 
   // Map server-side per-field codes back onto the right inline field.
   const fieldFromCode: Record<string, keyof typeof fieldErrors> = {
@@ -154,6 +311,7 @@ export default function CheckoutPage() {
           product_id: it.productId,
           quantity: it.quantity,
         })),
+        reservation_id: reservation?.id,
         ...(delivery?.advance_payment_required
           ? {
               advance_payment_method_id: proof.methodId,
@@ -162,20 +320,43 @@ export default function CheckoutPage() {
             }
           : {}),
       });
+      // Order placed — the reservation is now consumed. Clear local
+      // state so a refresh of the cart doesn't try to re-use an
+      // already-consumed hold.
+      clearStoredReservation(shop.slug);
       cart.clearCart();
       router.push(
         `/s/${shop.slug}/order-confirmed/${order.id}?phone=${encodeURIComponent(phone.trim())}`,
       );
     } catch (err) {
       if (err instanceof ApiRequestError) {
-        const field = fieldFromCode[err.code];
-        if (field) {
-          // Prefer the localized message we already have for this code.
-          const msg =
-            (fieldMessages as Record<string, string>)[err.code] ?? err.message;
-          setFieldErrors((prev) => ({ ...prev, [field]: msg }));
+        // The reservation went stale between rendering the form and
+        // submitting (sweeper expired it, or another tab consumed it).
+        // Drop the dead hold and let the user click "Restart hold" to
+        // grab a new one.
+        if (
+          err.code === "reservation_expired" ||
+          err.code === "reservation_consumed" ||
+          err.code === "reservation_not_found"
+        ) {
+          // Hold went stale between rendering the form and submitting
+          // — drop everything and bounce the buyer back to the form
+          // so they can re-click "Pay delivery fee".
+          clearStoredReservation(shop.slug);
+          setReservation(null);
+          setProof(emptyProof);
+          setPhase("form");
+          setReservationError({ code: err.code, msg: err.message });
         } else {
-          setError(t(`errors.${err.code}`, err.message));
+          const field = fieldFromCode[err.code];
+          if (field) {
+            // Prefer the localized message we already have for this code.
+            const msg =
+              (fieldMessages as Record<string, string>)[err.code] ?? err.message;
+            setFieldErrors((prev) => ({ ...prev, [field]: msg }));
+          } else {
+            setError(t(`errors.${err.code}`, err.message));
+          }
         }
       } else setError(t("errors.unknown"));
     } finally {
@@ -208,6 +389,21 @@ export default function CheckoutPage() {
       <h1 className="text-2xl font-bold tracking-tight mb-5">
         {locale === "bn" ? "চেকআউট" : "Checkout"}
       </h1>
+
+      {/* Reservation banner only shows once we're in the payment phase
+          (or there's a hard error to surface). In the form phase we're
+          deliberately silent — no countdown until the buyer commits. */}
+      {(phase === "payment" || reservationError) && (
+        <ReservationStatus
+          loading={reservationLoading}
+          reservation={reservation}
+          secondsRemaining={secondsRemaining}
+          expired={expired}
+          error={reservationError}
+          locale={locale}
+          onRestart={backToForm}
+        />
+      )}
 
       <form
         onSubmit={submit}
@@ -406,12 +602,16 @@ export default function CheckoutPage() {
             />
           </Card>
 
-          {/* Advance payment */}
-          {delivery?.advance_payment_required && (
+          {/* Advance payment section is hidden until the buyer clicks
+              "Pay delivery fee" — that's the moment we create the
+              reservation, and the moment they actually need to start
+              paying. Showing it earlier would be confusing because
+              the timer wouldn't yet be running. */}
+          {advanceRequired && phase === "payment" && (
             <AdvancePaymentSection
               shopSlug={shop.slug}
               locale={locale === "bn" ? "bn" : "en"}
-              instructions={delivery.advance_payment_instructions}
+              instructions={delivery?.advance_payment_instructions}
               value={proof}
               onChange={setProof}
             />
@@ -462,20 +662,83 @@ export default function CheckoutPage() {
               </div>
             </div>
             {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
-            <Button
-              type="submit"
-              variant="primary"
-              className="w-full mt-4"
-              disabled={disabled || submitting}
-            >
-              {submitting
-                ? locale === "bn"
-                  ? "অর্ডার হচ্ছে…"
-                  : "Placing order…"
-                : locale === "bn"
-                  ? "অর্ডার কনফার্ম করুন"
-                  : "Place order"}
-            </Button>
+
+            {/* Bottom action — three modes:
+                 1. Shop doesn't require advance: a single "Place order"
+                    button submits the form (legacy stock path; no
+                    reservation needed).
+                 2. Shop requires advance, phase=form: show "Pay
+                    delivery fee" — clicking validates the form,
+                    creates the reservation, and flips to payment.
+                 3. Shop requires advance, phase=payment: show "Place
+                    order" + a smaller "Edit details" link to back out. */}
+            {!advanceRequired ? (
+              <Button
+                type="submit"
+                variant="primary"
+                className="w-full mt-4"
+                disabled={disabled || submitting}
+              >
+                {submitting
+                  ? locale === "bn"
+                    ? "অর্ডার হচ্ছে…"
+                    : "Placing order…"
+                  : locale === "bn"
+                    ? "অর্ডার কনফার্ম করুন"
+                    : "Place order"}
+              </Button>
+            ) : phase === "form" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="w-full mt-4"
+                  onClick={startPayment}
+                  disabled={
+                    cart.items.length === 0 || reservationLoading
+                  }
+                >
+                  {reservationLoading
+                    ? locale === "bn"
+                      ? "হোল্ড করা হচ্ছে…"
+                      : "Holding your cart…"
+                    : locale === "bn"
+                      ? "ডেলিভারি ফি পেমেন্ট করুন"
+                      : "Pay delivery fee"}
+                </Button>
+                <p className="text-[12px] text-stone-500 mt-2 leading-snug">
+                  {locale === "bn"
+                    ? "ডেলিভারি ফি পেমেন্ট করার পর ১৫ মিনিটের জন্য আপনার পণ্য হোল্ড থাকবে।"
+                    : "Once you tap pay, we'll hold your items for 15 minutes while you complete the delivery fee."}
+                </p>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="w-full mt-4"
+                  disabled={disabled || submitting}
+                >
+                  {submitting
+                    ? locale === "bn"
+                      ? "অর্ডার হচ্ছে…"
+                      : "Placing order…"
+                    : locale === "bn"
+                      ? "অর্ডার কনফার্ম করুন"
+                      : "Place order"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={backToForm}
+                  className="w-full mt-2 text-[13px] font-medium text-stone-600 hover:text-stone-900 underline-offset-4 hover:underline"
+                >
+                  {locale === "bn"
+                    ? "← তথ্য পরিবর্তন করুন (হোল্ড বাতিল হবে)"
+                    : "← Edit details (releases hold)"}
+                </button>
+              </>
+            )}
           </Card>
         </div>
       </form>
@@ -489,4 +752,148 @@ function FieldError({ children }: { children: React.ReactNode }) {
       {children}
     </p>
   );
+}
+
+/* ── Reservation banner ──────────────────────────────────────────
+   Renders one of four states above the form:
+   1. Loading   — placing the hold (just landed on checkout)
+   2. Active    — countdown clock with how much time the buyer has left
+   3. Expired   — soft block + "Restart hold" button
+   4. Error     — something went wrong (e.g. insufficient stock at hold time)
+*/
+function ReservationStatus({
+  loading,
+  reservation,
+  secondsRemaining,
+  expired,
+  error,
+  locale,
+  onRestart,
+}: {
+  loading: boolean;
+  reservation: CartReservation | null;
+  secondsRemaining: number;
+  expired: boolean;
+  error: { code: string; msg: string } | null;
+  locale: "en" | "bn";
+  onRestart: () => void;
+}) {
+  if (loading && !reservation) {
+    return (
+      <div className="mb-5 px-4 py-3 rounded-md bg-stone-100 border border-stone-200 text-sm text-stone-700">
+        {locale === "bn"
+          ? "আপনার কার্ট হোল্ড করা হচ্ছে…"
+          : "Holding your cart…"}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="mb-5 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-800 flex items-center gap-3">
+        <span className="flex-1">{translatedReservationError(error, locale)}</span>
+        <button
+          type="button"
+          onClick={onRestart}
+          className="text-sm font-semibold text-red-700 hover:underline whitespace-nowrap"
+        >
+          {locale === "bn" ? "আবার চেষ্টা করুন" : "Try again"}
+        </button>
+      </div>
+    );
+  }
+  if (expired) {
+    return (
+      <div className="mb-5 px-4 py-3 rounded-md bg-amber-50 border border-amber-200 text-sm text-amber-900 flex items-center gap-3">
+        <span className="flex-1">
+          {locale === "bn"
+            ? "আপনার হোল্ড শেষ হয়ে গেছে — অর্ডার দেওয়ার জন্য নতুন করে শুরু করুন।"
+            : "Your hold has expired — please restart to place the order."}
+        </span>
+        <button
+          type="button"
+          onClick={onRestart}
+          className="px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold whitespace-nowrap"
+        >
+          {locale === "bn" ? "আবার শুরু করুন" : "Restart hold"}
+        </button>
+      </div>
+    );
+  }
+  if (!reservation) return null;
+
+  const minutes = Math.floor(secondsRemaining / 60);
+  const seconds = secondsRemaining % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  const urgent = secondsRemaining > 0 && secondsRemaining <= 60;
+
+  return (
+    <div
+      className={`mb-5 px-4 py-3 rounded-md border text-sm flex items-center gap-3 ${
+        urgent
+          ? "bg-amber-50 border-amber-200 text-amber-900"
+          : "bg-teal-50 border-teal-200 text-teal-900"
+      }`}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="flex-shrink-0"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+      <span className="flex-1">
+        {locale === "bn" ? (
+          <>
+            আপনার কার্ট{" "}
+            <strong className="font-mono">
+              {mm}:{ss}
+            </strong>{" "}
+            পর্যন্ত হোল্ড আছে। সময়মতো অর্ডার সম্পন্ন করুন।
+          </>
+        ) : (
+          <>
+            We're holding your cart for{" "}
+            <strong className="font-mono">
+              {mm}:{ss}
+            </strong>{" "}
+            — finish checkout before the timer runs out.
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function translatedReservationError(
+  error: { code: string; msg: string },
+  locale: "en" | "bn",
+): string {
+  switch (error.code) {
+    case "insufficient_stock":
+      return locale === "bn"
+        ? "এই পরিমাণ স্টকে নেই — কম পরিমাণে চেষ্টা করুন।"
+        : "Not enough stock for one or more items — try a smaller quantity.";
+    case "reservation_expired":
+      return locale === "bn"
+        ? "আপনার হোল্ড শেষ হয়েছে।"
+        : "Your hold expired.";
+    case "reservation_consumed":
+      return locale === "bn"
+        ? "এই হোল্ডে ইতিমধ্যে অর্ডার করা হয়েছে।"
+        : "This hold has already been used.";
+    case "reservation_not_found":
+      return locale === "bn"
+        ? "হোল্ড পাওয়া যায়নি।"
+        : "Hold not found — please restart.";
+    default:
+      return error.msg;
+  }
 }

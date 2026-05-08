@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -27,6 +28,12 @@ type PlaceOrderInput struct {
 	AdvancePaymentMethodID string
 	AdvancePaymentTxnRef   string
 	AdvancePaymentReceipt  string
+
+	// ReservationID, when set, tells PlaceOrder to consume a cart
+	// reservation instead of decrementing stock at place time. Items
+	// in this struct are ignored — the repository sources them from
+	// the reservation row.
+	ReservationID string
 }
 
 // SubmitAdvanceProofInput is the buyer-facing payload for submitting or
@@ -73,6 +80,7 @@ type OrderService struct {
 	products repository.ProductRepository
 	orders   repository.OrderRepository
 	methods  repository.PaymentMethodRepository
+	reserves repository.CartReservationRepository
 }
 
 func NewOrderService(
@@ -81,6 +89,7 @@ func NewOrderService(
 	products repository.ProductRepository,
 	orders repository.OrderRepository,
 	methods repository.PaymentMethodRepository,
+	reserves repository.CartReservationRepository,
 ) *OrderService {
 	return &OrderService{
 		shops:    shops,
@@ -88,6 +97,7 @@ func NewOrderService(
 		products: products,
 		orders:   orders,
 		methods:  methods,
+		reserves: reserves,
 	}
 }
 
@@ -131,10 +141,39 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		verifiedMethodID = &method.ID
 	}
 
+	// When the buyer is checking out against a reservation, source the
+	// item list from the reservation row so the ordered quantities match
+	// what's actually being held — the buyer can't quietly increase a
+	// quantity on the way to placing the order. Stock has already been
+	// debited at reserve time, so we skip the per-product stock check.
+	itemInputs := in.Items
+	if in.ReservationID != "" {
+		res, err := s.reserves.Get(ctx, shop.ID, in.ReservationID)
+		if err != nil {
+			return nil, err
+		}
+		if res.Status != domain.ReservationStatusActive {
+			if res.Status == domain.ReservationStatusConsumed {
+				return nil, domain.ErrReservationConsumed
+			}
+			return nil, domain.ErrReservationExpired
+		}
+		if time.Now().After(res.ExpiresAt) {
+			return nil, domain.ErrReservationExpired
+		}
+		itemInputs = make([]OrderItemInput, 0, len(res.Items))
+		for _, it := range res.Items {
+			itemInputs = append(itemInputs, OrderItemInput{
+				ProductID: it.ProductID,
+				Quantity:  it.Quantity,
+			})
+		}
+	}
+
 	// Build order items by looking up each product's current price and snapshotting it.
 	var subtotal float64
-	items := make([]domain.OrderItem, 0, len(in.Items))
-	for _, item := range in.Items {
+	items := make([]domain.OrderItem, 0, len(itemInputs))
+	for _, item := range itemInputs {
 		p, err := s.products.FindByID(ctx, item.ProductID, shop.ID)
 		if err != nil {
 			return nil, err
@@ -142,7 +181,11 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		if !p.IsActive || p.IsArchived {
 			return nil, domain.ErrProductNotFound
 		}
-		if p.Stock < item.Quantity {
+		// Skip the stock check when consuming a reservation — the units
+		// were already taken from products.stock at reserve time, so a
+		// `p.Stock < quantity` comparison would compare the *post-hold*
+		// number to the same number we held, which is meaningless.
+		if in.ReservationID == "" && p.Stock < item.Quantity {
 			return nil, domain.ErrInsufficientStock
 		}
 
@@ -210,6 +253,13 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		order.AdvancePaymentMethodID = verifiedMethodID
 		order.AdvancePaymentTxnRef = strings.TrimSpace(in.AdvancePaymentTxnRef)
 		order.AdvancePaymentReceipt = strings.TrimSpace(in.AdvancePaymentReceipt)
+	}
+	if in.ReservationID != "" {
+		// Best-effort: stamp the buyer's phone on the reservation row
+		// so admins can match a hold to a person. Never fatal.
+		_ = s.reserves.AttachPhone(ctx, in.ReservationID, order.CustomerPhone)
+		rid := in.ReservationID
+		order.ReservationID = &rid
 	}
 
 	if err := s.orders.PlaceOrder(ctx, order); err != nil {

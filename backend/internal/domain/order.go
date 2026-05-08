@@ -27,6 +27,10 @@ type Order struct {
 	AdvancePaymentTxnRef      string     `json:"advance_payment_txn_ref,omitempty"`
 	AdvancePaymentReceipt     string     `json:"advance_payment_receipt,omitempty"`
 	AdvancePaymentSubmittedAt *time.Time `json:"advance_payment_submitted_at,omitempty"`
+	// ReservationID, when set, tells PlaceOrder to consume a cart
+	// reservation (skipping the stock decrement, since it was already
+	// done at reserve time). Not persisted on the order row itself.
+	ReservationID *string `json:"-"`
 	CancelledReason           *string    `json:"cancelled_reason"`
 	Items                     []OrderItem `json:"items"`
 	CreatedAt                 time.Time   `json:"created_at"`

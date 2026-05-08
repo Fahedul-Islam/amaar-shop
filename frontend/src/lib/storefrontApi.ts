@@ -73,6 +73,10 @@ export interface PlaceOrderInput {
   advance_payment_method_id?: string;
   advance_payment_txn_ref?: string;
   advance_payment_receipt?: string;
+
+  // Optional. When set, items[] is ignored — the backend pulls them from
+  // the cart reservation and consumes it (no double stock decrement).
+  reservation_id?: string;
 }
 
 export interface SubmitAdvanceProofInput {

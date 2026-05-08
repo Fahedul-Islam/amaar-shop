@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -130,24 +131,70 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 		return fmt.Errorf("insert order: %w", err)
 	}
 
-	// Insert items and decrement stock in one pass.
+	// When the order is being placed against a cart reservation, the
+	// stock was already debited at reserve time — so we just consume the
+	// reservation here (mark it consumed) and skip the stock UPDATE.
+	// Otherwise we fall back to the legacy "decrement at place time"
+	// path that still serves callers without reservations.
+	consumeReservation := order.ReservationID != nil && *order.ReservationID != ""
+	if consumeReservation {
+		var status string
+		err := tx.QueryRowContext(ctx,
+			`UPDATE cart_reservations
+			    SET status = 'consumed', updated_at = now()
+			  WHERE id = $1
+			    AND shop_id = $2
+			    AND status = 'active'
+			    AND expires_at > now()
+			  RETURNING status`,
+			*order.ReservationID, order.ShopID,
+		).Scan(&status)
+		if errors.Is(err, sql.ErrNoRows) {
+			// Either gone, expired, or already consumed/cancelled.
+			// Surface the most helpful error after a peek.
+			var existing string
+			peekErr := tx.QueryRowContext(ctx,
+				`SELECT status FROM cart_reservations WHERE id = $1 AND shop_id = $2`,
+				*order.ReservationID, order.ShopID,
+			).Scan(&existing)
+			if errors.Is(peekErr, sql.ErrNoRows) {
+				return domain.ErrReservationNotFound
+			}
+			if peekErr != nil {
+				return fmt.Errorf("peek reservation: %w", peekErr)
+			}
+			switch existing {
+			case domain.ReservationStatusConsumed:
+				return domain.ErrReservationConsumed
+			default:
+				return domain.ErrReservationExpired
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("consume reservation: %w", err)
+		}
+	}
+
 	for i := range order.Items {
 		item := &order.Items[i]
 
-		// Decrement stock — the CHECK (stock >= 0) constraint on the products
-		// table guarantees we can't go negative. If it does, Postgres returns
-		// a check violation error.
-		res, err := tx.ExecContext(ctx,
-			`UPDATE products SET stock = stock - $1
-			 WHERE id = $2 AND shop_id = $3 AND is_active = true AND is_archived = false`,
-			item.Quantity, item.ProductID, order.ShopID,
-		)
-		if err != nil {
-			return domain.ErrInsufficientStock
-		}
-		rows, _ := res.RowsAffected()
-		if rows == 0 {
-			return domain.ErrProductNotFound
+		if !consumeReservation {
+			// Legacy path: decrement stock atomically. The
+			// CHECK (stock >= 0) constraint on products surfaces
+			// over-allocation as a check_violation, mapped to
+			// ErrInsufficientStock.
+			res, err := tx.ExecContext(ctx,
+				`UPDATE products SET stock = stock - $1
+				 WHERE id = $2 AND shop_id = $3 AND is_active = true AND is_archived = false`,
+				item.Quantity, item.ProductID, order.ShopID,
+			)
+			if err != nil {
+				return domain.ErrInsufficientStock
+			}
+			rows, _ := res.RowsAffected()
+			if rows == 0 {
+				return domain.ErrProductNotFound
+			}
 		}
 
 		err = tx.QueryRowContext(ctx,

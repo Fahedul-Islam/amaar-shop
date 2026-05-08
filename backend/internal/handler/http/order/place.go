@@ -64,18 +64,23 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Division/District are optional — orders allowed regardless.
-	if len(req.Items) == 0 {
-		httputil.WriteFieldError(w, "items_required", "Your cart is empty.")
-		return
-	}
-	for _, it := range req.Items {
-		if it.ProductID == "" {
-			httputil.WriteFieldError(w, "item_invalid", "One of the cart items is missing a product.")
+	// items[] is only required when a reservation_id is NOT supplied;
+	// when one is, the service sources items from the reservation row.
+	hasReservation := strings.TrimSpace(req.ReservationID) != ""
+	if !hasReservation {
+		if len(req.Items) == 0 {
+			httputil.WriteFieldError(w, "items_required", "Your cart is empty.")
 			return
 		}
-		if it.Quantity <= 0 {
-			httputil.WriteFieldError(w, "quantity_invalid", "Quantity must be at least 1.")
-			return
+		for _, it := range req.Items {
+			if it.ProductID == "" {
+				httputil.WriteFieldError(w, "item_invalid", "One of the cart items is missing a product.")
+				return
+			}
+			if it.Quantity <= 0 {
+				httputil.WriteFieldError(w, "quantity_invalid", "Quantity must be at least 1.")
+				return
+			}
 		}
 	}
 
@@ -98,6 +103,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		AdvancePaymentMethodID: strings.TrimSpace(req.AdvancePaymentMethodID),
 		AdvancePaymentTxnRef:   strings.TrimSpace(req.AdvancePaymentTxnRef),
 		AdvancePaymentReceipt:  strings.TrimSpace(req.AdvancePaymentReceipt),
+		ReservationID:          strings.TrimSpace(req.ReservationID),
 	})
 	if err != nil {
 		httputil.WriteError(w, err)

@@ -13,6 +13,11 @@ type PlaceOrderRequest struct {
 	AdvancePaymentMethodID string `json:"advance_payment_method_id"`
 	AdvancePaymentTxnRef   string `json:"advance_payment_txn_ref"`
 	AdvancePaymentReceipt  string `json:"advance_payment_receipt"`
+
+	// Optional. When set, the order is placed against a cart reservation
+	// (stock was already debited at reserve time, so PlaceOrder skips
+	// the per-item stock decrement and consumes the reservation).
+	ReservationID string `json:"reservation_id"`
 }
 
 type OrderItemRequest struct {
