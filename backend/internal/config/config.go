@@ -16,6 +16,7 @@ type Config struct {
 	AdminEmail         string
 	AdminPass          string
 	CORSAllowedOrigins []string
+	SteadfastBaseURL   string
 }
 
 // IsProduction reports whether the app is running in a production environment.
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
 		AdminPass:          os.Getenv("ADMIN_PASSWORD"),
 		CORSAllowedOrigins: corsAllowedOrigins,
+		SteadfastBaseURL:   os.Getenv("STEADFAST_BASE_URL"), // empty → client uses production default
 	}, nil
 }
 

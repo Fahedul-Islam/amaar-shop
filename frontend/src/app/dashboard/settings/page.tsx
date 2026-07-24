@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +24,7 @@ import {
   uploadBanner,
   getDeliverySettings,
 } from '@/lib/shopApi';
+import { getCourierSettings, updateCourierSettings } from '@/lib/courierApi';
 import { ApiRequestError } from '@/lib/api';
 import type { ReactNode } from 'react';
 
@@ -372,6 +373,9 @@ export default function ShopSettingsPage() {
               </div>
             )}
           </SettingsSection>
+
+          {/* Courier */}
+          <CourierSettingsSection />
         </div>
 
         {/* SIDEBAR */}
@@ -469,6 +473,143 @@ export default function ShopSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Courier settings ────────────────────────────────────────── */
+
+function CourierSettingsSection() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ['courier-settings'],
+    queryFn: getCourierSettings,
+  });
+  const [apiKey, setApiKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings) setEnabled(settings.enabled);
+  }, [settings]);
+
+  const configured = !!settings?.configured;
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await updateCourierSettings({
+        api_key: apiKey.trim(),
+        secret_key: secretKey.trim(),
+        enabled,
+      });
+      setApiKey('');
+      setSecretKey('');
+      qc.invalidateQueries({ queryKey: ['courier-settings'] });
+      setMsg('Courier settings saved.');
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingsSection
+      icon={<IcTruck size={18} />}
+      iconColor="blue"
+      title="Courier — Steadfast"
+      subtitle="Book parcels and pull tracking IDs automatically from any confirmed order."
+      badge={
+        configured ? (
+          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-teal-800 bg-teal-100 px-2 py-1 rounded-full">
+            <IcCheck size={11} /> Connected
+          </span>
+        ) : (
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-500 bg-stone-100 px-2 py-1 rounded-full">
+            Optional
+          </span>
+        )
+      }
+    >
+      <p className="text-sm text-stone-600 mb-5 leading-relaxed">
+        Paste the <strong className="font-semibold text-stone-800">Api-Key</strong> and{' '}
+        <strong className="font-semibold text-stone-800">Secret-Key</strong> from your Steadfast
+        merchant portal (Settings → API). Your keys are stored securely and never shown again.{' '}
+        <a
+          href="https://steadfast.com.bd"
+          target="_blank"
+          rel="noreferrer"
+          className="text-teal-700 font-medium hover:underline"
+        >
+          Steadfast portal ↗
+        </a>
+      </p>
+
+      <form onSubmit={save} className="grid gap-5">
+        <FieldRow
+          label="Api-Key"
+          hint={configured ? 'Leave blank to keep your saved key.' : undefined}
+        >
+          <PrettyInput
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={configured ? '•••••••• (saved)' : 'Your Steadfast Api-Key'}
+            autoComplete="off"
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="Secret-Key"
+          hint={configured ? 'Leave blank to keep your saved secret.' : undefined}
+        >
+          <PrettyInput
+            type="password"
+            value={secretKey}
+            onChange={(e) => setSecretKey(e.target.value)}
+            placeholder={configured ? '•••••••• (saved)' : 'Your Steadfast Secret-Key'}
+            autoComplete="off"
+          />
+        </FieldRow>
+
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="w-4 h-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+          />
+          <span className="text-sm text-stone-800">
+            Enable one-click Steadfast booking on order pages
+          </span>
+        </label>
+
+        {error && (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {error}
+          </div>
+        )}
+        {msg && (
+          <div className="text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-teal-500 text-white grid place-items-center flex-shrink-0">
+              <IcCheck size={12} />
+            </span>
+            {msg}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save courier settings'}
+          </Button>
+        </div>
+      </form>
+    </SettingsSection>
   );
 }
 

@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
+	"github.com/fhedul/amaarshop/backend/internal/courier"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/billing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
+	courierhandler "github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
@@ -90,6 +92,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	feeSubmissionRepo := postgres.NewFeeSubmissionRepo(db)
 	paymentMethodRepo := postgres.NewPaymentMethodRepo(db)
 	cartReservationRepo := postgres.NewCartReservationRepo(db)
+	courierSettingsRepo := postgres.NewCourierSettingsRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -97,6 +100,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
 	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo, paymentMethodRepo, cartReservationRepo)
+	steadfastClient := courier.NewSteadfast(nil, cfg.SteadfastBaseURL)
+	courierSvc := service.NewCourierService(shopRepo, orderRepo, courierSettingsRepo, steadfastClient)
 	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
 	cartReservationSvc := service.NewCartReservationService(shopRepo, productRepo, cartReservationRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
@@ -143,6 +148,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	categoryHandler := category.NewHandler(categorySvc, cfg)
 	productHandler := product.NewHandler(productSvc, cfg, visitWorker)
 	orderHandler := order.NewHandler(orderSvc, cfg, fileStore)
+	courierHandler := courierhandler.NewHandler(courierSvc, cfg)
 	paymentMethodHandler := paymentmethod.NewHandler(paymentMethodSvc, cfg)
 	reservationHandler := reservation.NewHandler(cartReservationSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
@@ -164,6 +170,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		CategoryHandler:    categoryHandler,
 		ProductHandler:     productHandler,
 		OrderHandler:       orderHandler,
+		CourierHandler:     courierHandler,
 		PaymentMethodHandler: paymentMethodHandler,
 		ReservationHandler:   reservationHandler,
 		AnalyticsHandler:   analyticsHandler,

@@ -78,6 +78,7 @@ var domainErrorMap = []struct {
 	{domain.ErrOrderNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
 	{domain.ErrCourierNameRequired, http.StatusBadRequest, "validation_error"},
+	{domain.ErrCourierNotConfigured, http.StatusUnprocessableEntity, "courier_not_configured"},
 	{domain.ErrAdvancePaymentRequired, http.StatusUnprocessableEntity, "advance_payment_required"},
 	{domain.ErrOrderLocked, http.StatusUnprocessableEntity, "order_locked"},
 	// Cart reservations

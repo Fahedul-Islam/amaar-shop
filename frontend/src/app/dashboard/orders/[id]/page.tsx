@@ -19,6 +19,7 @@ import {
   providerLabel,
   type PaymentMethod,
 } from "@/lib/paymentMethodApi";
+import { getCourierSettings, bookCourier } from "@/lib/courierApi";
 import { formatBDT, formatDateTime } from "@/lib/format";
 import { useI18n } from "@/hooks/useI18n";
 import { ApiRequestError } from "@/lib/api";
@@ -50,6 +51,7 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [shipOpen, setShipOpen] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order", id],
@@ -61,6 +63,12 @@ export default function OrderDetailPage() {
   const { data: methods } = useQuery({
     queryKey: ["payment-methods"],
     queryFn: listPaymentMethods,
+  });
+
+  // Courier settings gate the one-click "Book Steadfast" action.
+  const { data: courierSettings } = useQuery({
+    queryKey: ["courier-settings"],
+    queryFn: getCourierSettings,
   });
 
   const usedMethod = useMemo(() => {
@@ -120,6 +128,25 @@ export default function OrderDetailPage() {
     }
   };
 
+  // book auto-creates a Steadfast consignment and ships the order.
+  const book = async () => {
+    if (!order || booking) return;
+    setError(null);
+    setBooking(true);
+    try {
+      await bookCourier(order.id);
+      invalidateOrder();
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Could not book the courier",
+      );
+    } finally {
+      setBooking(false);
+    }
+  };
+
   // markReturned handles a rejected cash-on-delivery parcel coming back.
   const markReturned = () => {
     const reason = window.prompt(
@@ -164,6 +191,7 @@ export default function OrderDetailPage() {
     .join(", ");
   const actions = nextStatus[order.status] ?? [];
   const undoTo = prevStatus[order.status];
+  const canAutoBook = !!(courierSettings?.configured && courierSettings?.enabled);
   const cancelled = order.status === "cancelled";
   const returned = order.status === "returned";
 
@@ -536,8 +564,40 @@ export default function OrderDetailPage() {
                 Cancel order
               </button>
             )}
+            {actions.includes("shipped") &&
+              (canAutoBook ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShipOpen(true)}
+                    className="h-[42px] px-4 inline-flex items-center gap-2 border border-stone-300 rounded-[9px] bg-white text-stone-900 text-sm font-medium hover:bg-stone-50 transition-colors"
+                  >
+                    Enter manually
+                  </button>
+                  <button
+                    type="button"
+                    onClick={book}
+                    disabled={booking}
+                    className="h-[42px] px-5 inline-flex items-center gap-2 rounded-[9px] bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <IcTruck size={15} />
+                    {booking ? "Booking…" : "Book Steadfast"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShipOpen(true)}
+                  className="h-[42px] px-5 inline-flex items-center gap-2 rounded-[9px] bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors"
+                >
+                  <IcCheck size={14} />
+                  {actionLabel("shipped")}
+                </button>
+              ))}
             {actions
-              .filter((s) => s !== "cancelled" && s !== "returned")
+              .filter(
+                (s) => s !== "cancelled" && s !== "returned" && s !== "shipped",
+              )
               .map((s) => (
                 <button
                   key={s}
@@ -553,11 +613,6 @@ export default function OrderDetailPage() {
                       setError(
                         "Verify the advance payment first — mark it received in the payment card above.",
                       );
-                      return;
-                    }
-                    // Shipping captures courier + tracking first.
-                    if (s === "shipped") {
-                      setShipOpen(true);
                       return;
                     }
                     updateStatus(s);
