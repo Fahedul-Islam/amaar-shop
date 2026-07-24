@@ -333,6 +333,43 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, ownerID, orderID, 
 	return order, nil
 }
 
+// ShipOrder records courier + tracking on an order. From "confirmed" it
+// performs the confirmed->shipped transition and stores the shipment in one
+// step; from "shipped" it just updates the tracking details (e.g. the seller
+// entered the consignment ID after handing over the parcel). A courier name
+// is required so the buyer-facing tracking view always has something to show.
+func (s *OrderService) ShipOrder(ctx context.Context, ownerID, orderID, courierName, trackingID string) (*domain.Order, error) {
+	courierName = strings.TrimSpace(courierName)
+	trackingID = strings.TrimSpace(trackingID)
+	if courierName == "" {
+		return nil, domain.ErrCourierNameRequired
+	}
+
+	current, err := s.orders.OrderByIDForShopOwner(ctx, ownerID, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	var markShipped bool
+	switch current.Status {
+	case domain.Confirmed:
+		markShipped = true
+	case domain.Shipped:
+		markShipped = false
+	default:
+		return nil, domain.ErrInvalidStatusTransition
+	}
+
+	order, err := s.orders.SetShipment(ctx, ownerID, orderID, courierName, trackingID, markShipped)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.orders.LoadItems(ctx, order); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
 // BuyerCancelOrder lets the buyer cancel their own pending order.
 // Verified by matching customerPhone. A cancellation reason is required.
 func (s *OrderService) BuyerCancelOrder(ctx context.Context, slug, orderID, customerPhone, cancellationReason string) (*domain.Order, error) {

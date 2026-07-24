@@ -22,5 +22,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	mux.HandleFunc("GET /api/shops/me/orders", auth.Then(h.ListOfOrders))
 	mux.HandleFunc("GET /api/shops/me/orders/{id}", auth.Then(h.GetOrder))
 	mux.HandleFunc("POST /api/shops/me/orders/{id}/status", auth.Then(h.UpdateOrder))
+	mux.HandleFunc("POST /api/shops/me/orders/{id}/ship", auth.Then(h.ShipOrder))
 	mux.HandleFunc("POST /api/shops/me/orders/{id}/advance-received", auth.Then(h.MarkAdvanceReceived))
 }

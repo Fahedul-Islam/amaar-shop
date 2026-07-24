@@ -45,6 +45,10 @@ type OrderRepository interface {
 	// MarkAdvanceReceived sets advance_payment_received to received on the order.
 	MarkAdvanceReceived(ctx context.Context, ownerUserID, orderID string, received bool) (*domain.Order, error)
 
+	// SetShipment records courier name + tracking ID on an order. When
+	// markShipped is true the status is advanced to 'shipped' atomically.
+	SetShipment(ctx context.Context, ownerUserID, orderID, courierName, trackingID string, markShipped bool) (*domain.Order, error)
+
 	// SubmitAdvanceProof persists the buyer's advance-payment proof on a
 	// pending order. Returns ErrOrderLocked if the seller has already
 	// confirmed receipt.

@@ -109,6 +109,19 @@ func (m *mockOrderRepo) MarkAdvanceReceived(_ context.Context, ownerUserID, orde
 	return o, nil
 }
 
+func (m *mockOrderRepo) SetShipment(_ context.Context, ownerUserID, orderID, courierName, trackingID string, markShipped bool) (*domain.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return nil, domain.ErrOrderNotFound
+	}
+	o.CourierName = courierName
+	o.TrackingID = trackingID
+	if markShipped {
+		o.Status = "shipped"
+	}
+	return o, nil
+}
+
 func (m *mockOrderRepo) SubmitAdvanceProof(_ context.Context, shopID, orderID, customerPhone, methodID, txnRef, receipt string) (*domain.Order, error) {
 	o, ok := m.orders[orderID]
 	if !ok {
@@ -609,6 +622,70 @@ func TestUpdateOrderStatus_CancelRequiresReason(t *testing.T) {
 	if err != domain.ErrCancellationReasonRequired {
 		t.Errorf("expected ErrCancellationReasonRequired for empty reason, got %v", err)
 	}
+}
+
+func TestShipOrder(t *testing.T) {
+	seedOrder := func(t *testing.T) (*OrderService, *mockOrderRepo, string) {
+		svc, shopRepo, deliveryRepo, prodRepo, orderRepo := newTestOrderService(t)
+		shop := seedShopWithDelivery(t, shopRepo, deliveryRepo, "user-1", "my-shop")
+		p := seedProduct(t, prodRepo, shop.ID, "X", "100.00", 10)
+		order, _ := svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+			CustomerName: "Test", CustomerPhone: "01712345678",
+			DeliveryAddress: "Addr", DeliveryDivision: "Dhaka", DeliveryDistrict: "Dhaka",
+			Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		})
+		return svc, orderRepo, order.ID
+	}
+
+	t.Run("confirmed ships and records courier + tracking", func(t *testing.T) {
+		svc, orderRepo, id := seedOrder(t)
+		orderRepo.orders[id].Status = "confirmed"
+
+		got, err := svc.ShipOrder(context.Background(), "user-1", id, "steadfast", "  15A2B3  ")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.Status != "shipped" {
+			t.Errorf("expected status shipped, got %q", got.Status)
+		}
+		if got.CourierName != "steadfast" || got.TrackingID != "15A2B3" {
+			t.Errorf("courier/tracking not recorded (trimmed): %q / %q", got.CourierName, got.TrackingID)
+		}
+	})
+
+	t.Run("editing tracking on shipped order does not change status", func(t *testing.T) {
+		svc, orderRepo, id := seedOrder(t)
+		orderRepo.orders[id].Status = "shipped"
+
+		got, err := svc.ShipOrder(context.Background(), "user-1", id, "pathao", "NEW-ID")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.Status != "shipped" {
+			t.Errorf("expected status to stay shipped, got %q", got.Status)
+		}
+		if got.CourierName != "pathao" || got.TrackingID != "NEW-ID" {
+			t.Errorf("tracking edit not applied: %q / %q", got.CourierName, got.TrackingID)
+		}
+	})
+
+	t.Run("courier name is required", func(t *testing.T) {
+		svc, orderRepo, id := seedOrder(t)
+		orderRepo.orders[id].Status = "confirmed"
+
+		_, err := svc.ShipOrder(context.Background(), "user-1", id, "   ", "TRACK")
+		if err != domain.ErrCourierNameRequired {
+			t.Errorf("expected ErrCourierNameRequired, got %v", err)
+		}
+	})
+
+	t.Run("cannot ship a pending order", func(t *testing.T) {
+		svc, _, id := seedOrder(t) // stays pending
+		_, err := svc.ShipOrder(context.Background(), "user-1", id, "steadfast", "TRACK")
+		if err != domain.ErrInvalidStatusTransition {
+			t.Errorf("expected ErrInvalidStatusTransition, got %v", err)
+		}
+	})
 }
 
 // --- Tests: MarkAdvanceReceived ---

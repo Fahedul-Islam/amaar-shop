@@ -28,6 +28,9 @@ type Service interface {
 	// MarkAdvanceReceived marks advance payment as received (or unreceived) on an order.
 	MarkAdvanceReceived(ctx context.Context, ownerID, orderID string, received bool) (*domain.Order, error)
 
+	// ShipOrder records courier + tracking and (from "confirmed") ships the order.
+	ShipOrder(ctx context.Context, ownerID, orderID, courierName, trackingID string) (*domain.Order, error)
+
 	// LookupForCustomer looks up an order by ID + phone for the customer.
 	LookupForCustomer(ctx context.Context, slug, orderID, customerPhone string) (*domain.Order, error)
 

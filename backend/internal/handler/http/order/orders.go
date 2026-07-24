@@ -130,6 +130,35 @@ func (h *Handler) MarkAdvanceReceived(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, toOrderDTO(order))
 }
 
+// ShipOrder handles POST /api/shops/me/orders/{id}/ship. It records the
+// courier name + tracking/consignment ID and (from a confirmed order) advances
+// the status to shipped.
+func (h *Handler) ShipOrder(w http.ResponseWriter, r *http.Request) {
+	ownerID := middleware.GetUserID(r.Context())
+	orderID := httputil.GetIDParam(r, "id")
+
+	var req dto.ShipOrderRequest
+	if err := httputil.DecodeJSONBody(r, &req); err != nil {
+		httputil.WriteValidationError(w, "invalid JSON body")
+		return
+	}
+
+	req.CourierName = strings.TrimSpace(req.CourierName)
+	req.TrackingID = strings.TrimSpace(req.TrackingID)
+	if req.CourierName == "" {
+		httputil.WriteValidationError(w, "courier_name is required")
+		return
+	}
+
+	order, err := h.svc.ShipOrder(r.Context(), ownerID, orderID, req.CourierName, req.TrackingID)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, toOrderDTO(order))
+}
+
 // CustomerLookupOrder handles POST /api/shops/by-slug/{slug}/orders/{id}/lookup.
 func (h *Handler) CustomerLookupOrder(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")

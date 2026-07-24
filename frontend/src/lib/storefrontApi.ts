@@ -48,6 +48,8 @@ export interface Order {
   delivery_charge_bdt: string;
   total_bdt: string;
   status: string;
+  courier_name?: string;
+  tracking_id?: string;
   advance_payment_required: boolean;
   advance_payment_received: boolean;
   advance_payment_method_id?: string | null;

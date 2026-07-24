@@ -10,6 +10,7 @@ import { Badge, statusTone } from "@/components/ui/Badge";
 import { IcArrowLeft, IcDownload } from "@/components/icons/Icons";
 import { LeaveReviewForm } from "@/components/storefront/LeaveReviewForm";
 import { lookupOrder, buyerCancelOrder } from "@/lib/storefrontApi";
+import { courierLabel, courierTrackingUrl } from "@/lib/orderApi";
 import { ApiRequestError } from "@/lib/api";
 import { formatBDT, formatDateTime } from "@/lib/format";
 import type { Order } from "@/lib/storefrontApi";
@@ -227,6 +228,52 @@ function StorefrontOrderLookup() {
               </div>
             </div>
           </Card>
+
+          {order.courier_name && (
+            <Card className="p-5 mt-4" hover={false}>
+              <h3 className="text-sm font-semibold mb-2.5">
+                {locale === "bn" ? "কুরিয়ার তথ্য" : "Courier & tracking"}
+              </h3>
+              <div className="text-[13px] text-stone-600 leading-relaxed grid gap-1">
+                <div className="flex justify-between gap-3">
+                  <span className="text-stone-500">
+                    {locale === "bn" ? "কুরিয়ার" : "Courier"}
+                  </span>
+                  <span className="font-medium text-stone-900">
+                    {courierLabel(order.courier_name)}
+                  </span>
+                </div>
+                {order.tracking_id && (
+                  <div className="flex justify-between gap-3 items-center">
+                    <span className="text-stone-500">
+                      {locale === "bn" ? "ট্র্যাকিং আইডি" : "Tracking ID"}
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="font-mono font-medium text-stone-900">
+                        {order.tracking_id}
+                      </span>
+                      {courierTrackingUrl(
+                        order.courier_name,
+                        order.tracking_id,
+                      ) && (
+                        <a
+                          href={courierTrackingUrl(
+                            order.courier_name,
+                            order.tracking_id,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-600 font-medium hover:underline"
+                        >
+                          {locale === "bn" ? "ট্র্যাক ↗" : "Track ↗"}
+                        </a>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {order.status === "delivered" && (
             <Card className="p-5 mt-4" hover={false}>

@@ -177,6 +177,8 @@ func toOrderDTO(o *domain.Order) dto.OrderDTO {
 		DeliveryChargeBDT:      o.DeliveryChargeBDT,
 		TotalBDT:               o.TotalBDT,
 		Status:                 o.Status,
+		CourierName:            o.CourierName,
+		TrackingID:             o.TrackingID,
 		AdvancePaymentRequired: o.AdvancePaymentRequired,
 		AdvancePaymentReceived: o.AdvancePaymentReceived,
 		CancelledReason:        o.CancelledReason,

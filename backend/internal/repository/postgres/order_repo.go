@@ -24,7 +24,8 @@ func NewOrderRepo(db *sql.DB) repository.OrderRepository {
 const orderColumns = `o.id, o.shop_id, o.customer_name, o.customer_phone, o.delivery_address,
 	COALESCE(o.delivery_division, ''), COALESCE(o.delivery_district, ''),
 	COALESCE(o.delivery_area, ''), COALESCE(o.note, ''), o.subtotal_bdt, o.delivery_charge_bdt,
-	o.total_bdt, o.status, o.advance_payment_required,
+	o.total_bdt, o.status, COALESCE(o.courier_name, ''), COALESCE(o.tracking_id, ''),
+	o.advance_payment_required,
 	o.advance_payment_received,
 	o.advance_payment_method_id, COALESCE(o.advance_payment_txn_ref,''), COALESCE(o.advance_payment_receipt,''),
 	o.advance_payment_submitted_at,
@@ -38,7 +39,8 @@ func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
 	err := scanner.Scan(
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone, &o.DeliveryAddress,
 		&o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note, &o.SubtotalBDT, &o.DeliveryChargeBDT,
-		&o.TotalBDT, &o.Status, &o.AdvancePaymentRequired,
+		&o.TotalBDT, &o.Status, &o.CourierName, &o.TrackingID,
+		&o.AdvancePaymentRequired,
 		&o.AdvancePaymentReceived,
 		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
 		&submittedAt,
@@ -60,7 +62,8 @@ const orderReturning = `orders.id, orders.shop_id, orders.customer_name, orders.
 	orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
 	COALESCE(orders.delivery_area, ''), COALESCE(orders.note, ''),
 	orders.subtotal_bdt, orders.delivery_charge_bdt, orders.total_bdt,
-	orders.status, orders.advance_payment_required, orders.advance_payment_received,
+	orders.status, COALESCE(orders.courier_name,''), COALESCE(orders.tracking_id,''),
+	orders.advance_payment_required, orders.advance_payment_received,
 	orders.advance_payment_method_id, COALESCE(orders.advance_payment_txn_ref,''), COALESCE(orders.advance_payment_receipt,''),
 	orders.advance_payment_submitted_at,
 	orders.cancelled_reason, orders.created_at, orders.updated_at`
@@ -74,7 +77,8 @@ func scanOrderUpdate(scanner interface{ Scan(...any) error }) (*domain.Order, er
 		&o.ID, &o.ShopID, &o.CustomerName, &o.CustomerPhone,
 		&o.DeliveryAddress, &o.DeliveryDivision, &o.DeliveryDistrict, &o.DeliveryArea, &o.Note,
 		&o.SubtotalBDT, &o.DeliveryChargeBDT, &o.TotalBDT,
-		&o.Status, &o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
+		&o.Status, &o.CourierName, &o.TrackingID,
+		&o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
 		&submittedAt,
 		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
@@ -460,6 +464,33 @@ func (r *orderRepo) MarkAdvanceReceived(ctx context.Context, ownerUserID, orderI
 			return nil, domain.ErrOrderNotFound
 		}
 		return nil, fmt.Errorf("mark advance received: %w", err)
+	}
+	return o, nil
+}
+
+// SetShipment records the courier name and tracking/consignment ID on an
+// order. When markShipped is true the status is advanced to 'shipped' in the
+// same statement (the confirmed->shipped transition); otherwise only the
+// courier fields change (editing tracking on an already-shipped order).
+func (r *orderRepo) SetShipment(ctx context.Context, ownerUserID, orderID, courierName, trackingID string, markShipped bool) (*domain.Order, error) {
+	row := r.db.QueryRowContext(ctx,
+		`UPDATE orders
+		 SET courier_name = NULLIF($1,''),
+		     tracking_id  = NULLIF($2,''),
+		     status = CASE WHEN $3 THEN 'shipped' ELSE status END
+		 FROM shops
+		 WHERE shops.id = orders.shop_id
+		   AND shops.owner_user_id = $4
+		   AND orders.id = $5
+		 RETURNING `+orderReturning,
+		courierName, trackingID, markShipped, ownerUserID, orderID,
+	)
+	o, err := scanOrderUpdate(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("set shipment: %w", err)
 	}
 	return o, nil
 }

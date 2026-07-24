@@ -20,6 +20,10 @@ type Order struct {
 	DeliveryChargeBDT      string      `json:"delivery_charge_bdt"`
 	TotalBDT               string      `json:"total_bdt"`
 	Status                 string      `json:"status"`
+	// Shipment record. Populated when the seller hands the parcel to a courier
+	// (manually in Phase 1, or via a courier API later). Empty until shipped.
+	CourierName            string      `json:"courier_name,omitempty"`
+	TrackingID             string      `json:"tracking_id,omitempty"`
 	AdvancePaymentRequired bool        `json:"advance_payment_required"`
 	AdvancePaymentReceived bool        `json:"advance_payment_received"`
 	// Buyer-submitted advance-payment proof. Nil/empty until submitted.
@@ -62,6 +66,7 @@ var (
 	ErrInvalidStatusTransition    = errors.New("invalid order status transition")
 	ErrOrderNotFound              = errors.New("order not found")
 	ErrCancellationReasonRequired = errors.New("cancellation reason is required")
+	ErrCourierNameRequired        = errors.New("courier name is required")
 )
 
 var (

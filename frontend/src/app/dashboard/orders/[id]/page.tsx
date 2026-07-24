@@ -7,7 +7,11 @@ import {
   getOrder,
   updateOrderStatus,
   markAdvanceReceived,
+  shipOrder,
   prettyOrderStatus,
+  COURIERS,
+  courierLabel,
+  courierTrackingUrl,
 } from "@/lib/orderApi";
 import {
   listPaymentMethods,
@@ -24,7 +28,7 @@ import { ApiRequestError } from "@/lib/api";
 const nextStatus: Record<string, string[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["shipped", "cancelled"],
-  shipped: ["delivered"],
+  shipped: ["delivered", "returned"],
   delivered: [],
   cancelled: [],
 };
@@ -45,6 +49,7 @@ export default function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [shipOpen, setShipOpen] = useState(false);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order", id],
@@ -73,21 +78,22 @@ export default function OrderDetailPage() {
     order?.advance_payment_required && order.advance_payment_receipt
   );
 
-  const updateStatus = async (status: string) => {
+  const invalidateOrder = () => {
+    qc.invalidateQueries({ queryKey: ["order", id] });
+    qc.invalidateQueries({ queryKey: ["orders"] });
+    qc.invalidateQueries({ queryKey: ["orders-recent"] });
+    qc.invalidateQueries({ queryKey: ["stats-today"] });
+    qc.invalidateQueries({ queryKey: ["top-products"] });
+    qc.invalidateQueries({ queryKey: ["stats-range"] });
+  };
+
+  const updateStatus = async (status: string, reason?: string) => {
     if (!order) return;
     setError(null);
     try {
-      await updateOrderStatus(
-        order.id,
-        status,
-        status === "cancelled" ? cancelReason : undefined,
-      );
-      qc.invalidateQueries({ queryKey: ["order", id] });
-      qc.invalidateQueries({ queryKey: ["orders"] });
-      qc.invalidateQueries({ queryKey: ["orders-recent"] });
-      qc.invalidateQueries({ queryKey: ["stats-today"] });
-      qc.invalidateQueries({ queryKey: ["top-products"] });
-      qc.invalidateQueries({ queryKey: ["stats-range"] });
+      const r = reason ?? (status === "cancelled" ? cancelReason : undefined);
+      await updateOrderStatus(order.id, status, r);
+      invalidateOrder();
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -95,6 +101,32 @@ export default function OrderDetailPage() {
           : "Could not update status",
       );
     }
+  };
+
+  // submitShip records courier + tracking and (from confirmed) ships the order.
+  const submitShip = async (courier: string, tracking: string) => {
+    if (!order) return;
+    setError(null);
+    try {
+      await shipOrder(order.id, courier, tracking);
+      invalidateOrder();
+      setShipOpen(false);
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Could not save shipment",
+      );
+    }
+  };
+
+  // markReturned handles a rejected cash-on-delivery parcel coming back.
+  const markReturned = () => {
+    const reason = window.prompt(
+      "Why is this order being returned? (e.g. buyer refused, wrong number)",
+    );
+    if (reason === null) return; // cancelled the prompt
+    updateStatus("returned", reason.trim() || "Returned by courier");
   };
 
   const markPayment = async (received: boolean) => {
@@ -364,6 +396,72 @@ export default function OrderDetailPage() {
                   value={order.note}
                 />
               )}
+
+              {order.courier_name && (
+                <InfoLine
+                  icon={<IcTruck size={16} />}
+                  label="Courier"
+                  value={
+                    <div className="flex flex-col gap-1">
+                      <span>{courierLabel(order.courier_name)}</span>
+                      {order.tracking_id ? (
+                        <span className="inline-flex items-center gap-2 flex-wrap text-[12.5px] text-stone-600">
+                          <span className="font-mono text-stone-900">
+                            {order.tracking_id}
+                          </span>
+                          {courierTrackingUrl(
+                            order.courier_name,
+                            order.tracking_id,
+                          ) && (
+                            <a
+                              href={courierTrackingUrl(
+                                order.courier_name,
+                                order.tracking_id,
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-teal-600 font-medium hover:underline"
+                            >
+                              Track ↗
+                            </a>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-[12.5px] text-stone-400">
+                          No tracking ID recorded
+                        </span>
+                      )}
+                    </div>
+                  }
+                  actions={
+                    <div className="flex gap-1.5">
+                      {order.tracking_id && (
+                        <button
+                          type="button"
+                          onClick={() => copy(order.tracking_id!, "track")}
+                          title="Copy tracking ID"
+                          className="w-[30px] h-[30px] grid place-items-center rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 transition-colors"
+                        >
+                          {copied === "track" ? (
+                            <IcCheck size={14} />
+                          ) : (
+                            <IcCopy size={14} />
+                          )}
+                        </button>
+                      )}
+                      {order.status === "shipped" && (
+                        <button
+                          type="button"
+                          onClick={() => setShipOpen(true)}
+                          className="h-[30px] px-2.5 grid place-items-center rounded-md bg-stone-100 hover:bg-stone-200 text-[12px] font-medium text-stone-700 hover:text-stone-900 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  }
+                />
+              )}
             </div>
           </section>
 
@@ -410,6 +508,16 @@ export default function OrderDetailPage() {
                 Undo · back to {undoTo}
               </button>
             )}
+            {actions.includes("returned") && (
+              <button
+                type="button"
+                onClick={markReturned}
+                className="h-[42px] px-4 inline-flex items-center gap-2 border border-coral-100 rounded-[9px] bg-white text-coral-600 text-sm font-medium hover:bg-coral-50 transition-colors"
+              >
+                <IcUndo size={14} />
+                Mark returned
+              </button>
+            )}
             {actions.includes("cancelled") && (
               <button
                 type="button"
@@ -429,7 +537,7 @@ export default function OrderDetailPage() {
               </button>
             )}
             {actions
-              .filter((s) => s !== "cancelled")
+              .filter((s) => s !== "cancelled" && s !== "returned")
               .map((s) => (
                 <button
                   key={s}
@@ -445,6 +553,11 @@ export default function OrderDetailPage() {
                       setError(
                         "Verify the advance payment first — mark it received in the payment card above.",
                       );
+                      return;
+                    }
+                    // Shipping captures courier + tracking first.
+                    if (s === "shipped") {
+                      setShipOpen(true);
                       return;
                     }
                     updateStatus(s);
@@ -465,6 +578,16 @@ export default function OrderDetailPage() {
             />
           )}
         </div>
+      )}
+
+      {shipOpen && (
+        <ShipModal
+          initialCourier={order.courier_name}
+          initialTracking={order.tracking_id}
+          editing={order.status === "shipped"}
+          onClose={() => setShipOpen(false)}
+          onSubmit={submitShip}
+        />
       )}
     </div>
   );
@@ -991,7 +1114,13 @@ function QuickMessages({
     order.status,
     order.advance_payment_required,
     order.advance_payment_received,
-    { name: order.customer_name, shortId, total },
+    {
+      name: order.customer_name,
+      shortId,
+      total,
+      courier: courierLabel(order.courier_name),
+      tracking: order.tracking_id || "",
+    },
   );
 
   const phoneDigits = order.customer_phone.replace(/\D/g, "");
@@ -1073,6 +1202,106 @@ function QuickMessages({
   );
 }
 
+/* ── Ship modal ───────────────────────────────────────────────── */
+
+function ShipModal({
+  initialCourier,
+  initialTracking,
+  editing,
+  onClose,
+  onSubmit,
+}: {
+  initialCourier?: string;
+  initialTracking?: string;
+  editing: boolean;
+  onClose: () => void;
+  onSubmit: (courier: string, tracking: string) => Promise<void>;
+}) {
+  const [courier, setCourier] = useState(initialCourier || "");
+  const [tracking, setTracking] = useState(initialTracking || "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!courier || saving) return;
+    setSaving(true);
+    await onSubmit(courier, tracking);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-stone-900/40 grid place-items-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-[16px] w-full max-w-[420px] shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-stone-100">
+          <h3 className="text-[16px] font-semibold text-stone-900">
+            {editing ? "Edit shipment" : "Hand to courier"}
+          </h3>
+          <p className="text-[12.5px] text-stone-500 mt-0.5">
+            {editing
+              ? "Update the courier or tracking ID for this parcel."
+              : "Pick the courier and enter the consignment / tracking ID. The buyer can track it from their order page."}
+          </p>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3.5">
+          <label className="block">
+            <span className="text-[12.5px] font-semibold text-stone-700">
+              Courier
+            </span>
+            <select
+              value={courier}
+              onChange={(e) => setCourier(e.target.value)}
+              className="mt-1 w-full h-11 px-3 border border-stone-300 rounded-[9px] text-sm text-stone-900 bg-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+            >
+              <option value="" disabled>
+                Select a courier…
+              </option>
+              {COURIERS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-[12.5px] font-semibold text-stone-700">
+              Tracking / consignment ID{" "}
+              <span className="font-normal text-stone-400">(optional)</span>
+            </span>
+            <input
+              value={tracking}
+              onChange={(e) => setTracking(e.target.value)}
+              placeholder="e.g. 15A2B3C4"
+              className="mt-1 w-full h-11 px-3 border border-stone-300 rounded-[9px] text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+            />
+          </label>
+        </div>
+        <div className="px-5 py-4 border-t border-stone-100 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[42px] px-4 rounded-[9px] border border-stone-300 bg-white text-stone-800 text-sm font-medium hover:bg-stone-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!courier || saving}
+            className="h-[42px] px-5 rounded-[9px] bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Saving…" : editing ? "Save shipment" : "Mark as shipped"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Action-bar hint ──────────────────────────────────────────── */
 
 function NextStepHint({
@@ -1126,9 +1355,15 @@ function pickTemplates(
   status: string,
   advanceRequired: boolean,
   advanceReceived: boolean,
-  vars: { name: string; shortId: string; total: string },
+  vars: {
+    name: string;
+    shortId: string;
+    total: string;
+    courier?: string;
+    tracking?: string;
+  },
 ): { label: string; body: string }[] {
-  const { name, shortId, total } = vars;
+  const { name, shortId, total, courier, tracking } = vars;
   const out: { label: string; body: string }[] = [];
 
   if (status === "pending") {
@@ -1148,9 +1383,11 @@ function pickTemplates(
       body: `Hello ${name}, your order ${shortId} (${total}) is confirmed. We will hand it over to the courier soon and share an update. Thank you!`,
     });
   } else if (status === "shipped") {
+    const via = courier ? ` via ${courier}` : "";
+    const track = tracking ? ` Your tracking ID is ${tracking}.` : "";
     out.push({
       label: "Out for delivery",
-      body: `Hello ${name}, your order ${shortId} (${total}) is now with the courier. Please keep ${total} ready for cash on delivery. The rider may call before arriving. Thank you!`,
+      body: `Hello ${name}, your order ${shortId} (${total}) is now with the courier${via}.${track} Please keep ${total} ready for cash on delivery. The rider may call before arriving. Thank you!`,
     });
     out.push({
       label: "Couldn't reach you",

@@ -47,6 +47,8 @@ type OrderDTO struct {
 	DeliveryChargeBDT         string         `json:"delivery_charge_bdt"`
 	TotalBDT                  string         `json:"total_bdt"`
 	Status                    string         `json:"status"`
+	CourierName               string         `json:"courier_name,omitempty"`
+	TrackingID                string         `json:"tracking_id,omitempty"`
 	AdvancePaymentRequired    bool           `json:"advance_payment_required"`
 	AdvancePaymentReceived    bool           `json:"advance_payment_received"`
 	AdvancePaymentMethodID    *string        `json:"advance_payment_method_id,omitempty"`
@@ -71,6 +73,12 @@ type MarketplaceOrderDTO struct {
 type UpdateOrderStatusRequest struct {
 	Status             string `json:"status"`
 	CancellationReason string `json:"cancellation_reason"`
+}
+
+// ShipOrderRequest is the body for POST /api/shops/me/orders/{id}/ship.
+type ShipOrderRequest struct {
+	CourierName string `json:"courier_name"`
+	TrackingID  string `json:"tracking_id"`
 }
 
 // BuyerCancelRequest is the body for POST /api/shops/by-slug/{slug}/orders/{id}/cancel.
