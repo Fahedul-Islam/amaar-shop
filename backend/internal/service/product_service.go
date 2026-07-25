@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -17,6 +18,7 @@ type CreateProductInput struct {
 	Name                  string
 	Description           string
 	PriceBDT              string
+	CostPriceBDT          *string
 	Stock                 int
 	CategoryID            *string
 	IsActive              bool
@@ -32,6 +34,8 @@ type UpdateProductInput struct {
 	Name                  *string
 	Description           *string
 	PriceBDT              *string
+	CostPriceBDT          *string
+	ClearCostPrice        bool
 	Stock                 *int
 	CategoryID            *string
 	ClearCategory         bool
@@ -120,8 +124,38 @@ func validateProductFields(name, priceBDT string, stock int) error {
 	return nil
 }
 
+// validateCostPrice accepts nil/blank (cost not tracked) but rejects
+// non-numeric or negative values.
+func validateCostPrice(cost *string) error {
+	if cost == nil || strings.TrimSpace(*cost) == "" {
+		return nil
+	}
+	v, err := strconv.ParseFloat(strings.TrimSpace(*cost), 64)
+	if err != nil || v < 0 {
+		return domain.ErrInvalidCostPrice
+	}
+	return nil
+}
+
+// normalizeCostPrice turns a blank cost into nil so the column stores NULL
+// ("not tracked") rather than 0.00 ("free"), which the profit report
+// distinguishes.
+func normalizeCostPrice(cost *string) *string {
+	if cost == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*cost)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func (s *ProductService) CreateProduct(ctx context.Context, ownerUserID string, in CreateProductInput) (*domain.Product, error) {
 	if err := validateProductFields(in.Name, in.PriceBDT, in.Stock); err != nil {
+		return nil, err
+	}
+	if err := validateCostPrice(in.CostPriceBDT); err != nil {
 		return nil, err
 	}
 	shop, err := s.resolveShop(ctx, ownerUserID)
@@ -151,6 +185,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, ownerUserID string, 
 		Name:                  in.Name,
 		Description:           in.Description,
 		PriceBDT:              in.PriceBDT,
+		CostPriceBDT:          normalizeCostPrice(in.CostPriceBDT),
 		Stock:                 in.Stock,
 		IsActive:              in.IsActive,
 		DiscountType:          in.DiscountType,
@@ -182,6 +217,14 @@ func (s *ProductService) UpdateProduct(ctx context.Context, ownerUserID, product
 	}
 	if in.PriceBDT != nil {
 		p.PriceBDT = *in.PriceBDT
+	}
+	if in.ClearCostPrice {
+		p.CostPriceBDT = nil
+	} else if in.CostPriceBDT != nil {
+		if err := validateCostPrice(in.CostPriceBDT); err != nil {
+			return nil, err
+		}
+		p.CostPriceBDT = normalizeCostPrice(in.CostPriceBDT)
 	}
 	if in.Stock != nil {
 		p.Stock = *in.Stock

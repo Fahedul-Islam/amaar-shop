@@ -11,8 +11,10 @@ import {
 interface Props {
   value: DateRange;
   onChange: (next: DateRange) => void;
-  compare: boolean;
-  onCompareChange: (next: boolean) => void;
+  // Optional: pages without a comparison mode (e.g. Profit & Ads) omit both
+  // and the compare toggle is hidden rather than rendered inert.
+  compare?: boolean;
+  onCompareChange?: (next: boolean) => void;
 }
 
 const PRESETS: DateRangePreset[] = [
@@ -133,15 +135,17 @@ export function DateRangePicker({ value, onChange, compare, onCompareChange }: P
             </div>
           )}
 
-          <label className="flex items-center gap-2 mt-3 pt-3 border-t border-stone-100 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={compare}
-              onChange={(e) => onCompareChange(e.target.checked)}
-              className="h-3.5 w-3.5 accent-teal-600"
-            />
-            <span className="text-xs text-stone-700">Compare with previous period</span>
-          </label>
+          {onCompareChange && (
+            <label className="flex items-center gap-2 mt-3 pt-3 border-t border-stone-100 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!compare}
+                onChange={(e) => onCompareChange(e.target.checked)}
+                className="h-3.5 w-3.5 accent-teal-600"
+              />
+              <span className="text-xs text-stone-700">Compare with previous period</span>
+            </label>
+          )}
         </div>
       )}
     </div>

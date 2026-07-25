@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -72,6 +73,16 @@ var validTransitions = map[string][]string{
 	"cancelled": {"pending"},
 }
 
+// OrderEventPublisher receives order lifecycle events for downstream
+// integrations (currently Meta conversion tracking). It is optional: when nil
+// the order flow behaves exactly as before.
+//
+// Implementations must be non-blocking and must never return an error that
+// affects the order — a tracking failure is not a checkout failure.
+type OrderEventPublisher interface {
+	PublishOrderEvent(ctx context.Context, order *domain.Order, eventName string) error
+}
+
 // OrderService orchestrates order placement: price look-up, delivery charge
 // calculation, COD/advance-payment checks, and transactional stock decrement.
 type OrderService struct {
@@ -81,6 +92,31 @@ type OrderService struct {
 	orders   repository.OrderRepository
 	methods  repository.PaymentMethodRepository
 	reserves repository.CartReservationRepository
+
+	events OrderEventPublisher
+	log    *slog.Logger
+}
+
+// SetEventPublisher attaches a lifecycle event publisher. Kept out of the
+// constructor so existing callers and tests are unaffected.
+func (s *OrderService) SetEventPublisher(p OrderEventPublisher, log *slog.Logger) {
+	s.events = p
+	if log == nil {
+		log = slog.Default()
+	}
+	s.log = log
+}
+
+// publish reports a lifecycle event, swallowing (but logging) any failure.
+// Conversion tracking must never break an order.
+func (s *OrderService) publish(ctx context.Context, order *domain.Order, eventName string) {
+	if s.events == nil || order == nil {
+		return
+	}
+	if err := s.events.PublishOrderEvent(ctx, order, eventName); err != nil && s.log != nil {
+		s.log.Error("publish order event failed",
+			"event", eventName, "order_id", order.ID, "error", err)
+	}
 }
 
 func NewOrderService(
@@ -197,8 +233,11 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 			ProductID:            p.ID,
 			ProductNameSnapshot:  p.Name,
 			UnitPriceSnapshotBDT: p.PriceBDT,
-			Quantity:             item.Quantity,
-			LineTotalBDT:         fmt.Sprintf("%.2f", lineTotal),
+			// Freeze supplier cost so profit reporting on this order stays
+			// accurate even if the product's cost changes later.
+			UnitCostSnapshotBDT: p.CostPriceBDT,
+			Quantity:            item.Quantity,
+			LineTotalBDT:        fmt.Sprintf("%.2f", lineTotal),
 		})
 	}
 
@@ -266,6 +305,9 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		return nil, err
 	}
 
+	// Tell Meta a purchase happened so ad targeting learns from it.
+	s.publish(ctx, order, "Purchase")
+
 	return order, nil
 }
 
@@ -329,6 +371,13 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, ownerID, orderID, 
 	}
 	if err := s.orders.LoadItems(ctx, order); err != nil {
 		return nil, err
+	}
+
+	// The delivered event is the one worth optimising ads against under cash
+	// on delivery: it represents a parcel the buyer actually accepted and paid
+	// for, not merely an order they placed.
+	if newStatus == domain.Delivered {
+		s.publish(ctx, order, "OrderDelivered")
 	}
 	return order, nil
 }

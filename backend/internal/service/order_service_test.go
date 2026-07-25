@@ -61,6 +61,14 @@ func (m *mockOrderRepo) OrderByIDForShopOwner(_ context.Context, ownerUserID, or
 	return o, nil
 }
 
+func (m *mockOrderRepo) OrderByID(_ context.Context, orderID string) (*domain.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return nil, domain.ErrOrderNotFound
+	}
+	return o, nil
+}
+
 func (m *mockOrderRepo) UpdateOrderStatusForShopOwner(_ context.Context, ownerUserID, orderID, status string, cancelledReason *string) (*domain.Order, error) {
 	o, ok := m.orders[orderID]
 	if !ok {

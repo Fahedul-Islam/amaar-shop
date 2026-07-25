@@ -79,6 +79,14 @@ var domainErrorMap = []struct {
 	{domain.ErrCancellationReasonRequired, http.StatusBadRequest, "validation_error"},
 	{domain.ErrCourierNameRequired, http.StatusBadRequest, "validation_error"},
 	{domain.ErrCourierNotConfigured, http.StatusUnprocessableEntity, "courier_not_configured"},
+	// Marketing / unit economics
+	{domain.ErrInvalidAdPlatform, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidAdAmount, http.StatusBadRequest, "validation_error"},
+	{domain.ErrInvalidSpendDate, http.StatusBadRequest, "validation_error"},
+	{domain.ErrAdSpendNotFound, http.StatusNotFound, "not_found"},
+	{domain.ErrInvalidCostPrice, http.StatusBadRequest, "validation_error"},
+	{domain.ErrMetaNotConfigured, http.StatusUnprocessableEntity, "meta_not_configured"},
+	{domain.ErrInvalidPixelID, http.StatusBadRequest, "validation_error"},
 	{domain.ErrAdvancePaymentRequired, http.StatusUnprocessableEntity, "advance_payment_required"},
 	{domain.ErrOrderLocked, http.StatusUnprocessableEntity, "order_locked"},
 	// Cart reservations

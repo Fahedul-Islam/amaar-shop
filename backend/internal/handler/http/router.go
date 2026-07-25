@@ -17,7 +17,9 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/metatracking"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
@@ -43,7 +45,9 @@ type RouterDeps struct {
 	PaymentMethodHandler *paymentmethod.Handler
 	ReservationHandler   *reservation.Handler
 	AnalyticsHandler   *analytics.Handler
+	MarketingHandler   *marketing.Handler
 	MarketplaceHandler *marketplace.Handler
+	MetaHandler        *metatracking.Handler
 	ReviewHandler      *review.Handler
 	VisitHandler       *visit.Handler
 	CustomerHandler    *customer.Handler
@@ -72,7 +76,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.PaymentMethodHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.ReservationHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.AnalyticsHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.MarketingHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.MarketplaceHandler.RegisterRoutes(mux)
+	deps.MetaHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.ReviewHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.VisitHandler.RegisterRoutes(mux)
 	deps.CustomerHandler.RegisterRoutes(mux, deps.Middleware)

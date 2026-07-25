@@ -13,6 +13,7 @@ import (
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	"github.com/fhedul/amaarshop/backend/internal/courier"
+	"github.com/fhedul/amaarshop/backend/internal/meta"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
@@ -21,7 +22,9 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	courierhandler "github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
+	marketinghandler "github.com/fhedul/amaarshop/backend/internal/handler/http/marketing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/metatracking"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
@@ -49,6 +52,8 @@ type App struct {
 	VisitWorker        *visit.Worker
 	VisitAggregator    *visit.Aggregator
 	ReservationSweeper *service.ReservationSweeper
+	AdSpendFiller      *service.AdSpendFiller
+	MetaDispatcher     *service.MetaDispatcher
 }
 
 // New builds the full dependency graph from config and returns a ready App.
@@ -93,6 +98,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	paymentMethodRepo := postgres.NewPaymentMethodRepo(db)
 	cartReservationRepo := postgres.NewCartReservationRepo(db)
 	courierSettingsRepo := postgres.NewCourierSettingsRepo(db)
+	marketingRepo := postgres.NewMarketingRepo(db)
+	metaRepo := postgres.NewMetaRepo(db)
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -105,6 +112,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
 	cartReservationSvc := service.NewCartReservationService(shopRepo, productRepo, cartReservationRepo)
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
+	marketingSvc := service.NewMarketingService(shopRepo, marketingRepo)
+	metaSvc := service.NewMetaService(shopRepo, orderRepo, metaRepo)
+
+	// Order lifecycle events feed Meta conversion tracking. Attached after
+	// construction so the order service stays usable without it.
+	orderSvc.SetEventPublisher(metaSvc, log)
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
@@ -142,6 +155,18 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	reservationSweeper := service.NewReservationSweeper(cartReservationRepo, log, time.Minute)
 	reservationSweeper.Start()
 
+	// Turns each shop's recurring daily ad budget into spend rows. Hourly and
+	// idempotent, so a shop enabling a budget mid-day is covered promptly and a
+	// restart catches up missed days.
+	adSpendFiller := service.NewAdSpendFiller(marketingRepo, log, time.Hour)
+	adSpendFiller.Start()
+
+	// Delivers queued Meta conversions out-of-band, so checkout never waits on
+	// (or fails because of) the Graph API.
+	metaClient := meta.NewClient(nil, cfg.MetaGraphBaseURL)
+	metaDispatcher := service.NewMetaDispatcher(metaRepo, orderRepo, metaClient, log, 30*time.Second)
+	metaDispatcher.Start()
+
 	// --- Handlers (depend only on service interfaces) ---
 	authHandler := auth.NewHandler(authSvc, cfg)
 	shopHandler := shop.NewHandler(shopSvc, cfg)
@@ -152,6 +177,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	paymentMethodHandler := paymentmethod.NewHandler(paymentMethodSvc, cfg)
 	reservationHandler := reservation.NewHandler(cartReservationSvc, cfg)
 	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
+	marketingHandler := marketinghandler.NewHandler(marketingSvc, cfg)
+	metaHandler := metatracking.NewHandler(metaSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
 	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
@@ -174,7 +201,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		PaymentMethodHandler: paymentMethodHandler,
 		ReservationHandler:   reservationHandler,
 		AnalyticsHandler:   analyticsHandler,
+		MarketingHandler:   marketingHandler,
 		MarketplaceHandler: marketplaceHandler,
+		MetaHandler:        metaHandler,
 		ReviewHandler:      reviewHandler,
 		VisitHandler:       visitHandler,
 		CustomerHandler:    customerHandler,
@@ -192,11 +221,19 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		VisitWorker:        visitWorker,
 		VisitAggregator:    visitAggregator,
 		ReservationSweeper: reservationSweeper,
+		AdSpendFiller:      adSpendFiller,
+		MetaDispatcher:     metaDispatcher,
 	}, nil
 }
 
 // Close shuts down background workers (draining in-flight visits) and the DB.
 func (a *App) Close() error {
+	if a.MetaDispatcher != nil {
+		a.MetaDispatcher.Stop()
+	}
+	if a.AdSpendFiller != nil {
+		a.AdSpendFiller.Stop()
+	}
 	if a.ReservationSweeper != nil {
 		a.ReservationSweeper.Stop()
 	}

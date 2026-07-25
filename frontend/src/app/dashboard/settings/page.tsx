@@ -25,6 +25,7 @@ import {
   getDeliverySettings,
 } from '@/lib/shopApi';
 import { getCourierSettings, updateCourierSettings } from '@/lib/courierApi';
+import { getMetaSettings, updateMetaSettings } from '@/lib/trackingApi';
 import { ApiRequestError } from '@/lib/api';
 import type { ReactNode } from 'react';
 
@@ -376,6 +377,9 @@ export default function ShopSettingsPage() {
 
           {/* Courier */}
           <CourierSettingsSection />
+
+          {/* Meta conversion tracking */}
+          <MetaTrackingSection />
         </div>
 
         {/* SIDEBAR */}
@@ -606,6 +610,167 @@ function CourierSettingsSection() {
         <div className="flex justify-end pt-1">
           <Button type="submit" variant="primary" disabled={saving}>
             {saving ? 'Saving…' : 'Save courier settings'}
+          </Button>
+        </div>
+      </form>
+    </SettingsSection>
+  );
+}
+
+/* ── Meta conversion tracking ────────────────────────────────── */
+
+function MetaTrackingSection() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ['meta-settings'],
+    queryFn: getMetaSettings,
+  });
+  const [pixelId, setPixelId] = useState('');
+  const [token, setToken] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [trackDelivered, setTrackDelivered] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setEnabled(settings.enabled);
+      setTrackDelivered(settings.track_delivered);
+    }
+  }, [settings]);
+
+  const configured = !!settings?.configured;
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await updateMetaSettings({
+        pixel_id: pixelId.trim(),
+        access_token: token.trim(),
+        enabled,
+        track_delivered: trackDelivered,
+      });
+      setPixelId('');
+      setToken('');
+      qc.invalidateQueries({ queryKey: ['meta-settings'] });
+      setMsg('Meta tracking settings saved.');
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingsSection
+      icon={<IcFacebook size={18} />}
+      iconColor="blue"
+      title="Facebook ad tracking"
+      subtitle="Tell Meta which orders actually turned into money, so your ads find more buyers like them."
+      badge={
+        configured ? (
+          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-teal-800 bg-teal-100 px-2 py-1 rounded-full">
+            <IcCheck size={11} /> Connected
+          </span>
+        ) : (
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-500 bg-stone-100 px-2 py-1 rounded-full">
+            Optional
+          </span>
+        )
+      }
+    >
+      <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 mb-5">
+        <p className="text-[13px] text-blue-900 leading-relaxed">
+          Find both values in{' '}
+          <strong className="font-semibold">
+            Meta Events Manager → your dataset → Settings
+          </strong>
+          . Copy the <strong className="font-semibold">Dataset (Pixel) ID</strong>, then scroll to
+          Conversions API and press <strong className="font-semibold">Generate access token</strong>.
+        </p>
+      </div>
+
+      <form onSubmit={save} className="grid gap-5">
+        <FieldRow
+          label="Pixel / Dataset ID"
+          hint={configured ? 'Leave blank to keep the saved ID.' : undefined}
+        >
+          <PrettyInput
+            value={pixelId}
+            onChange={(e) => setPixelId(e.target.value)}
+            placeholder={configured ? '•••••••• (saved)' : 'e.g. 1234567890123456'}
+            autoComplete="off"
+            inputMode="numeric"
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="Conversions API access token"
+          hint={configured ? 'Leave blank to keep the saved token.' : undefined}
+        >
+          <PrettyInput
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={configured ? '•••••••• (saved)' : 'Paste the generated token'}
+            autoComplete="off"
+          />
+        </FieldRow>
+
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+          />
+          <span className="text-sm text-stone-800">
+            Send conversions to Meta
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-teal-100 bg-teal-50/50 px-3.5 py-3">
+          <input
+            type="checkbox"
+            checked={trackDelivered}
+            onChange={(e) => setTrackDelivered(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+          />
+          <span className="text-sm text-stone-800">
+            <strong className="font-semibold">Also report deliveries</strong> — recommended
+            <span className="block text-xs text-stone-600 mt-0.5 leading-relaxed">
+              Cash on delivery means an order isn&rsquo;t money until the buyer accepts it.
+              Reporting deliveries teaches Meta to find people who actually take the parcel,
+              instead of ones who refuse it at the door.
+            </span>
+          </span>
+        </label>
+
+        {error && (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {error}
+          </div>
+        )}
+        {msg && (
+          <div className="text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-teal-500 text-white grid place-items-center flex-shrink-0">
+              <IcCheck size={12} />
+            </span>
+            {msg}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+          <p className="text-xs text-stone-500 max-w-sm">
+            Customer phone and name are encrypted (hashed) before sending — Meta never
+            receives readable customer details.
+          </p>
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save tracking settings'}
           </Button>
         </div>
       </form>

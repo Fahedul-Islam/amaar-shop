@@ -50,6 +50,7 @@ func toProductDTO(p *domain.Product) dto.ProductDTO {
 		Name:                  p.Name,
 		Description:           p.Description,
 		PriceBDT:              p.PriceBDT,
+		CostPriceBDT:          p.CostPriceBDT,
 		Stock:                 p.Stock,
 		IsActive:              p.IsActive,
 		IsArchived:            p.IsArchived,

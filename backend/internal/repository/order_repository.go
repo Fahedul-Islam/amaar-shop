@@ -27,6 +27,11 @@ type OrderRepository interface {
 	// OrderByIDForShopOwner returns the order with the given ID if it belongs to the shop owned by ownerUserID.
 	OrderByIDForShopOwner(ctx context.Context, ownerUserID, orderID string) (*domain.Order, error)
 
+	// OrderByID returns an order without any ownership scoping. Reserved for
+	// background jobs that already hold a trusted order ID (e.g. the Meta
+	// conversions dispatcher); never call it from a request handler.
+	OrderByID(ctx context.Context, orderID string) (*domain.Order, error)
+
 	// UpdateOrderStatusForShopOwner updates the status (and optional cancellation reason)
 	// of the order if it belongs to the shop owned by ownerUserID.
 	// If the new status is "cancelled", stock is restored in the same transaction.

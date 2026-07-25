@@ -73,6 +73,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Name:                  req.Name,
 		Description:           req.Description,
 		PriceBDT:              req.PriceBDT,
+		CostPriceBDT:          req.CostPriceBDT,
 		Stock:                 req.Stock,
 		CategoryID:            req.CategoryID,
 		IsActive:              isActive,
@@ -145,6 +146,24 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		s = strings.TrimSpace(s)
 		in.PriceBDT = &s
+	}
+	// A null cost_price_bdt clears the cost; omitting it leaves it unchanged.
+	if v, ok := raw["cost_price_bdt"]; ok {
+		if string(v) == "null" {
+			in.ClearCostPrice = true
+		} else {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				httputil.WriteValidationError(w, "cost_price_bdt must be a string")
+				return
+			}
+			s = strings.TrimSpace(s)
+			if s == "" {
+				in.ClearCostPrice = true
+			} else {
+				in.CostPriceBDT = &s
+			}
+		}
 	}
 	if v, ok := raw["stock"]; ok {
 		var n int

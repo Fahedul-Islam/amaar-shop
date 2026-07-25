@@ -22,6 +22,8 @@ export interface Product {
   name: string;
   description: string;
   price_bdt: string;
+  /** Seller-only buying price. Null when not tracked. Never exposed publicly. */
+  cost_price_bdt: string | null;
   stock: number;
   is_active: boolean;
   is_archived: boolean;
@@ -84,6 +86,8 @@ export interface CreateProductInput {
   name: string;
   description?: string;
   price_bdt: string;
+  /** Buying price per unit. Send null to clear it. */
+  cost_price_bdt?: string | null;
   stock: number;
   category_id?: string | null;
   is_active?: boolean;

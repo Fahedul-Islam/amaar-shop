@@ -31,6 +31,7 @@ type CreateProductRequest struct {
 	Name                  string  `json:"name"`
 	Description           string  `json:"description"`
 	PriceBDT              string  `json:"price_bdt"`
+	CostPriceBDT          *string `json:"cost_price_bdt"`
 	Stock                 int     `json:"stock"`
 	CategoryID            *string `json:"category_id"`
 	IsActive              *bool   `json:"is_active"`
@@ -43,10 +44,11 @@ type CreateProductRequest struct {
 // UpdateProductRequest mirrors CreateProductRequest but every field is optional.
 // A null CategoryID clears the category; omitting the field leaves it unchanged.
 type UpdateProductRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	PriceBDT    *string `json:"price_bdt"`
-	Stock       *int    `json:"stock"`
+	Name         *string `json:"name"`
+	Description  *string `json:"description"`
+	PriceBDT     *string `json:"price_bdt"`
+	CostPriceBDT *string `json:"cost_price_bdt"`
+	Stock        *int    `json:"stock"`
 	// CategoryID uses a custom hasCategoryID marker in the handler because
 	// encoding/json cannot distinguish null from omitted for pointer fields.
 	CategoryID *string `json:"category_id"`
@@ -72,6 +74,9 @@ type ProductDTO struct {
 	Name                  string            `json:"name"`
 	Description           string            `json:"description"`
 	PriceBDT              string            `json:"price_bdt"`
+	// CostPriceBDT is seller-only — it is deliberately absent from
+	// PublicProductDTO so buyers never see the shop's margin.
+	CostPriceBDT          *string           `json:"cost_price_bdt"`
 	Stock                 int               `json:"stock"`
 	IsActive              bool              `json:"is_active"`
 	IsArchived            bool              `json:"is_archived"`

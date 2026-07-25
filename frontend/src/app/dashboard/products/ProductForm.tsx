@@ -59,6 +59,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [costPrice, setCostPrice] = useState('');
   const [stock, setStock] = useState('1');
   const [categoryId, setCategoryId] = useState<string>('');
   const [isActive, setIsActive] = useState(true);
@@ -75,6 +76,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
       setName(product.name);
       setDescription(product.description);
       setPrice(product.price_bdt);
+      setCostPrice(product.cost_price_bdt ?? '');
       setStock(String(product.stock));
       setCategoryId(product.category_id ?? '');
       setIsActive(product.is_active);
@@ -113,6 +115,8 @@ export default function ProductFormPage({ mode, productId }: Props) {
       name: name.trim(),
       description: description.trim(),
       price_bdt: price,
+      // Blank clears the stored cost (null), rather than saving 0.
+      cost_price_bdt: costPrice.trim() === '' ? null : costPrice.trim(),
       stock: parseInt(stock, 10) || 0,
       category_id: categoryId || null,
       is_active: isActive,
@@ -232,6 +236,21 @@ export default function ProductFormPage({ mode, productId }: Props) {
               <Input name="price" label="Price (৳)" value={price} onChange={(e) => setPrice(e.target.value)} required />
               <Input name="stock" label="Stock" value={stock} onChange={(e) => setStock(e.target.value)} required />
             </div>
+            <div className="grid gap-3.5 md:grid-cols-2">
+              <div>
+                <Input
+                  name="cost_price"
+                  label="Buying price (৳)"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(e.target.value)}
+                  placeholder="Optional"
+                />
+                <p className="text-xs text-stone-500 mt-1">
+                  What you pay your supplier. Only you see this — it powers your profit &amp; ad reports.
+                </p>
+              </div>
+              <MarginPreview price={price} cost={costPrice} />
+            </div>
           </Card>
 
           <Card className="p-5 grid gap-3.5" hover={false}>
@@ -348,6 +367,59 @@ export default function ProductFormPage({ mode, productId }: Props) {
           )}
         </div>
       </form>
+    </div>
+  );
+}
+
+// MarginPreview gives instant feedback while typing: profit per unit and
+// margin %, plus the break-even ROAS the seller's ads must beat at that margin.
+function MarginPreview({ price, cost }: { price: string; cost: string }) {
+  const p = parseFloat(price);
+  const c = parseFloat(cost);
+  const valid = Number.isFinite(p) && Number.isFinite(c) && p > 0 && c >= 0;
+  if (!valid) {
+    return (
+      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3.5 py-3 text-xs text-stone-500 self-start">
+        Add a buying price to see your profit per unit and the ad ROAS you need
+        to break even.
+      </div>
+    );
+  }
+  const profit = p - c;
+  const marginPct = (profit / p) * 100;
+  const loss = profit <= 0;
+  return (
+    <div
+      className={`rounded-lg border px-3.5 py-3 self-start ${
+        loss
+          ? 'border-red-200 bg-red-50'
+          : 'border-teal-100 bg-teal-50'
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-stone-600">Profit / unit</span>
+        <span
+          className={`text-lg font-bold ${loss ? 'text-red-700' : 'text-teal-800'}`}
+        >
+          ৳{profit.toFixed(2)}
+        </span>
+      </div>
+      <div className="flex items-baseline justify-between gap-2 mt-0.5">
+        <span className="text-xs font-medium text-stone-600">Margin</span>
+        <span className={`text-xs font-semibold ${loss ? 'text-red-700' : 'text-teal-800'}`}>
+          {marginPct.toFixed(1)}%
+        </span>
+      </div>
+      {loss ? (
+        <p className="text-[11px] text-red-700 mt-1.5 leading-snug">
+          You lose money on every sale at this price.
+        </p>
+      ) : (
+        <p className="text-[11px] text-teal-800 mt-1.5 leading-snug">
+          Ads must return at least{' '}
+          <strong>{(p / profit).toFixed(2)}x</strong> (break-even ROAS).
+        </p>
+      )}
     </div>
   );
 }

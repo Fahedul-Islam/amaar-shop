@@ -152,41 +152,8 @@ func toMarketplaceShopDTO(s *domain.Shop) dto.MarketplaceShopDTO {
 	return d
 }
 
-func toOrderDTO(o *domain.Order) dto.OrderDTO {
-	items := make([]dto.OrderItemDTO, 0, len(o.Items))
-	for _, it := range o.Items {
-		items = append(items, dto.OrderItemDTO{
-			ID:                   it.ID,
-			ProductID:            it.ProductID,
-			ProductNameSnapshot:  it.ProductNameSnapshot,
-			UnitPriceSnapshotBDT: it.UnitPriceSnapshotBDT,
-			Quantity:             it.Quantity,
-			LineTotalBDT:         it.LineTotalBDT,
-		})
-	}
-	return dto.OrderDTO{
-		ID:                     o.ID,
-		ShopID:                 o.ShopID,
-		CustomerName:           o.CustomerName,
-		CustomerPhone:          o.CustomerPhone,
-		DeliveryAddress:        o.DeliveryAddress,
-		DeliveryDivision:       o.DeliveryDivision,
-		DeliveryDistrict:       o.DeliveryDistrict,
-		Note:                   o.Note,
-		SubtotalBDT:            o.SubtotalBDT,
-		DeliveryChargeBDT:      o.DeliveryChargeBDT,
-		TotalBDT:               o.TotalBDT,
-		Status:                 o.Status,
-		CourierName:            o.CourierName,
-		TrackingID:             o.TrackingID,
-		AdvancePaymentRequired: o.AdvancePaymentRequired,
-		AdvancePaymentReceived: o.AdvancePaymentReceived,
-		CancelledReason:        o.CancelledReason,
-		Items:                  items,
-		CreatedAt:              o.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:              o.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-	}
-}
+// toOrderDTO delegates to the shared mapper (see dto.ToOrderDTO).
+func toOrderDTO(o *domain.Order) dto.OrderDTO { return dto.ToOrderDTO(o) }
 
 func parsePagination(pageStr, sizeStr string) (page, size int) {
 	page = 1

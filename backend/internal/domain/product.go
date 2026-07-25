@@ -17,6 +17,9 @@ type Product struct {
 	Name                  string         `json:"name"`
 	Description           string         `json:"description"`
 	PriceBDT              string         `json:"price_bdt"`
+	// CostPriceBDT is what the seller pays their supplier per unit. Nil means
+	// "not entered", which profit reporting flags rather than treating as free.
+	CostPriceBDT          *string        `json:"cost_price_bdt"`
 	Stock                 int            `json:"stock"`
 	IsActive              bool           `json:"is_active"`
 	IsArchived            bool           `json:"is_archived"`

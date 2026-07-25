@@ -49,6 +49,10 @@ type OrderItem struct {
 	ProductID            string `json:"product_id"`
 	ProductNameSnapshot  string `json:"product_name_snapshot"`
 	UnitPriceSnapshotBDT string `json:"unit_price_snapshot_bdt"`
+	// UnitCostSnapshotBDT freezes the supplier cost at order time so later
+	// cost edits don't rewrite the profit of past orders. Nil when the product
+	// had no cost price recorded.
+	UnitCostSnapshotBDT *string `json:"unit_cost_snapshot_bdt,omitempty"`
 	Quantity             int    `json:"quantity"`
 	LineTotalBDT         string `json:"line_total_bdt"`
 }

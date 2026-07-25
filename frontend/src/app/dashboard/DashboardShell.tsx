@@ -20,6 +20,7 @@ const nav = [
   { href: '/dashboard/customers', label: 'Customers', Icon: IcUser },
   { href: '/dashboard/reviews', label: 'Reviews', Icon: IcHeart },
   { href: '/dashboard/analytics', label: 'Analytics', Icon: IcChart },
+  { href: '/dashboard/marketing', label: 'Profit & Ads', Icon: IcBanknote },
   { href: '/dashboard/billing', label: 'Billing', Icon: IcBanknote },
   { href: '/dashboard/facebook', label: 'Facebook', Icon: IcFacebook },
   { href: '/dashboard/settings', label: 'Settings', Icon: IcSettings },

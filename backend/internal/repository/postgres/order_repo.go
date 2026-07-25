@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
@@ -204,11 +203,11 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 		err = tx.QueryRowContext(ctx,
 			`INSERT INTO order_items
 			   (order_id, product_id, product_name_snapshot,
-			    unit_price_snapshot_bdt, quantity, line_total_bdt)
-			 VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric)
+			    unit_price_snapshot_bdt, unit_cost_snapshot_bdt, quantity, line_total_bdt)
+			 VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6, $7::numeric)
 			 RETURNING id`,
 			order.ID, item.ProductID, item.ProductNameSnapshot,
-			item.UnitPriceSnapshotBDT, item.Quantity, item.LineTotalBDT,
+			item.UnitPriceSnapshotBDT, item.UnitCostSnapshotBDT, item.Quantity, item.LineTotalBDT,
 		).Scan(&item.ID)
 		if err != nil {
 			return fmt.Errorf("insert order item: %w", err)
@@ -278,10 +277,25 @@ func (r *orderRepo) OrderByIDForShopOwner(ctx context.Context, ownerUserID, orde
 	return o, nil
 }
 
+// OrderByID looks an order up by primary key with no tenant scoping. Only
+// background workers use it, and only with an ID they already got from our own
+// tables — request paths must use the owner-scoped variant.
+func (r *orderRepo) OrderByID(ctx context.Context, orderID string) (*domain.Order, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+orderColumns+` FROM orders o WHERE o.id = $1`, orderID)
+	o, err := scanOrder(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("query order by id: %w", err)
+	}
+	return o, nil
+}
+
 // UpdateOrderStatusForShopOwner updates order status. When cancelling,
 // stock is restored in the same transaction.
 func (r *orderRepo) UpdateOrderStatusForShopOwner(ctx context.Context, ownerUserID, orderID, status string, cancelledReason *string) (*domain.Order, error) {
-	log.Println(status)
 	if status == "cancelled" {
 		return r.cancelWithStockRestore(ctx, ownerUserID, orderID, cancelledReason)
 	}
@@ -584,7 +598,6 @@ func (r *orderRepo) UpdateBuyerEditableFields(ctx context.Context, shopID, order
 // FindByIDAndPhone returns an order for customer lookup (by shop + order ID + phone).
 // Accepts both full UUIDs and short prefixes (e.g. first 8 hex chars shown to customers).
 func (r *orderRepo) FindByIDAndPhone(ctx context.Context, shopID, orderID, customerPhone string) (*domain.Order, error) {
-	log.Printf("Finding order by shopID=%s, orderID=%s, customerPhone=%s", shopID, orderID, customerPhone)
 	row := r.db.QueryRowContext(ctx,
 		`SELECT `+orderColumns+`
 		 FROM orders o
@@ -621,7 +634,7 @@ func (r *orderRepo) LoadItems(ctx context.Context, orders ...*domain.Order) erro
 
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, order_id, product_id, product_name_snapshot,
-		        unit_price_snapshot_bdt, quantity, line_total_bdt
+		        unit_price_snapshot_bdt, unit_cost_snapshot_bdt::text, quantity, line_total_bdt
 		 FROM order_items
 		 WHERE order_id IN (`+strings.Join(ids, ",")+`)
 		 ORDER BY created_at`,
@@ -635,10 +648,14 @@ func (r *orderRepo) LoadItems(ctx context.Context, orders ...*domain.Order) erro
 	byOrder := make(map[string][]domain.OrderItem)
 	for rows.Next() {
 		var it domain.OrderItem
+		var unitCost sql.NullString
 		if err := rows.Scan(&it.ID, &it.OrderID, &it.ProductID,
-			&it.ProductNameSnapshot, &it.UnitPriceSnapshotBDT,
+			&it.ProductNameSnapshot, &it.UnitPriceSnapshotBDT, &unitCost,
 			&it.Quantity, &it.LineTotalBDT); err != nil {
 			return fmt.Errorf("scan order item: %w", err)
+		}
+		if unitCost.Valid {
+			it.UnitCostSnapshotBDT = &unitCost.String
 		}
 		byOrder[it.OrderID] = append(byOrder[it.OrderID], it)
 	}
