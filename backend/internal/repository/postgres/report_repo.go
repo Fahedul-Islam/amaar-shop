@@ -82,7 +82,7 @@ func (r *reportRepo) FindByID(ctx context.Context, id string) (*domain.AdminRepo
 	return out, nil
 }
 
-func (r *reportRepo) List(ctx context.Context, f repository.ReportListFilter) ([]domain.AdminReportRow, int, error) {
+func (r *reportRepo) List(ctx context.Context, f domain.ReportListFilter) ([]domain.AdminReportRow, int, error) {
 	conditions := []string{"1=1"}
 	args := []any{}
 	argN := 1

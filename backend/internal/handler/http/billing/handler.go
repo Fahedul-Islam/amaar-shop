@@ -15,7 +15,6 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
-	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // Service is the slice of BillingService methods this handler uses.
@@ -24,7 +23,7 @@ type Service interface {
 	SubmitPayment(ctx context.Context, ownerUserID string, in domain.CreateFeeSubmissionInput) (*domain.FeeSubmission, error)
 	MySubmissions(ctx context.Context, ownerUserID string, limit int) ([]domain.FeeSubmission, error)
 
-	ListSubmissions(ctx context.Context, f repository.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error)
+	ListSubmissions(ctx context.Context, f domain.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error)
 	SubmissionCounts(ctx context.Context) (map[string]int, error)
 	FindSubmission(ctx context.Context, id string) (*domain.AdminFeeSubmissionRow, error)
 	ApproveSubmission(ctx context.Context, in domain.ReviewFeeSubmissionInput) (*domain.AdminFeeSubmissionRow, error)
@@ -138,7 +137,7 @@ func (h *Handler) ListSubmissions(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
-	rows, total, err := h.svc.ListSubmissions(r.Context(), repository.FeeSubmissionListFilter{
+	rows, total, err := h.svc.ListSubmissions(r.Context(), domain.FeeSubmissionListFilter{
 		Status:   q.Get("status"),
 		ShopID:   q.Get("shop_id"),
 		Page:     page,

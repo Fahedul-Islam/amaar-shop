@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -312,7 +313,19 @@ func (m *mockCartReservationRepo) SweepExpired(_ context.Context) (int, error) {
 
 // --- Test helpers ---
 
-func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliveryRepo, *mockProductRepo, *mockOrderRepo) {
+// orderTestDeps exposes every mock behind an OrderService. Tests that only
+// need the common four keep using newTestOrderService below.
+type orderTestDeps struct {
+	svc      *OrderService
+	shops    *mockShopRepo
+	delivery *mockDeliveryRepo
+	products *mockProductRepo
+	orders   *mockOrderRepo
+	methods  *mockPaymentMethodRepo
+	reserves *mockCartReservationRepo
+}
+
+func newOrderTestDeps(t *testing.T) orderTestDeps {
 	t.Helper()
 	shopRepo := newMockShopRepo()
 	deliveryRepo := newMockDeliveryRepo()
@@ -320,8 +333,21 @@ func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliv
 	orderRepo := newMockOrderRepo()
 	pmRepo := newMockPaymentMethodRepo()
 	resRepo := newMockCartReservationRepo()
-	svc := NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo, pmRepo, resRepo)
-	return svc, shopRepo, deliveryRepo, prodRepo, orderRepo
+	return orderTestDeps{
+		svc:      NewOrderService(shopRepo, deliveryRepo, prodRepo, orderRepo, pmRepo, resRepo),
+		shops:    shopRepo,
+		delivery: deliveryRepo,
+		products: prodRepo,
+		orders:   orderRepo,
+		methods:  pmRepo,
+		reserves: resRepo,
+	}
+}
+
+func newTestOrderService(t *testing.T) (*OrderService, *mockShopRepo, *mockDeliveryRepo, *mockProductRepo, *mockOrderRepo) {
+	t.Helper()
+	d := newOrderTestDeps(t)
+	return d.svc, d.shops, d.delivery, d.products, d.orders
 }
 
 func seedShopWithDelivery(t *testing.T, shopRepo *mockShopRepo, deliveryRepo *mockDeliveryRepo, ownerID, slug string) *domain.Shop {
@@ -840,5 +866,290 @@ func TestNormalizePhone(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("normalizePhone(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+// --- Tests: PlaceOrder delivery zones, advance payment, reservations -------
+//
+// These pin down the three PlaceOrder branches that had no coverage: the
+// per-division zone charge, the advance-payment proof gate, and consuming a
+// cart reservation.
+
+func TestPlaceOrder_ZoneChargeOverridesDefault(t *testing.T) {
+	d := newOrderTestDeps(t)
+	shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+	d.delivery.settings[shop.ID].DeliveryZones = []domain.DeliveryZone{
+		{Division: "Dhaka", DeliveryCharge: "60.00"},
+		{Division: "Chattogram", DeliveryCharge: "120.00"},
+	}
+	p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 10)
+
+	cases := []struct {
+		name     string
+		division string
+		want     string
+	}{
+		{"zone match", "Chattogram", "120.00"},
+		{"case-insensitive match", "chattogram", "120.00"},
+		{"surrounding whitespace trimmed", "  Chattogram  ", "120.00"},
+		{"division with no zone falls back to default", "Sylhet", "60.00"},
+		{"empty division falls back to default", "", "60.00"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			order, err := d.svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+				CustomerName:     "Test User",
+				CustomerPhone:    "01712345678",
+				DeliveryAddress:  "123 Street",
+				DeliveryDivision: tc.division,
+				Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if order.DeliveryChargeBDT != tc.want {
+				t.Errorf("delivery charge = %q, want %q", order.DeliveryChargeBDT, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlaceOrder_FreeDeliveryThresholdBeatsZoneCharge(t *testing.T) {
+	d := newOrderTestDeps(t)
+	shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+	d.delivery.settings[shop.ID].DeliveryZones = []domain.DeliveryZone{
+		{Division: "Chattogram", DeliveryCharge: "120.00"},
+	}
+	// Threshold seeded at 1000.00; this order clears it.
+	p := seedProduct(t, d.products, shop.ID, "Item", "1500.00", 10)
+
+	order, err := d.svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+		CustomerName:     "Test User",
+		CustomerPhone:    "01712345678",
+		DeliveryAddress:  "123 Street",
+		DeliveryDivision: "Chattogram",
+		Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if order.DeliveryChargeBDT != "0.00" {
+		t.Errorf("threshold must zero the zone charge, got %q", order.DeliveryChargeBDT)
+	}
+}
+
+// seedAdvancePayment turns on the advance-payment requirement and returns an
+// active payment method belonging to the shop.
+func seedAdvancePayment(t *testing.T, d orderTestDeps, shopID string) *domain.ShopPaymentMethod {
+	t.Helper()
+	d.delivery.settings[shopID].AdvancePaymentRequired = true
+	pm := &domain.ShopPaymentMethod{ShopID: shopID, MethodType: "mobile", IsActive: true}
+	if err := d.methods.Create(context.Background(), pm); err != nil {
+		t.Fatalf("seed payment method: %v", err)
+	}
+	return pm
+}
+
+func TestPlaceOrder_AdvancePaymentRequired(t *testing.T) {
+	d := newOrderTestDeps(t)
+	shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+	pm := seedAdvancePayment(t, d, shop.ID)
+	p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 10)
+
+	base := func() PlaceOrderInput {
+		return PlaceOrderInput{
+			CustomerName:     "Test User",
+			CustomerPhone:    "01712345678",
+			DeliveryAddress:  "123 Street",
+			DeliveryDivision: "Dhaka",
+			Items:            []OrderItemInput{{ProductID: p.ID, Quantity: 1}},
+		}
+	}
+
+	t.Run("all three proof fields required together", func(t *testing.T) {
+		for _, missing := range []string{"method", "txn", "receipt"} {
+			in := base()
+			in.AdvancePaymentMethodID, in.AdvancePaymentTxnRef, in.AdvancePaymentReceipt = pm.ID, "TXN1", "/uploads/r.jpg"
+			switch missing {
+			case "method":
+				in.AdvancePaymentMethodID = ""
+			case "txn":
+				in.AdvancePaymentTxnRef = ""
+			case "receipt":
+				in.AdvancePaymentReceipt = ""
+			}
+			if _, err := d.svc.PlaceOrder(context.Background(), "my-shop", in); err != domain.ErrAdvancePaymentRequired {
+				t.Errorf("missing %s: got %v, want ErrAdvancePaymentRequired", missing, err)
+			}
+		}
+	})
+
+	t.Run("method from another shop is rejected", func(t *testing.T) {
+		other := mustCreateShop(t, d.shops, "user-2", "other-shop")
+		foreign := &domain.ShopPaymentMethod{ShopID: other.ID, MethodType: "mobile", IsActive: true}
+		if err := d.methods.Create(context.Background(), foreign); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		in := base()
+		in.AdvancePaymentMethodID, in.AdvancePaymentTxnRef, in.AdvancePaymentReceipt = foreign.ID, "TXN1", "/uploads/r.jpg"
+		if _, err := d.svc.PlaceOrder(context.Background(), "my-shop", in); err != domain.ErrPaymentMethodNotInShop {
+			t.Errorf("got %v, want ErrPaymentMethodNotInShop", err)
+		}
+	})
+
+	t.Run("inactive method is rejected", func(t *testing.T) {
+		inactive := &domain.ShopPaymentMethod{ShopID: shop.ID, MethodType: "mobile", IsActive: false}
+		if err := d.methods.Create(context.Background(), inactive); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		in := base()
+		in.AdvancePaymentMethodID, in.AdvancePaymentTxnRef, in.AdvancePaymentReceipt = inactive.ID, "TXN1", "/uploads/r.jpg"
+		if _, err := d.svc.PlaceOrder(context.Background(), "my-shop", in); err != domain.ErrPaymentMethodNotInShop {
+			t.Errorf("got %v, want ErrPaymentMethodNotInShop", err)
+		}
+	})
+
+	t.Run("valid proof is snapshotted onto the order", func(t *testing.T) {
+		in := base()
+		in.AdvancePaymentMethodID = pm.ID
+		in.AdvancePaymentTxnRef = "  TXN1  "
+		in.AdvancePaymentReceipt = "  /uploads/r.jpg  "
+		order, err := d.svc.PlaceOrder(context.Background(), "my-shop", in)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !order.AdvancePaymentRequired {
+			t.Error("AdvancePaymentRequired should be true")
+		}
+		if order.AdvancePaymentMethodID == nil || *order.AdvancePaymentMethodID != pm.ID {
+			t.Errorf("method id = %v, want %q", order.AdvancePaymentMethodID, pm.ID)
+		}
+		if order.AdvancePaymentTxnRef != "TXN1" {
+			t.Errorf("txn ref = %q, want trimmed %q", order.AdvancePaymentTxnRef, "TXN1")
+		}
+		if order.AdvancePaymentReceipt != "/uploads/r.jpg" {
+			t.Errorf("receipt = %q, want trimmed", order.AdvancePaymentReceipt)
+		}
+	})
+}
+
+func TestPlaceOrder_FromReservation(t *testing.T) {
+	newActiveReservation := func(t *testing.T, d orderTestDeps, shopID, productID string, qty int) *domain.CartReservation {
+		t.Helper()
+		res, err := d.reserves.Create(context.Background(), shopID, time.Now().Add(10*time.Minute),
+			[]repository.ReserveItemInput{{ProductID: productID, Quantity: qty}})
+		if err != nil {
+			t.Fatalf("create reservation: %v", err)
+		}
+		return res
+	}
+
+	t.Run("items come from the reservation, not the request", func(t *testing.T) {
+		d := newOrderTestDeps(t)
+		shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+		p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 10)
+		res := newActiveReservation(t, d, shop.ID, p.ID, 2)
+
+		order, err := d.svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+			CustomerName:     "Test User",
+			CustomerPhone:    "01712345678",
+			DeliveryAddress:  "123 Street",
+			DeliveryDivision: "Dhaka",
+			ReservationID:    res.ID,
+			// A buyer inflating the quantity here must be ignored.
+			Items: []OrderItemInput{{ProductID: p.ID, Quantity: 99}},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(order.Items) != 1 || order.Items[0].Quantity != 2 {
+			t.Fatalf("expected the reserved quantity of 2, got %+v", order.Items)
+		}
+		if order.SubtotalBDT != "200.00" {
+			t.Errorf("subtotal = %q, want 200.00", order.SubtotalBDT)
+		}
+		if order.ReservationID == nil || *order.ReservationID != res.ID {
+			t.Errorf("order should carry the reservation id")
+		}
+		if got := d.reserves.reservations[res.ID].CustomerPhone; got != "01712345678" {
+			t.Errorf("buyer phone should be stamped on the hold, got %q", got)
+		}
+	})
+
+	t.Run("stock check is skipped because units are already held", func(t *testing.T) {
+		d := newOrderTestDeps(t)
+		shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+		// Stock is 0: the reserve already debited it. Placing must still work.
+		p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 0)
+		res := newActiveReservation(t, d, shop.ID, p.ID, 3)
+
+		order, err := d.svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+			CustomerName:    "Test User",
+			CustomerPhone:   "01712345678",
+			DeliveryAddress: "123 Street",
+			ReservationID:   res.ID,
+		})
+		if err != nil {
+			t.Fatalf("reservation checkout must not re-check stock: %v", err)
+		}
+		if order.Items[0].Quantity != 3 {
+			t.Errorf("quantity = %d, want 3", order.Items[0].Quantity)
+		}
+	})
+
+	t.Run("non-active and stale reservations are refused", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			mutate  func(r *domain.CartReservation)
+			wantErr error
+		}{
+			{"consumed", func(r *domain.CartReservation) { r.Status = domain.ReservationStatusConsumed }, domain.ErrReservationConsumed},
+			{"expired status", func(r *domain.CartReservation) { r.Status = domain.ReservationStatusExpired }, domain.ErrReservationExpired},
+			{"cancelled status", func(r *domain.CartReservation) { r.Status = domain.ReservationStatusCancelled }, domain.ErrReservationExpired},
+			{"past expiry", func(r *domain.CartReservation) { r.ExpiresAt = time.Now().Add(-time.Minute) }, domain.ErrReservationExpired},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				d := newOrderTestDeps(t)
+				shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+				p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 10)
+				res := newActiveReservation(t, d, shop.ID, p.ID, 1)
+				tc.mutate(d.reserves.reservations[res.ID])
+
+				_, err := d.svc.PlaceOrder(context.Background(), "my-shop", PlaceOrderInput{
+					CustomerName:    "Test User",
+					CustomerPhone:   "01712345678",
+					DeliveryAddress: "123 Street",
+					ReservationID:   res.ID,
+				})
+				if err != tc.wantErr {
+					t.Errorf("got %v, want %v", err, tc.wantErr)
+				}
+			})
+		}
+	})
+}
+
+func TestLegacyDeliveryArea(t *testing.T) {
+	cases := []struct {
+		name               string
+		district, division string
+		want               string
+	}{
+		{"both present", "Gulshan", "Dhaka", "Gulshan, Dhaka"},
+		{"division only", "", "Dhaka", "Dhaka"},
+		{"no division means no area", "Gulshan", "", ""},
+		{"neither", "", "", ""},
+		// Callers trim before calling, so a blank-but-present district must
+		// not produce a dangling ", Dhaka".
+		{"whitespace district is treated as absent", "   ", "Dhaka", "Dhaka"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			district := strings.TrimSpace(tc.district)
+			if got := legacyDeliveryArea(district, tc.division); got != tc.want {
+				t.Errorf("legacyDeliveryArea(%q, %q) = %q, want %q", district, tc.division, got, tc.want)
+			}
+		})
 	}
 }

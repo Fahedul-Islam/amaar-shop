@@ -12,14 +12,14 @@ import (
 
 // BillingService owns the seller-side billing flow: looking up what a shop
 // owes (using the current rule), submitting a payment claim, and the admin
-// review of those claims. AdminService keeps owning the rule itself and the
-// per-shop fee status across the platform.
+// review of those claims. PlatformFeeService keeps owning the rule itself and
+// the admin-recorded settlements against it.
 type BillingService struct {
-	rules      repository.FeeRuleRepository
-	subs       repository.FeeSubmissionRepository
-	feePays    repository.FeePaymentRepository
-	shops      repository.ShopRepository
-	adminQueries repository.AdminRepository
+	rules    repository.FeeRuleRepository
+	subs     repository.FeeSubmissionRepository
+	feePays  repository.FeePaymentRepository
+	shops    repository.ShopRepository
+	unbilled repository.ShopFeeQueries
 }
 
 func NewBillingService(
@@ -27,10 +27,10 @@ func NewBillingService(
 	subs repository.FeeSubmissionRepository,
 	feePays repository.FeePaymentRepository,
 	shops repository.ShopRepository,
-	admin repository.AdminRepository,
+	unbilled repository.ShopFeeQueries,
 ) *BillingService {
 	return &BillingService{
-		rules: rules, subs: subs, feePays: feePays, shops: shops, adminQueries: admin,
+		rules: rules, subs: subs, feePays: feePays, shops: shops, unbilled: unbilled,
 	}
 }
 
@@ -51,7 +51,7 @@ func (s *BillingService) MyBillingSnapshot(ctx context.Context, ownerUserID stri
 	if err != nil {
 		return nil, err
 	}
-	unbilledCount, unbilledGMV, err := s.adminQueries.UnbilledForShop(ctx, shop.ID)
+	unbilledCount, unbilledGMV, err := s.unbilled.UnbilledForShop(ctx, shop.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *BillingService) MySubmissions(ctx context.Context, ownerUserID string, 
 // ----- Admin-side review ---------------------------------------------------
 
 // ListSubmissions returns the admin review queue.
-func (s *BillingService) ListSubmissions(ctx context.Context, f repository.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error) {
+func (s *BillingService) ListSubmissions(ctx context.Context, f domain.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error) {
 	if f.PageSize <= 0 || f.PageSize > 200 {
 		f.PageSize = 25
 	}

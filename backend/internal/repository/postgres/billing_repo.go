@@ -179,7 +179,7 @@ func (r *feeSubmissionRepo) HasPending(ctx context.Context, shopID string) (bool
 	return exists, nil
 }
 
-func (r *feeSubmissionRepo) List(ctx context.Context, f repository.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error) {
+func (r *feeSubmissionRepo) List(ctx context.Context, f domain.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error) {
 	conditions := []string{"1=1"}
 	args := []any{}
 	argN := 1

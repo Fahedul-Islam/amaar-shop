@@ -27,6 +27,23 @@ func IsValidFeeRuleType(t string) bool {
 	return FeeRuleType(t) == FeeRuleTypePercentage || FeeRuleType(t) == FeeRuleTypeFixedPerOrder
 }
 
+// FeeSubmissionListFilter is the standard filter for the admin review queue
+// and the seller's own submission history.
+type FeeSubmissionListFilter struct {
+	Status   string // optional
+	ShopID   string // optional — caller scope (seller view passes their shop)
+	Page     int
+	PageSize int
+}
+
+// Offset returns the SQL offset for the given page/page_size.
+func (f FeeSubmissionListFilter) Offset() int {
+	if f.Page < 1 {
+		return 0
+	}
+	return (f.Page - 1) * f.PageSize
+}
+
 // FeeRule is the platform-wide fee setting. There's exactly one row.
 // It supersedes the old hard-coded PlatformFeeRate constant.
 type FeeRule struct {

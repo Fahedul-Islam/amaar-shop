@@ -81,6 +81,22 @@ type AdminReportRow struct {
 	ShopSlug string `json:"shop_slug"`
 }
 
+// ReportListFilter is the standard filter shape for paginated admin report lists.
+type ReportListFilter struct {
+	Status   string
+	ShopID   string
+	Page     int
+	PageSize int
+}
+
+// Offset returns the SQL offset for the given page/page_size.
+func (f ReportListFilter) Offset() int {
+	if f.Page < 1 {
+		return 0
+	}
+	return (f.Page - 1) * f.PageSize
+}
+
 // CreateReportInput is the validated payload from a customer's report form.
 type CreateReportInput struct {
 	ShopSlug      string

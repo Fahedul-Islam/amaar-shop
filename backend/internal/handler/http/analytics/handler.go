@@ -14,19 +14,20 @@ import (
 
 // Handler implements the analytics endpoints.
 type Handler struct {
-	svc Service
-	cfg *config.Config
+	sales  SalesService
+	visits VisitService
+	cfg    *config.Config
 }
 
-func NewHandler(svc Service, cfg *config.Config) *Handler {
-	return &Handler{svc: svc, cfg: cfg}
+func NewHandler(sales SalesService, visits VisitService, cfg *config.Config) *Handler {
+	return &Handler{sales: sales, visits: visits, cfg: cfg}
 }
 
 // TodayStats handles GET /api/shops/me/stats/today.
 func (h *Handler) TodayStats(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 
-	stats, err := h.svc.TodayStats(r.Context(), ownerID)
+	stats, err := h.sales.TodayStats(r.Context(), ownerID)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -70,7 +71,7 @@ func (h *Handler) RangeStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := h.svc.RangeStats(r.Context(), ownerID, from, to)
+	stats, err := h.sales.RangeStats(r.Context(), ownerID, from, to)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -110,7 +111,7 @@ func (h *Handler) StatsSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := h.svc.StatsSummary(r.Context(), ownerID, curFrom, curTo, prevFrom, prevTo)
+	res, err := h.sales.StatsSummary(r.Context(), ownerID, curFrom, curTo, prevFrom, prevTo)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -188,7 +189,7 @@ func toChangesDTO(c *domain.SummaryChanges) *dto.SummaryChangesDTO {
 func (h *Handler) DashboardSummary(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 
-	s, err := h.svc.DashboardSummary(r.Context(), ownerID)
+	s, err := h.sales.DashboardSummary(r.Context(), ownerID)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -224,7 +225,7 @@ func (h *Handler) DashboardSummary(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) TopProducts(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 
-	products, err := h.svc.TopProducts(r.Context(), ownerID)
+	products, err := h.sales.TopProducts(r.Context(), ownerID)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -258,7 +259,7 @@ func (h *Handler) VisitSummary(w http.ResponseWriter, r *http.Request) {
 
 	days := parseDays(r.URL.Query().Get("days"), period)
 
-	buckets, from, to, err := h.svc.VisitSummary(r.Context(), ownerID, period, days)
+	buckets, from, to, err := h.visits.VisitSummary(r.Context(), ownerID, period, days)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -284,7 +285,7 @@ func (h *Handler) VisitSummary(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) TopVisitedProducts(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.GetUserID(r.Context())
 
-	products, err := h.svc.TopVisitedProducts(r.Context(), ownerID)
+	products, err := h.visits.TopVisitedProducts(r.Context(), ownerID)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -308,7 +309,7 @@ func (h *Handler) VisitConversion(w http.ResponseWriter, r *http.Request) {
 
 	days := parseDays(r.URL.Query().Get("days"), domain.VisitPeriodDaily)
 
-	c, err := h.svc.VisitConversion(r.Context(), ownerID, days)
+	c, err := h.visits.VisitConversion(r.Context(), ownerID, days)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -348,7 +349,7 @@ func parseDays(raw string, period domain.VisitPeriod) int {
 func (h *Handler) PopularProducts(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
-	products, err := h.svc.PopularProducts(r.Context(), slug)
+	products, err := h.sales.PopularProducts(r.Context(), slug)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return

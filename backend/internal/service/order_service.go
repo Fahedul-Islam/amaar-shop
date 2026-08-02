@@ -139,6 +139,10 @@ func NewOrderService(
 
 // PlaceOrder creates a new order on the shop identified by slug.
 // It recalculates all prices server-side and never trusts client totals.
+//
+// The steps it orchestrates — proof verification, item resolution, line
+// pricing, delivery charge — each live in their own function below so they can
+// be read and tested on their own.
 func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrderInput) (*domain.Order, error) {
 	// Resolve the shop (404 if suspended or missing).
 	shop, err := s.shops.FindBySlug(ctx, slug)
@@ -158,120 +162,26 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		return nil, domain.ErrCheckoutDisabled
 	}
 
-	// When the shop demands an advance delivery fee, the buyer must submit
-	// proof along with the order. We require all three fields together —
-	// chosen method + txn ref + receipt path — and verify the method
-	// belongs to this shop.
-	var verifiedMethodID *string
-	if ds.AdvancePaymentRequired {
-		if in.AdvancePaymentMethodID == "" || in.AdvancePaymentTxnRef == "" || in.AdvancePaymentReceipt == "" {
-			return nil, domain.ErrAdvancePaymentRequired
-		}
-		method, err := s.methods.Get(ctx, in.AdvancePaymentMethodID)
-		if err != nil {
-			return nil, err
-		}
-		if method.ShopID != shop.ID || !method.IsActive {
-			return nil, domain.ErrPaymentMethodNotInShop
-		}
-		verifiedMethodID = &method.ID
+	verifiedMethodID, err := s.verifyAdvancePayment(ctx, shop.ID, ds, in)
+	if err != nil {
+		return nil, err
 	}
 
-	// When the buyer is checking out against a reservation, source the
-	// item list from the reservation row so the ordered quantities match
-	// what's actually being held — the buyer can't quietly increase a
-	// quantity on the way to placing the order. Stock has already been
-	// debited at reserve time, so we skip the per-product stock check.
-	itemInputs := in.Items
-	if in.ReservationID != "" {
-		res, err := s.reserves.Get(ctx, shop.ID, in.ReservationID)
-		if err != nil {
-			return nil, err
-		}
-		if res.Status != domain.ReservationStatusActive {
-			if res.Status == domain.ReservationStatusConsumed {
-				return nil, domain.ErrReservationConsumed
-			}
-			return nil, domain.ErrReservationExpired
-		}
-		if time.Now().After(res.ExpiresAt) {
-			return nil, domain.ErrReservationExpired
-		}
-		itemInputs = make([]OrderItemInput, 0, len(res.Items))
-		for _, it := range res.Items {
-			itemInputs = append(itemInputs, OrderItemInput{
-				ProductID: it.ProductID,
-				Quantity:  it.Quantity,
-			})
-		}
+	itemInputs, err := s.resolveItemInputs(ctx, shop.ID, in)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build order items by looking up each product's current price and snapshotting it.
-	var subtotal float64
-	items := make([]domain.OrderItem, 0, len(itemInputs))
-	for _, item := range itemInputs {
-		p, err := s.products.FindByID(ctx, item.ProductID, shop.ID)
-		if err != nil {
-			return nil, err
-		}
-		if !p.IsActive || p.IsArchived {
-			return nil, domain.ErrProductNotFound
-		}
-		// Skip the stock check when consuming a reservation — the units
-		// were already taken from products.stock at reserve time, so a
-		// `p.Stock < quantity` comparison would compare the *post-hold*
-		// number to the same number we held, which is meaningless.
-		if in.ReservationID == "" && p.Stock < item.Quantity {
-			return nil, domain.ErrInsufficientStock
-		}
-
-		unitPrice, _ := strconv.ParseFloat(p.PriceBDT, 64)
-		lineTotal := unitPrice * float64(item.Quantity)
-		subtotal += lineTotal
-
-		items = append(items, domain.OrderItem{
-			ProductID:            p.ID,
-			ProductNameSnapshot:  p.Name,
-			UnitPriceSnapshotBDT: p.PriceBDT,
-			// Freeze supplier cost so profit reporting on this order stays
-			// accurate even if the product's cost changes later.
-			UnitCostSnapshotBDT: p.CostPriceBDT,
-			Quantity:            item.Quantity,
-			LineTotalBDT:        fmt.Sprintf("%.2f", lineTotal),
-		})
+	// Stock was already debited at reserve time, so only a non-reservation
+	// checkout re-checks it.
+	items, subtotal, err := s.buildOrderItems(ctx, shop.ID, itemInputs, in.ReservationID == "")
+	if err != nil {
+		return nil, err
 	}
 
-	// Per-division delivery charge with default fallback.
-	// Orders are accepted regardless of area.
-	deliveryCharge, _ := strconv.ParseFloat(ds.DeliveryCharge, 64)
 	division := strings.TrimSpace(in.DeliveryDivision)
-	if division != "" {
-		for _, z := range ds.DeliveryZones {
-			if strings.EqualFold(strings.TrimSpace(z.Division), division) {
-				if zoneFee, err := strconv.ParseFloat(z.DeliveryCharge, 64); err == nil {
-					deliveryCharge = zoneFee
-				}
-				break
-			}
-		}
-	}
-
-	// Free delivery when subtotal meets threshold.
-	if ds.FreeDeliveryThreshold != nil {
-		threshold, _ := strconv.ParseFloat(*ds.FreeDeliveryThreshold, 64)
-		if threshold > 0 && subtotal >= threshold {
-			deliveryCharge = 0
-		}
-	}
-
-	total := subtotal + deliveryCharge
-
-	legacyArea := ""
-	if division != "" && in.DeliveryDistrict != "" {
-		legacyArea = fmt.Sprintf("%s, %s", strings.TrimSpace(in.DeliveryDistrict), division)
-	} else if division != "" {
-		legacyArea = division
-	}
+	district := strings.TrimSpace(in.DeliveryDistrict)
+	deliveryCharge := ds.DeliveryChargeFor(division, subtotal)
 
 	order := &domain.Order{
 		ShopID:                 shop.ID,
@@ -279,12 +189,12 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 		CustomerPhone:          normalizePhone(in.CustomerPhone),
 		DeliveryAddress:        in.DeliveryAddress,
 		DeliveryDivision:       division,
-		DeliveryDistrict:       strings.TrimSpace(in.DeliveryDistrict),
-		DeliveryArea:           legacyArea,
+		DeliveryDistrict:       district,
+		DeliveryArea:           legacyDeliveryArea(district, division),
 		Note:                   in.Note,
 		SubtotalBDT:            fmt.Sprintf("%.2f", subtotal),
 		DeliveryChargeBDT:      fmt.Sprintf("%.2f", deliveryCharge),
-		TotalBDT:               fmt.Sprintf("%.2f", total),
+		TotalBDT:               fmt.Sprintf("%.2f", subtotal+deliveryCharge),
 		AdvancePaymentRequired: ds.AdvancePaymentRequired,
 		Items:                  items,
 	}
@@ -309,6 +219,128 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	s.publish(ctx, order, "Purchase")
 
 	return order, nil
+}
+
+// verifyAdvancePayment checks the buyer's advance-payment proof when the shop
+// demands one, returning the verified payment-method ID (nil when the shop
+// asks for no proof).
+//
+// All three fields are required together — chosen method + txn ref + receipt
+// path — and the method must be an active one belonging to this shop, so a
+// buyer can't point at another seller's account.
+func (s *OrderService) verifyAdvancePayment(
+	ctx context.Context,
+	shopID string,
+	ds *domain.DeliverySettings,
+	in PlaceOrderInput,
+) (*string, error) {
+	if !ds.AdvancePaymentRequired {
+		return nil, nil
+	}
+	if in.AdvancePaymentMethodID == "" || in.AdvancePaymentTxnRef == "" || in.AdvancePaymentReceipt == "" {
+		return nil, domain.ErrAdvancePaymentRequired
+	}
+	method, err := s.methods.Get(ctx, in.AdvancePaymentMethodID)
+	if err != nil {
+		return nil, err
+	}
+	if method.ShopID != shopID || !method.IsActive {
+		return nil, domain.ErrPaymentMethodNotInShop
+	}
+	return &method.ID, nil
+}
+
+// resolveItemInputs decides what is actually being ordered.
+//
+// Without a reservation that is simply the request's item list. With one, the
+// items come from the held row instead, so the ordered quantities match what
+// is actually being held — a buyer can't quietly raise a quantity on the way
+// to placing the order.
+func (s *OrderService) resolveItemInputs(ctx context.Context, shopID string, in PlaceOrderInput) ([]OrderItemInput, error) {
+	if in.ReservationID == "" {
+		return in.Items, nil
+	}
+
+	res, err := s.reserves.Get(ctx, shopID, in.ReservationID)
+	if err != nil {
+		return nil, err
+	}
+	if res.Status != domain.ReservationStatusActive {
+		if res.Status == domain.ReservationStatusConsumed {
+			return nil, domain.ErrReservationConsumed
+		}
+		return nil, domain.ErrReservationExpired
+	}
+	if time.Now().After(res.ExpiresAt) {
+		return nil, domain.ErrReservationExpired
+	}
+
+	items := make([]OrderItemInput, 0, len(res.Items))
+	for _, it := range res.Items {
+		items = append(items, OrderItemInput{
+			ProductID: it.ProductID,
+			Quantity:  it.Quantity,
+		})
+	}
+	return items, nil
+}
+
+// buildOrderItems looks up each product, snapshots its price and supplier cost
+// onto the line, and returns the lines plus the running subtotal.
+//
+// checkStock is false when consuming a reservation: those units already left
+// products.stock at reserve time, so comparing the post-hold number against
+// the same quantity we are holding would be meaningless.
+func (s *OrderService) buildOrderItems(
+	ctx context.Context,
+	shopID string,
+	inputs []OrderItemInput,
+	checkStock bool,
+) ([]domain.OrderItem, float64, error) {
+	var subtotal float64
+	items := make([]domain.OrderItem, 0, len(inputs))
+
+	for _, item := range inputs {
+		p, err := s.products.FindByID(ctx, item.ProductID, shopID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !p.IsActive || p.IsArchived {
+			return nil, 0, domain.ErrProductNotFound
+		}
+		if checkStock && p.Stock < item.Quantity {
+			return nil, 0, domain.ErrInsufficientStock
+		}
+
+		unitPrice, _ := strconv.ParseFloat(p.PriceBDT, 64)
+		lineTotal := unitPrice * float64(item.Quantity)
+		subtotal += lineTotal
+
+		items = append(items, domain.OrderItem{
+			ProductID:            p.ID,
+			ProductNameSnapshot:  p.Name,
+			UnitPriceSnapshotBDT: p.PriceBDT,
+			// Freeze supplier cost so profit reporting on this order stays
+			// accurate even if the product's cost changes later.
+			UnitCostSnapshotBDT: p.CostPriceBDT,
+			Quantity:            item.Quantity,
+			LineTotalBDT:        fmt.Sprintf("%.2f", lineTotal),
+		})
+	}
+	return items, subtotal, nil
+}
+
+// legacyDeliveryArea rebuilds the old free-text "District, Division" string
+// that older clients still read off the order.
+func legacyDeliveryArea(district, division string) string {
+	switch {
+	case division == "":
+		return ""
+	case district == "":
+		return division
+	default:
+		return fmt.Sprintf("%s, %s", district, division)
+	}
 }
 
 // GetShopOrders returns orders for the shop owned by ownerUserID with optional filters.

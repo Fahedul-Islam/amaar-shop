@@ -56,7 +56,7 @@ func (s *ReportService) SubmitReport(ctx context.Context, in domain.CreateReport
 }
 
 // List returns paginated reports for the admin view.
-func (s *ReportService) List(ctx context.Context, f repository.ReportListFilter) ([]domain.AdminReportRow, int, error) {
+func (s *ReportService) List(ctx context.Context, f domain.ReportListFilter) ([]domain.AdminReportRow, int, error) {
 	if f.PageSize <= 0 || f.PageSize > 200 {
 		f.PageSize = 25
 	}

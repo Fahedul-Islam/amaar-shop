@@ -16,17 +16,15 @@ import (
 // conversions. Sending happens in MetaDispatcher; this layer only enqueues, so
 // nothing in the buyer's request path ever waits on Meta.
 type MetaService struct {
-	shops  repository.ShopRepository
-	orders repository.OrderRepository
+	shops    repository.ShopRepository
 	metaRepo repository.MetaRepository
 }
 
 func NewMetaService(
 	shops repository.ShopRepository,
-	orders repository.OrderRepository,
 	metaRepo repository.MetaRepository,
 ) *MetaService {
-	return &MetaService{shops: shops, orders: orders, metaRepo: metaRepo}
+	return &MetaService{shops: shops, metaRepo: metaRepo}
 }
 
 // GetSettings returns the shop's Meta configuration.
