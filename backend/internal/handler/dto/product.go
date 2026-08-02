@@ -68,12 +68,12 @@ type ProductImageDTO struct {
 }
 
 type ProductDTO struct {
-	ID                    string            `json:"id"`
-	ShopID                string            `json:"shop_id"`
-	CategoryID            *string           `json:"category_id"`
-	Name                  string            `json:"name"`
-	Description           string            `json:"description"`
-	PriceBDT              string            `json:"price_bdt"`
+	ID          string  `json:"id"`
+	ShopID      string  `json:"shop_id"`
+	CategoryID  *string `json:"category_id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	PriceBDT    string  `json:"price_bdt"`
 	// CostPriceBDT is seller-only — it is deliberately absent from
 	// PublicProductDTO so buyers never see the shop's margin.
 	CostPriceBDT          *string           `json:"cost_price_bdt"`

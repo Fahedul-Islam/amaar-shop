@@ -70,11 +70,11 @@ type LowStockProductDTO struct {
 
 // DashboardSummaryDTO is the seller home page response.
 type DashboardSummaryDTO struct {
-	PendingOrdersCount     int                  `json:"pending_orders_count"`
-	AwaitingAdvanceCount   int                  `json:"awaiting_advance_count"`
-	UnansweredReviewsCount int                  `json:"unanswered_reviews_count"`
-	OutOfStockCount        int                  `json:"out_of_stock_count"`
-	LowStockCount          int                  `json:"low_stock_count"`
+	PendingOrdersCount     int `json:"pending_orders_count"`
+	AwaitingAdvanceCount   int `json:"awaiting_advance_count"`
+	UnansweredReviewsCount int `json:"unanswered_reviews_count"`
+	OutOfStockCount        int `json:"out_of_stock_count"`
+	LowStockCount          int `json:"low_stock_count"`
 
 	TodayRevenueBDT     string `json:"today_revenue_bdt"`
 	TodayOrders         int    `json:"today_orders"`

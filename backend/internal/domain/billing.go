@@ -47,14 +47,14 @@ func (f FeeSubmissionListFilter) Offset() int {
 // FeeRule is the platform-wide fee setting. There's exactly one row.
 // It supersedes the old hard-coded PlatformFeeRate constant.
 type FeeRule struct {
-	RuleType    FeeRuleType `json:"rule_type"`
+	RuleType FeeRuleType `json:"rule_type"`
 	// Value is a numeric string for precision.
 	// For percentage: "5.0000" means 5%.
 	// For fixed_per_order: "10.00" means ৳10 per order.
-	Value       string      `json:"value"`
-	Description string      `json:"description,omitempty"`
-	UpdatedAt   time.Time   `json:"updated_at"`
-	UpdatedBy   *string     `json:"updated_by,omitempty"`
+	Value       string    `json:"value"`
+	Description string    `json:"description,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	UpdatedBy   *string   `json:"updated_by,omitempty"`
 }
 
 // HumanLabel returns "5% of sales" or "৳10 per order" for UI display.
@@ -151,19 +151,19 @@ func IsValidPaymentMethod(m string) bool {
 
 // FeeSubmission is one seller-initiated fee payment claim.
 type FeeSubmission struct {
-	ID             string              `json:"id"`
-	ShopID         string              `json:"shop_id"`
-	AmountBDT      string              `json:"amount_bdt"`
-	PaymentMethod  PaymentMethod       `json:"payment_method"`
-	TransactionID  string              `json:"transaction_id"`
-	SenderAccount  string              `json:"sender_account,omitempty"`
-	Note           string              `json:"note,omitempty"`
-	Status         FeeSubmissionStatus `json:"status"`
-	AdminFeedback  string              `json:"admin_feedback,omitempty"`
-	ReviewedBy     *string             `json:"reviewed_by,omitempty"`
-	ReviewedAt     *time.Time          `json:"reviewed_at,omitempty"`
-	FeePaymentID   *string             `json:"fee_payment_id,omitempty"`
-	SubmittedAt    time.Time           `json:"submitted_at"`
+	ID            string              `json:"id"`
+	ShopID        string              `json:"shop_id"`
+	AmountBDT     string              `json:"amount_bdt"`
+	PaymentMethod PaymentMethod       `json:"payment_method"`
+	TransactionID string              `json:"transaction_id"`
+	SenderAccount string              `json:"sender_account,omitempty"`
+	Note          string              `json:"note,omitempty"`
+	Status        FeeSubmissionStatus `json:"status"`
+	AdminFeedback string              `json:"admin_feedback,omitempty"`
+	ReviewedBy    *string             `json:"reviewed_by,omitempty"`
+	ReviewedAt    *time.Time          `json:"reviewed_at,omitempty"`
+	FeePaymentID  *string             `json:"fee_payment_id,omitempty"`
+	SubmittedAt   time.Time           `json:"submitted_at"`
 }
 
 // AdminFeeSubmissionRow is FeeSubmission joined with shop info for the
@@ -198,25 +198,25 @@ type ReviewFeeSubmissionInput struct {
 // ShopBillingSnapshot is what a seller sees on their billing page: the
 // current rule, what they owe right now, and the last few payments.
 type ShopBillingSnapshot struct {
-	Rule              FeeRule          `json:"rule"`
-	UnbilledOrders    int              `json:"unbilled_orders"`
-	UnbilledGMVBDT    string           `json:"unbilled_gmv_bdt"`
-	OutstandingFeeBDT string           `json:"outstanding_fee_bdt"`
-	LastPaidAt        *string          `json:"last_paid_at,omitempty"`
-	DaysSinceLastPaid *int             `json:"days_since_last_paid,omitempty"`
-	Status            FeeStatus        `json:"status"`
-	HasPendingSubmission bool          `json:"has_pending_submission"`
-	RecentSubmissions []FeeSubmission  `json:"recent_submissions"`
+	Rule                 FeeRule         `json:"rule"`
+	UnbilledOrders       int             `json:"unbilled_orders"`
+	UnbilledGMVBDT       string          `json:"unbilled_gmv_bdt"`
+	OutstandingFeeBDT    string          `json:"outstanding_fee_bdt"`
+	LastPaidAt           *string         `json:"last_paid_at,omitempty"`
+	DaysSinceLastPaid    *int            `json:"days_since_last_paid,omitempty"`
+	Status               FeeStatus       `json:"status"`
+	HasPendingSubmission bool            `json:"has_pending_submission"`
+	RecentSubmissions    []FeeSubmission `json:"recent_submissions"`
 }
 
 var (
-	ErrFeeRuleInvalidType   = errors.New("fee rule type must be 'percentage' or 'fixed_per_order'")
-	ErrFeeRuleInvalidValue  = errors.New("fee rule value must be a number greater than or equal to zero")
-	ErrFeeRulePercentTooBig = errors.New("percentage value must be between 0 and 100")
-	ErrSubmissionNotFound       = errors.New("payment submission not found")
-	ErrInvalidSubmissionStatus  = errors.New("invalid submission status")
-	ErrInvalidPaymentMethod     = errors.New("invalid payment method")
-	ErrTransactionIDRequired    = errors.New("transaction id is required")
+	ErrFeeRuleInvalidType        = errors.New("fee rule type must be 'percentage' or 'fixed_per_order'")
+	ErrFeeRuleInvalidValue       = errors.New("fee rule value must be a number greater than or equal to zero")
+	ErrFeeRulePercentTooBig      = errors.New("percentage value must be between 0 and 100")
+	ErrSubmissionNotFound        = errors.New("payment submission not found")
+	ErrInvalidSubmissionStatus   = errors.New("invalid submission status")
+	ErrInvalidPaymentMethod      = errors.New("invalid payment method")
+	ErrTransactionIDRequired     = errors.New("transaction id is required")
 	ErrSubmissionAlreadyReviewed = errors.New("this submission has already been reviewed")
-	ErrPendingSubmissionExists  = errors.New("you already have a pending submission — wait for admin review")
+	ErrPendingSubmissionExists   = errors.New("you already have a pending submission — wait for admin review")
 )

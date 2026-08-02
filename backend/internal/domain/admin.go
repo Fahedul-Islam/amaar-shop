@@ -82,10 +82,10 @@ type AdminOverview struct {
 
 // AdminListFilter is the standard filter shape for paginated admin lists.
 type AdminListFilter struct {
-	Status string
-	Role   string // users only
-	Query  string
-	Page   int
+	Status   string
+	Role     string // users only
+	Query    string
+	Page     int
 	PageSize int
 }
 
@@ -115,7 +115,7 @@ const PlatformFeeRate = 0.05
 // PeriodMetric pairs a current value with its previous-period equivalent so
 // the UI can show "↑ 14% vs prev period" without doing the math itself.
 type PeriodMetric struct {
-	Current  string   `json:"current"`             // decimal string for money, integer string otherwise
+	Current  string   `json:"current"` // decimal string for money, integer string otherwise
 	Previous string   `json:"previous"`
 	Pct      *float64 `json:"change_pct,omitempty"` // null when previous == 0 (undefined %)
 }
@@ -136,12 +136,12 @@ type CategoryBreakdown struct {
 
 // TopProductRow ranks products by units sold in the period.
 type TopProductRow struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	ShopName   string `json:"shop_name"`
-	UnitsSold  int    `json:"units_sold"`
-	GMVBdt     string `json:"gmv_bdt"`
-	ImageURL   string `json:"image_url"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ShopName  string `json:"shop_name"`
+	UnitsSold int    `json:"units_sold"`
+	GMVBdt    string `json:"gmv_bdt"`
+	ImageURL  string `json:"image_url"`
 }
 
 // GeoBreakdown groups orders by delivery area for the geo-distribution widget.
@@ -183,28 +183,28 @@ const FeeBillingCycleDays = 14
 type FeeStatus string
 
 const (
-	FeeStatusPaidUp  FeeStatus = "paid_up"  // no outstanding balance
-	FeeStatusDue     FeeStatus = "due"      // balance owed, within current 14-day window
-	FeeStatusOverdue FeeStatus = "overdue"  // balance owed, last payment > 14 days ago (or never)
+	FeeStatusPaidUp  FeeStatus = "paid_up" // no outstanding balance
+	FeeStatusDue     FeeStatus = "due"     // balance owed, within current 14-day window
+	FeeStatusOverdue FeeStatus = "overdue" // balance owed, last payment > 14 days ago (or never)
 )
 
 // ShopFeeStatus is one shop's current fee picture. It's computed live from
 // orders + payments — there's no "invoice" entity. The UI uses it to render
 // "shop X owes ৳Y, last paid Z days ago".
 type ShopFeeStatus struct {
-	ShopID         string    `json:"shop_id"`
-	ShopName       string    `json:"shop_name"`
-	ShopSlug       string    `json:"shop_slug"`
+	ShopID   string `json:"shop_id"`
+	ShopName string `json:"shop_name"`
+	ShopSlug string `json:"shop_slug"`
 
-	UnbilledOrders int       `json:"unbilled_orders"` // orders since last payment (period start)
-	UnbilledGMVBDT string    `json:"unbilled_gmv_bdt"`
+	UnbilledOrders    int    `json:"unbilled_orders"` // orders since last payment (period start)
+	UnbilledGMVBDT    string `json:"unbilled_gmv_bdt"`
 	OutstandingFeeBDT string `json:"outstanding_fee_bdt"` // 5% × UnbilledGMV
 
-	LastPaidAt        *string  `json:"last_paid_at,omitempty"`        // ISO8601, nil if never paid
-	LastPaidAmountBDT string   `json:"last_paid_amount_bdt,omitempty"` // amount of the last payment
-	DaysSinceLastPaid *int     `json:"days_since_last_paid,omitempty"` // nil if never paid
+	LastPaidAt        *string `json:"last_paid_at,omitempty"`         // ISO8601, nil if never paid
+	LastPaidAmountBDT string  `json:"last_paid_amount_bdt,omitempty"` // amount of the last payment
+	DaysSinceLastPaid *int    `json:"days_since_last_paid,omitempty"` // nil if never paid
 
-	Status   FeeStatus `json:"status"`
+	Status FeeStatus `json:"status"`
 }
 
 // FinancialReport bundles fee-collection data for the admin financial page.
@@ -212,10 +212,10 @@ type FinancialReport struct {
 	Days int `json:"days"`
 
 	// Window-scoped metrics:
-	GMV         PeriodMetric `json:"gmv_bdt"`         // total order value processed by all shops
-	PlatformFee PeriodMetric `json:"platform_fee_bdt"` // 5% of GMV — what the platform earned in this window
+	GMV           PeriodMetric `json:"gmv_bdt"`            // total order value processed by all shops
+	PlatformFee   PeriodMetric `json:"platform_fee_bdt"`   // 5% of GMV — what the platform earned in this window
 	FeesCollected PeriodMetric `json:"fees_collected_bdt"` // sum of shop_fee_payments rows in window
-	Refunds     PeriodMetric `json:"refunds_bdt"`       // cancelled order totals (informational)
+	Refunds       PeriodMetric `json:"refunds_bdt"`        // cancelled order totals (informational)
 
 	// Live cross-window snapshots:
 	OutstandingFeesBDT       string `json:"outstanding_fees_bdt"`        // total still owed by all shops right now
@@ -265,4 +265,3 @@ type AdminTeamMember struct {
 	IsSuperAdmin bool   `json:"is_super_admin"` // first admin == super admin in this MVP
 	CreatedAt    string `json:"created_at"`
 }
-

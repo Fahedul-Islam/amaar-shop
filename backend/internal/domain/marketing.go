@@ -33,12 +33,12 @@ func IsValidAdPlatform(p string) bool {
 // Entered manually by the seller — a courier/marketing API import can later
 // populate the same rows without changing anything downstream.
 type AdSpend struct {
-	ID        string    `json:"id"`
-	ShopID    string    `json:"shop_id"`
-	SpendDate string    `json:"spend_date"` // YYYY-MM-DD
-	Platform  string    `json:"platform"`
-	AmountBDT string    `json:"amount_bdt"`
-	Note      string    `json:"note,omitempty"`
+	ID        string `json:"id"`
+	ShopID    string `json:"shop_id"`
+	SpendDate string `json:"spend_date"` // YYYY-MM-DD
+	Platform  string `json:"platform"`
+	AmountBDT string `json:"amount_bdt"`
+	Note      string `json:"note,omitempty"`
 	// IsEstimated marks a row auto-filled from the shop's daily budget rather
 	// than confirmed by the seller.
 	IsEstimated bool      `json:"is_estimated"`
@@ -88,14 +88,14 @@ type ProfitSummary struct {
 	NetProfitBDT        string `json:"net_profit_bdt"` // gross profit - ad spend
 
 	// Ratios. Pointers are nil when the input is zero (undefined, not 0.0).
-	GrossMarginPct    *float64 `json:"gross_margin_pct"`     // gross profit / delivered revenue
-	ROAS              *float64 `json:"roas"`                 // delivered revenue / ad spend
-	BreakEvenROAS     *float64 `json:"break_even_roas"`      // 1 / gross margin
-	CostPerOrderBDT   *string  `json:"cost_per_order_bdt"`   // ad spend / total orders
-	CACDeliveredBDT   *string  `json:"cac_delivered_bdt"`    // ad spend / delivered orders
+	GrossMarginPct     *float64 `json:"gross_margin_pct"`     // gross profit / delivered revenue
+	ROAS               *float64 `json:"roas"`                 // delivered revenue / ad spend
+	BreakEvenROAS      *float64 `json:"break_even_roas"`      // 1 / gross margin
+	CostPerOrderBDT    *string  `json:"cost_per_order_bdt"`   // ad spend / total orders
+	CACDeliveredBDT    *string  `json:"cac_delivered_bdt"`    // ad spend / delivered orders
 	DeliverySuccessPct *float64 `json:"delivery_success_pct"` // delivered / (delivered + returned)
-	AOVBDT            *string  `json:"aov_bdt"`              // delivered revenue / delivered orders
-	ProfitPerOrderBDT *string  `json:"profit_per_order_bdt"` // net profit / delivered orders
+	AOVBDT             *string  `json:"aov_bdt"`              // delivered revenue / delivered orders
+	ProfitPerOrderBDT  *string  `json:"profit_per_order_bdt"` // net profit / delivered orders
 
 	// Data-quality signal: delivered line items with no cost price recorded.
 	// When > 0 the COGS (and therefore profit) figure understates the truth.

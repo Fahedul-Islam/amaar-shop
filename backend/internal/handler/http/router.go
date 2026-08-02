@@ -17,16 +17,16 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/metatracking"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
-	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/paymentmethod"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
-	"github.com/fhedul/amaarshop/backend/internal/handler/http/reservation"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/report"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/reservation"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
@@ -34,29 +34,29 @@ import (
 
 // RouterDeps holds everything the router needs to register all routes.
 type RouterDeps struct {
-	DB                 *sql.DB
-	UploadDir          string
-	AuthHandler        *auth.Handler
-	ShopHandler        *shop.Handler
-	CategoryHandler    *category.Handler
-	ProductHandler     *product.Handler
+	DB                   *sql.DB
+	UploadDir            string
+	AuthHandler          *auth.Handler
+	ShopHandler          *shop.Handler
+	CategoryHandler      *category.Handler
+	ProductHandler       *product.Handler
 	OrderHandler         *order.Handler
 	CourierHandler       *courier.Handler
 	PaymentMethodHandler *paymentmethod.Handler
 	ReservationHandler   *reservation.Handler
-	AnalyticsHandler   *analytics.Handler
-	MarketingHandler   *marketing.Handler
-	MarketplaceHandler *marketplace.Handler
-	MetaHandler        *metatracking.Handler
-	ReviewHandler      *review.Handler
-	VisitHandler       *visit.Handler
-	CustomerHandler    *customer.Handler
-	AdminHandler       *admin.Handler
-	ReportHandler      *report.Handler
-	InvoiceHandler     *invoice.Handler
-	BillingHandler     *billing.Handler
-	Middleware         *middleware.Manager
-	RateLimiter        *middleware.RateLimiter
+	AnalyticsHandler     *analytics.Handler
+	MarketingHandler     *marketing.Handler
+	MarketplaceHandler   *marketplace.Handler
+	MetaHandler          *metatracking.Handler
+	ReviewHandler        *review.Handler
+	VisitHandler         *visit.Handler
+	CustomerHandler      *customer.Handler
+	AdminHandler         *admin.Handler
+	ReportHandler        *report.Handler
+	InvoiceHandler       *invoice.Handler
+	BillingHandler       *billing.Handler
+	Middleware           *middleware.Manager
+	RateLimiter          *middleware.RateLimiter
 }
 
 // NewRouter builds the complete mux: health probes, static /uploads/,

@@ -20,9 +20,9 @@ const DefaultSteadfastBaseURL = "https://portal.packzy.com/api/v1"
 
 // ConsignmentRequest is the courier-agnostic booking payload.
 type ConsignmentRequest struct {
-	Invoice          string  // unique per merchant; we pass the order ID
+	Invoice          string // unique per merchant; we pass the order ID
 	RecipientName    string
-	RecipientPhone   string  // 11-digit BD number, digits only
+	RecipientPhone   string // 11-digit BD number, digits only
 	RecipientAddress string
 	CODAmount        float64 // cash the rider collects on delivery
 	Note             string

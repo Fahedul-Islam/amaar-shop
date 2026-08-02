@@ -11,12 +11,12 @@ const MaxProductImages = 5
 // Product is a sellable item in a shop's catalog. Images are loaded alongside
 // the product by the repository so handlers don't need a second round-trip.
 type Product struct {
-	ID                    string         `json:"id"`
-	ShopID                string         `json:"shop_id"`
-	CategoryID            *string        `json:"category_id"`
-	Name                  string         `json:"name"`
-	Description           string         `json:"description"`
-	PriceBDT              string         `json:"price_bdt"`
+	ID          string  `json:"id"`
+	ShopID      string  `json:"shop_id"`
+	CategoryID  *string `json:"category_id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	PriceBDT    string  `json:"price_bdt"`
 	// CostPriceBDT is what the seller pays their supplier per unit. Nil means
 	// "not entered", which profit reporting flags rather than treating as free.
 	CostPriceBDT          *string        `json:"cost_price_bdt"`
@@ -80,10 +80,10 @@ func (f MarketplaceProductFilter) Offset() int {
 }
 
 var (
-	ErrProductNotFound   = errors.New("product not found")
-	ErrInsufficientStock = errors.New("insufficient stock")
-	ErrTooManyImages     = errors.New("product already has the maximum number of images")
-	ErrInvalidPrice      = errors.New("price must be greater than 0")
-	ErrInvalidStock      = errors.New("stock must be greater than or equal to 0")
+	ErrProductNotFound     = errors.New("product not found")
+	ErrInsufficientStock   = errors.New("insufficient stock")
+	ErrTooManyImages       = errors.New("product already has the maximum number of images")
+	ErrInvalidPrice        = errors.New("price must be greater than 0")
+	ErrInvalidStock        = errors.New("stock must be greater than or equal to 0")
 	ErrProductNameRequired = errors.New("product name is required")
 )

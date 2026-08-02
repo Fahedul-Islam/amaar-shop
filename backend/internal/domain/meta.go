@@ -86,8 +86,8 @@ type TrackingStats struct {
 	ReportedValueBDT string `json:"reported_value_bdt"`
 
 	// LastError surfaces the most recent failure so a broken token is obvious.
-	LastError   string     `json:"last_error,omitempty"`
-	LastSentAt  *time.Time `json:"last_sent_at,omitempty"`
+	LastError   string              `json:"last_error,omitempty"`
+	LastSentAt  *time.Time          `json:"last_sent_at,omitempty"`
 	ByEventType []MetaEventTypeStat `json:"by_event_type"`
 }
 
@@ -97,9 +97,9 @@ type FunnelStats struct {
 	StartDate string `json:"start_date"`
 	EndDate   string `json:"end_date"`
 
-	ProductViews   int `json:"product_views"`
-	UniqueVisitors int `json:"unique_visitors"`
-	OrdersPlaced   int `json:"orders_placed"`
+	ProductViews    int `json:"product_views"`
+	UniqueVisitors  int `json:"unique_visitors"`
+	OrdersPlaced    int `json:"orders_placed"`
 	OrdersDelivered int `json:"orders_delivered"`
 
 	// Step-to-step conversion rates as percentages. Nil when the preceding

@@ -16,8 +16,8 @@ type LoginRequest struct {
 
 // AuthResponse is returned after successful signup or login.
 type AuthResponse struct {
-	AccessToken string   `json:"access_token"`
-	User        UserDTO  `json:"user"`
+	AccessToken string  `json:"access_token"`
+	User        UserDTO `json:"user"`
 }
 
 // TokenResponse is returned after a successful token refresh.

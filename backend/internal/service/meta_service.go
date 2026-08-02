@@ -119,8 +119,8 @@ func (s *MetaService) PublishOrderEvent(ctx context.Context, order *domain.Order
 
 	orderID := order.ID
 	return s.metaRepo.EnqueueEvent(ctx, &domain.MetaEvent{
-		ShopID:  order.ShopID,
-		OrderID: &orderID,
+		ShopID:    order.ShopID,
+		OrderID:   &orderID,
 		EventName: eventName,
 		// Stable per (order, event kind): makes enqueueing idempotent and lets
 		// a browser pixel dedupe against the same conversion.

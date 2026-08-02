@@ -64,10 +64,10 @@ func (d DeliverySettings) DeliveryChargeFor(division string, subtotal float64) f
 }
 
 var (
-	ErrInvalidDeliveryCharge   = errors.New("delivery charge must be >= 0")
-	ErrInvalidThreshold        = errors.New("free delivery threshold must be greater than delivery charge")
-	ErrInvalidDivision         = errors.New("invalid division")
-	ErrDeliveryNotConfigured   = errors.New("delivery settings must be configured before adding products")
+	ErrInvalidDeliveryCharge = errors.New("delivery charge must be >= 0")
+	ErrInvalidThreshold      = errors.New("free delivery threshold must be greater than delivery charge")
+	ErrInvalidDivision       = errors.New("invalid division")
+	ErrDeliveryNotConfigured = errors.New("delivery settings must be configured before adding products")
 )
 
 // AllowedDivisions mirrors the frontend list to prevent typos.

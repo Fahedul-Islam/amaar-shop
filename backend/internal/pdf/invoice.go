@@ -78,8 +78,8 @@ func BuildOrderInvoice(in InvoiceData) ([]byte, error) {
 		})
 	}
 	d.Table([]Column{
-		{Header: "Item",  Width: 0,  Align: "L"},
-		{Header: "Qty",   Width: 18, Align: "R"},
+		{Header: "Item", Width: 0, Align: "L"},
+		{Header: "Qty", Width: 18, Align: "R"},
 		{Header: "Price", Width: 32, Align: "R"},
 		{Header: "Total", Width: 32, Align: "R"},
 	}, rows)

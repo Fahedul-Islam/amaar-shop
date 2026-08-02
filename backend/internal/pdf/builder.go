@@ -131,8 +131,9 @@ type Column struct {
 }
 
 // Table renders a striped table with a teal header bar.
-//   columns: header definitions
-//   rows:    each row is one slice of strings, same length as columns
+//
+//	columns: header definitions
+//	rows:    each row is one slice of strings, same length as columns
 func (d *Doc) Table(columns []Column, rows [][]string) {
 	pageW, _ := d.pdf.GetPageSize()
 	usableW := pageW - 30
