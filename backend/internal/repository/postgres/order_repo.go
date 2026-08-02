@@ -56,6 +56,27 @@ func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
 	return o, err
 }
 
+// scanOrderWith scans the shared orderColumns via scanOrder, then reads any
+// extra trailing columns the caller appended to its SELECT.
+//
+// Queries that join onto orders (the marketplace lookup) previously repeated
+// scanOrder's destination list by hand, which silently broke the moment a
+// column was added to orderColumns. Routing them through scanOrder means the
+// column list has exactly one scanner and cannot drift again.
+func scanOrderWith(scanner interface{ Scan(...any) error }, extra ...any) (*domain.Order, error) {
+	return scanOrder(trailingScanner{inner: scanner, extra: extra})
+}
+
+// trailingScanner appends fixed destinations after whatever its caller asks to scan.
+type trailingScanner struct {
+	inner interface{ Scan(...any) error }
+	extra []any
+}
+
+func (t trailingScanner) Scan(dest ...any) error {
+	return t.inner.Scan(append(dest, t.extra...)...)
+}
+
 // orderReturning returns the column list for RETURNING clauses on UPDATE.
 const orderReturning = `orders.id, orders.shop_id, orders.customer_name, orders.customer_phone,
 	orders.delivery_address, COALESCE(orders.delivery_division, ''), COALESCE(orders.delivery_district, ''),
