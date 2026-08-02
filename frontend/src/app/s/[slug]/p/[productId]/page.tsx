@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { getProduct, getProducts, type PublicProduct } from "@/lib/storefrontApi
 import { getProductReviews, type Review } from "@/lib/reviewApi";
 import { applyDiscount, formatBDT, formatDateTime } from "@/lib/format";
 import { useI18n } from "@/hooks/useI18n";
+import { StickyBuyBar } from "@/components/storefront/StickyBuyBar";
 
 type Tab = "description" | "reviews" | "delivery";
 
@@ -20,6 +21,9 @@ export default function ProductDetailPage() {
   const [imgIdx, setImgIdx] = useState(0);
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<Tab>("description");
+  // Watched by the sticky buy bar: once these buttons scroll away, the bar
+  // takes over so the buyer never has to scroll back up to order.
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["sf-product", params.slug, params.productId],
@@ -339,7 +343,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Actions row */}
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2.5 mb-3.5">
+          <div ref={actionsRef} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2.5 mb-3.5">
             <div className="flex items-center h-[52px] rounded-[12px] border-[1.5px] border-stone-200 bg-white overflow-hidden">
               <button
                 type="button"
@@ -612,6 +616,22 @@ export default function ProductDetailPage() {
           </div>
         </section>
       )}
+
+      {/* Follows the buyer down the page so the order action is never more
+          than a tap away — mobile only; desktop has the sticky sidebar. */}
+      <StickyBuyBar
+        watchRef={actionsRef}
+        name={product.name}
+        imageUrl={images[0]?.url ?? null}
+        productId={product.id}
+        price={Number(effective)}
+        originalPrice={original ? Number(original) : null}
+        quantity={qty}
+        outOfStock={outOfStock}
+        onBuyNow={buyNow}
+        onAddToCart={addToCart}
+        locale={locale === "bn" ? "bn" : "en"}
+      />
     </div>
   );
 }

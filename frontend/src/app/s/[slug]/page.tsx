@@ -969,7 +969,10 @@ function ShopProductCard({
               e.stopPropagation();
               onAdd();
             }}
-            className="absolute left-2.5 right-2.5 bottom-2.5 h-[38px] rounded-[9px] bg-stone-900 hover:bg-teal-600 text-white text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 opacity-0 translate-y-1.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200"
+            // Always visible on touch devices: a hover-only reveal is
+            // unreachable on a phone, which is where nearly all buyers are.
+            // Desktop keeps the slide-up-on-hover treatment.
+            className="absolute left-2.5 right-2.5 bottom-2.5 h-[38px] rounded-[9px] bg-stone-900 hover:bg-teal-600 text-white text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 opacity-100 translate-y-0 lg:opacity-0 lg:translate-y-1.5 lg:group-hover:opacity-100 lg:group-hover:translate-y-0 transition-all duration-200"
           >
             <IcCart size={14} />
             {locale === "bn" ? "কার্টে যোগ" : "Add to cart"}

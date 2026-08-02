@@ -9,6 +9,12 @@ import { ApiRequestError } from "@/lib/api";
 import { useI18n } from "@/hooks/useI18n";
 import { BD_DIVISIONS, BD_DISTRICTS, type Division } from "@/lib/bdGeo";
 import {
+  clearBuyerDetails,
+  hasStoredDetails,
+  loadBuyerDetails,
+  saveBuyerDetails,
+} from "@/lib/buyerDetails";
+import {
   cancelReservation,
   CartReservation,
   clearStoredReservation,
@@ -33,13 +39,42 @@ export default function CheckoutPage() {
   const { locale, t } = useI18n();
   const router = useRouter();
 
+  // Prefilled from the buyer's own device when they've ordered before, so a
+  // repeat purchase is a review-and-confirm instead of five fields of typing.
+  // Lazy initialisers keep this to a single read and avoid a flash of empty
+  // inputs.
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [division, setDivision] = useState<Division | "">("");
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
+  const [prefilled, setPrefilled] = useState(false);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Restored after mount rather than during render: the server has no access
+  // to localStorage, so seeding initial state directly would make the server
+  // and client markup disagree.
+  useEffect(() => {
+    const saved = loadBuyerDetails();
+    if (!hasStoredDetails(saved)) return;
+    setName(saved.name);
+    setPhone(saved.phone);
+    setDivision(saved.division);
+    setDistrict(saved.district);
+    setAddress(saved.address);
+    setPrefilled(true);
+  }, []);
+
+  const forgetMe = () => {
+    clearBuyerDetails();
+    setName("");
+    setPhone("");
+    setDivision("");
+    setDistrict("");
+    setAddress("");
+    setPrefilled(false);
+  };
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     name?: string;
@@ -347,6 +382,14 @@ export default function CheckoutPage() {
             }
           : {}),
       });
+      // Remember for next time only once the order actually succeeded.
+      saveBuyerDetails({
+        name: name.trim(),
+        phone: phone.trim(),
+        division,
+        district,
+        address: address.trim(),
+      });
       clearStoredReservation(shop.slug);
       cart.clearCart();
       router.push(
@@ -519,6 +562,22 @@ export default function CheckoutPage() {
             filled={detailsFilled}
             filledLabel={locale === "bn" ? "পূর্ণ" : "Filled"}
           >
+            {prefilled && (
+              <div className="flex items-center gap-2 flex-wrap mb-3.5 px-3.5 py-2.5 rounded-[10px] bg-teal-50 border border-teal-100">
+                <span className="text-[13px] text-teal-900">
+                  {locale === "bn"
+                    ? "আপনার আগের তথ্য বসানো হয়েছে — দেখে নিন।"
+                    : "We filled in your details from last time — check them below."}
+                </span>
+                <button
+                  type="button"
+                  onClick={forgetMe}
+                  className="ml-auto text-[12.5px] font-semibold text-teal-700 underline underline-offset-2 hover:text-teal-800"
+                >
+                  {locale === "bn" ? "আপনি নন? মুছুন" : "Not you? Clear"}
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <Field
                 label={locale === "bn" ? "পুরো নাম" : "Full name"}
