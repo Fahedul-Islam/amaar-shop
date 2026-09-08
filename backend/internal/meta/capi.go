@@ -37,16 +37,16 @@ const (
 // UserData carries the identifiers Meta matches against its users. Every field
 // is plain text here and hashed on the way out.
 type UserData struct {
-	Phone     string
-	Email     string
-	FirstName string
-	LastName  string
-	City      string
-	State     string
-	Country   string // ISO-2, e.g. "bd"
+	Phone      string
+	Email      string
+	FirstName  string
+	LastName   string
+	City       string
+	State      string
+	Country    string // ISO-2, e.g. "bd"
 	ExternalID string
-	ClientIP  string
-	UserAgent string
+	ClientIP   string
+	UserAgent  string
 }
 
 // Event is one conversion to report.

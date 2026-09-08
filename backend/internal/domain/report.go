@@ -9,12 +9,12 @@ import (
 type ReportReason string
 
 const (
-	ReportReasonCounterfeit  ReportReason = "counterfeit"
-	ReportReasonScam         ReportReason = "scam"
+	ReportReasonCounterfeit   ReportReason = "counterfeit"
+	ReportReasonScam          ReportReason = "scam"
 	ReportReasonInappropriate ReportReason = "inappropriate"
-	ReportReasonPoorQuality  ReportReason = "poor_quality"
-	ReportReasonHarassment   ReportReason = "harassment"
-	ReportReasonOther        ReportReason = "other"
+	ReportReasonPoorQuality   ReportReason = "poor_quality"
+	ReportReasonHarassment    ReportReason = "harassment"
+	ReportReasonOther         ReportReason = "other"
 )
 
 // ValidReportReasons is the canonical allow-list for client-side dropdowns
@@ -81,6 +81,22 @@ type AdminReportRow struct {
 	ShopSlug string `json:"shop_slug"`
 }
 
+// ReportListFilter is the standard filter shape for paginated admin report lists.
+type ReportListFilter struct {
+	Status   string
+	ShopID   string
+	Page     int
+	PageSize int
+}
+
+// Offset returns the SQL offset for the given page/page_size.
+func (f ReportListFilter) Offset() int {
+	if f.Page < 1 {
+		return 0
+	}
+	return (f.Page - 1) * f.PageSize
+}
+
 // CreateReportInput is the validated payload from a customer's report form.
 type CreateReportInput struct {
 	ShopSlug      string
@@ -91,9 +107,9 @@ type CreateReportInput struct {
 }
 
 var (
-	ErrReportNotFound          = errors.New("report not found")
-	ErrInvalidReportReason     = errors.New("invalid report reason")
-	ErrInvalidReportStatus     = errors.New("invalid report status")
+	ErrReportNotFound            = errors.New("report not found")
+	ErrInvalidReportReason       = errors.New("invalid report reason")
+	ErrInvalidReportStatus       = errors.New("invalid report status")
 	ErrReportDescriptionTooShort = errors.New("description must be at least 10 characters")
 	ErrReportDescriptionTooLong  = errors.New("description must be at most 2000 characters")
 )

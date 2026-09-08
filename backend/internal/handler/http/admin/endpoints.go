@@ -8,12 +8,11 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
-	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
 // GetStats returns the platform overview headline numbers.
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.svc.PlatformStats(r.Context())
+	stats, err := h.insights.PlatformStats(r.Context())
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -23,7 +22,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 // GetOverview bundles stats + recent shops + top shops in one round-trip.
 func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
-	overview, err := h.svc.Overview(r.Context())
+	overview, err := h.insights.Overview(r.Context())
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -34,7 +33,7 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 // ListShops returns paginated shops with admin-only filters.
 func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
 	f := parseListFilter(r)
-	rows, total, err := h.svc.ListShops(r.Context(), f)
+	rows, total, err := h.moderation.ListShops(r.Context(), f)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -44,7 +43,7 @@ func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
 
 // GetShop returns a single admin-enriched shop row.
 func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
-	shop, err := h.svc.GetShop(r.Context(), r.PathValue("id"))
+	shop, err := h.moderation.GetShop(r.Context(), r.PathValue("id"))
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -65,7 +64,7 @@ func (h *Handler) UpdateShop(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "is_suspended is required")
 		return
 	}
-	shop, err := h.svc.SetShopSuspended(r.Context(), r.PathValue("id"), *body.IsSuspended)
+	shop, err := h.moderation.SetShopSuspended(r.Context(), r.PathValue("id"), *body.IsSuspended)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -76,7 +75,7 @@ func (h *Handler) UpdateShop(w http.ResponseWriter, r *http.Request) {
 // ListUsers returns paginated users.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	f := parseListFilter(r)
-	rows, total, err := h.svc.ListUsers(r.Context(), f)
+	rows, total, err := h.moderation.ListUsers(r.Context(), f)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -87,7 +86,7 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 // ListOrders returns cross-shop orders.
 func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	f := parseListFilter(r)
-	rows, total, err := h.svc.ListOrders(r.Context(), f)
+	rows, total, err := h.moderation.ListOrders(r.Context(), f)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -98,7 +97,7 @@ func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 // ListProducts returns cross-shop products for moderation.
 func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	f := parseListFilter(r)
-	rows, total, err := h.svc.ListProducts(r.Context(), f)
+	rows, total, err := h.moderation.ListProducts(r.Context(), f)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -120,7 +119,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if err := h.svc.SetProductActive(r.Context(), id, *body.IsActive); err != nil {
+	if err := h.moderation.SetProductActive(r.Context(), id, *body.IsActive); err != nil {
 		httputil.WriteError(w, err)
 		return
 	}
@@ -139,7 +138,7 @@ func parseDays(r *http.Request, fallback int) int {
 // GetAnalytics returns the trailing-window insights snapshot.
 // Default window is 30 days; admins can pass ?days=7|90|365 etc.
 func (h *Handler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
-	report, err := h.svc.AnalyticsReport(r.Context(), parseDays(r, 30))
+	report, err := h.insights.AnalyticsReport(r.Context(), parseDays(r, 30))
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -149,7 +148,7 @@ func (h *Handler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 // GetFinancial returns money-and-payouts data for the trailing window.
 func (h *Handler) GetFinancial(w http.ResponseWriter, r *http.Request) {
-	report, err := h.svc.FinancialReport(r.Context(), parseDays(r, 30))
+	report, err := h.insights.FinancialReport(r.Context(), parseDays(r, 30))
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -159,7 +158,7 @@ func (h *Handler) GetFinancial(w http.ResponseWriter, r *http.Request) {
 
 // ListAdmins returns every admin team member.
 func (h *Handler) ListAdmins(w http.ResponseWriter, r *http.Request) {
-	team, err := h.svc.ListAdmins(r.Context())
+	team, err := h.access.ListAdmins(r.Context())
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -183,7 +182,7 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 	caller := middleware.GetUserID(r.Context())
 	target := r.PathValue("id")
-	if err := h.svc.SetUserAdmin(r.Context(), caller, target, *body.IsAdmin); err != nil {
+	if err := h.access.SetUserAdmin(r.Context(), caller, target, *body.IsAdmin); err != nil {
 		httputil.WriteError(w, err)
 		return
 	}
@@ -195,7 +194,7 @@ func (h *Handler) ListReports(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
-	f := repository.ReportListFilter{
+	f := domain.ReportListFilter{
 		Status:   q.Get("status"),
 		ShopID:   q.Get("shop_id"),
 		Page:     page,
@@ -303,7 +302,7 @@ func (h *Handler) RecordFeePayment(w http.ResponseWriter, r *http.Request) {
 		in.CoversUntil = t
 	}
 
-	payment, err := h.svc.RecordFeePayment(r.Context(), in)
+	payment, err := h.fees.RecordFeePayment(r.Context(), in)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -317,7 +316,7 @@ func (h *Handler) GetFeePaymentHistory(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 {
 		limit = 25
 	}
-	history, err := h.svc.FeePaymentHistory(r.Context(), r.PathValue("id"), limit)
+	history, err := h.fees.FeePaymentHistory(r.Context(), r.PathValue("id"), limit)
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -327,7 +326,7 @@ func (h *Handler) GetFeePaymentHistory(w http.ResponseWriter, r *http.Request) {
 
 // GetFeeRule returns the current platform fee rule.
 func (h *Handler) GetFeeRule(w http.ResponseWriter, r *http.Request) {
-	rule, err := h.svc.FeeRule(r.Context())
+	rule, err := h.fees.FeeRule(r.Context())
 	if err != nil {
 		httputil.WriteError(w, err)
 		return
@@ -347,7 +346,7 @@ func (h *Handler) UpdateFeeRule(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteValidationError(w, "invalid request body")
 		return
 	}
-	rule, err := h.svc.UpdateFeeRule(r.Context(), domain.UpdateFeeRuleInput{
+	rule, err := h.fees.UpdateFeeRule(r.Context(), domain.UpdateFeeRuleInput{
 		RuleType:    body.RuleType,
 		Value:       body.Value,
 		Description: body.Description,

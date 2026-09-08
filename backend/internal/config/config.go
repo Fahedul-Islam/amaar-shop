@@ -70,7 +70,7 @@ func Load() (*Config, error) {
 		AdminEmail:         os.Getenv("ADMIN_EMAIL"),
 		AdminPass:          os.Getenv("ADMIN_PASSWORD"),
 		CORSAllowedOrigins: corsAllowedOrigins,
-		SteadfastBaseURL:   os.Getenv("STEADFAST_BASE_URL"), // empty → client uses production default
+		SteadfastBaseURL:   os.Getenv("STEADFAST_BASE_URL"),  // empty → client uses production default
 		MetaGraphBaseURL:   os.Getenv("META_GRAPH_BASE_URL"), // empty → client uses production default
 	}, nil
 }

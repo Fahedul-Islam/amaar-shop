@@ -310,16 +310,11 @@ func (r *marketplaceRepo) LookupOrdersByPhone(ctx context.Context, phone string)
 	orders := []*domain.MarketplaceOrder{}
 	for rows.Next() {
 		mo := &domain.MarketplaceOrder{}
-		err := rows.Scan(
-			&mo.ID, &mo.ShopID, &mo.CustomerName, &mo.CustomerPhone, &mo.DeliveryAddress,
-			&mo.DeliveryDivision, &mo.DeliveryDistrict, &mo.DeliveryArea, &mo.Note, &mo.SubtotalBDT, &mo.DeliveryChargeBDT,
-			&mo.TotalBDT, &mo.Status, &mo.AdvancePaymentRequired,
-			&mo.AdvancePaymentReceived, &mo.CancelledReason, &mo.CreatedAt, &mo.UpdatedAt,
-			&mo.ShopName, &mo.ShopSlug,
-		)
+		o, err := scanOrderWith(rows, &mo.ShopName, &mo.ShopSlug)
 		if err != nil {
 			return nil, fmt.Errorf("marketplace order scan: %w", err)
 		}
+		mo.Order = *o
 		orders = append(orders, mo)
 	}
 	return orders, rows.Err()

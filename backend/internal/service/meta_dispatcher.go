@@ -29,7 +29,7 @@ type MetaSender interface {
 // server restart — pending rows are simply picked up on the next pass.
 type MetaDispatcher struct {
 	repo      repository.MetaRepository
-	orders    repository.OrderRepository
+	orders    repository.OrderReader
 	sender    MetaSender
 	log       *slog.Logger
 	interval  time.Duration
@@ -41,7 +41,7 @@ type MetaDispatcher struct {
 
 func NewMetaDispatcher(
 	repo repository.MetaRepository,
-	orders repository.OrderRepository,
+	orders repository.OrderReader,
 	sender MetaSender,
 	log *slog.Logger,
 	interval time.Duration,

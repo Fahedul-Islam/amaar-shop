@@ -38,10 +38,10 @@ type ProductRating struct {
 }
 
 var (
-	ErrReviewNotFound        = errors.New("review not found")
-	ErrReviewAlreadyExists   = errors.New("a review for this order item already exists")
-	ErrOrderNotDelivered     = errors.New("order must be delivered before it can be reviewed")
-	ErrInvalidRating         = errors.New("rating must be between 1 and 5")
-	ErrReplyAlreadyExists    = errors.New("reply already exists for this review")
-	ErrEmptyReply            = errors.New("reply cannot be empty")
+	ErrReviewNotFound      = errors.New("review not found")
+	ErrReviewAlreadyExists = errors.New("a review for this order item already exists")
+	ErrOrderNotDelivered   = errors.New("order must be delivered before it can be reviewed")
+	ErrInvalidRating       = errors.New("rating must be between 1 and 5")
+	ErrReplyAlreadyExists  = errors.New("reply already exists for this review")
+	ErrEmptyReply          = errors.New("reply cannot be empty")
 )

@@ -11,57 +11,86 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
 	"github.com/fhedul/amaarshop/backend/internal/handler/httputil"
-	"github.com/fhedul/amaarshop/backend/internal/repository"
 )
 
-// Service is the subset of AdminService methods the HTTP handler uses.
-// Defining it as an interface here keeps the handler decoupled from the
-// concrete service and easy to test with a fake.
-type Service interface {
-	IsAdmin(ctx context.Context, userID string) (bool, error)
-	PlatformStats(ctx context.Context) (*domain.PlatformStats, error)
-	Overview(ctx context.Context) (*domain.AdminOverview, error)
+// The admin dashboard spans five unrelated concerns, so the handler depends on
+// five narrow interfaces rather than one wide one. Each is defined here at the
+// consumer and satisfied by its own service, so a change to (say) fee
+// settlement can't force the moderation screens to recompile or their fakes to
+// grow new methods.
 
+// AccessService gates the admin area and manages who else holds the keys.
+type AccessService interface {
+	IsAdmin(ctx context.Context, userID string) (bool, error)
+	ListAdmins(ctx context.Context) ([]domain.AdminTeamMember, error)
+	SetUserAdmin(ctx context.Context, callerID, targetID string, isAdmin bool) error
+}
+
+// ModerationService backs the cross-shop browse-and-act screens.
+type ModerationService interface {
 	ListShops(ctx context.Context, f domain.AdminListFilter) ([]domain.AdminShopRow, int, error)
 	GetShop(ctx context.Context, shopID string) (*domain.AdminShopRow, error)
 	SetShopSuspended(ctx context.Context, shopID string, suspended bool) (*domain.AdminShopRow, error)
-
 	ListUsers(ctx context.Context, f domain.AdminListFilter) ([]domain.AdminUserRow, int, error)
 	ListOrders(ctx context.Context, f domain.AdminListFilter) ([]domain.AdminOrderRow, int, error)
 	ListProducts(ctx context.Context, f domain.AdminListFilter) ([]domain.AdminProductRow, int, error)
 	SetProductActive(ctx context.Context, productID string, active bool) error
-
-	AnalyticsReport(ctx context.Context, days int) (*domain.AnalyticsReport, error)
-	FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error)
-	ListAdmins(ctx context.Context) ([]domain.AdminTeamMember, error)
-	SetUserAdmin(ctx context.Context, callerID, targetID string, isAdmin bool) error
-
-	RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error)
-	FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error)
-
-	FeeRule(ctx context.Context) (*domain.FeeRule, error)
-	UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
 }
 
-// ReportService is the subset of report service methods the admin handler
-// uses. Kept separate from Service so the report code can evolve without
-// churning the larger admin interface.
+// InsightsService backs the read-only overview and reporting pages.
+type InsightsService interface {
+	PlatformStats(ctx context.Context) (*domain.PlatformStats, error)
+	Overview(ctx context.Context) (*domain.AdminOverview, error)
+	AnalyticsReport(ctx context.Context, days int) (*domain.AnalyticsReport, error)
+	FinancialReport(ctx context.Context, days int) (*domain.FinancialReport, error)
+}
+
+// FeeService backs the platform fee rule and admin-recorded settlements.
+type FeeService interface {
+	FeeRule(ctx context.Context) (*domain.FeeRule, error)
+	UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
+	RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error)
+	FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error)
+}
+
+// ReportService backs the customer-submitted shop report queue.
 type ReportService interface {
-	List(ctx context.Context, f repository.ReportListFilter) ([]domain.AdminReportRow, int, error)
+	List(ctx context.Context, f domain.ReportListFilter) ([]domain.AdminReportRow, int, error)
 	CountByStatus(ctx context.Context) (map[string]int, error)
 	FindByID(ctx context.Context, id string) (*domain.AdminReportRow, error)
 	UpdateStatus(ctx context.Context, reportID, newStatus, adminNote, adminUserID string) (*domain.AdminReportRow, error)
 }
 
-// Handler implements the /api/admin/* endpoints.
-type Handler struct {
-	svc     Service
-	reports ReportService
-	cfg     *config.Config
+// Deps carries the handler's collaborators. A struct rather than positional
+// arguments so adding a sixth concern later doesn't silently reorder a call.
+type Deps struct {
+	Access     AccessService
+	Moderation ModerationService
+	Insights   InsightsService
+	Fees       FeeService
+	Reports    ReportService
+	Config     *config.Config
 }
 
-func NewHandler(svc Service, reports ReportService, cfg *config.Config) *Handler {
-	return &Handler{svc: svc, reports: reports, cfg: cfg}
+// Handler implements the /api/admin/* endpoints.
+type Handler struct {
+	access     AccessService
+	moderation ModerationService
+	insights   InsightsService
+	fees       FeeService
+	reports    ReportService
+	cfg        *config.Config
+}
+
+func NewHandler(d Deps) *Handler {
+	return &Handler{
+		access:     d.Access,
+		moderation: d.Moderation,
+		insights:   d.Insights,
+		fees:       d.Fees,
+		reports:    d.Reports,
+		cfg:        d.Config,
+	}
 }
 
 // RegisterRoutes mounts every admin endpoint under /api/admin behind the
@@ -109,7 +138,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 func (h *Handler) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
-		ok, err := h.svc.IsAdmin(r.Context(), userID)
+		ok, err := h.access.IsAdmin(r.Context(), userID)
 		if err != nil {
 			httputil.WriteUnauthorized(w)
 			return

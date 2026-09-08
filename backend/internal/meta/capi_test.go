@@ -12,11 +12,11 @@ import (
 
 func TestNormalizePhone(t *testing.T) {
 	cases := map[string]string{
-		"01712345678":    "8801712345678", // local trunk zero → country code
+		"01712345678":      "8801712345678", // local trunk zero → country code
 		"+880 1712-345678": "8801712345678",
-		"8801712345678":  "8801712345678",
-		"01712-345 678":  "8801712345678",
-		"":               "",
+		"8801712345678":    "8801712345678",
+		"01712-345 678":    "8801712345678",
+		"":                 "",
 	}
 	for in, want := range cases {
 		if got := normalizePhone(in); got != want {

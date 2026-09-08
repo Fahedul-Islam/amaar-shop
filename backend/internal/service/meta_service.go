@@ -16,17 +16,15 @@ import (
 // conversions. Sending happens in MetaDispatcher; this layer only enqueues, so
 // nothing in the buyer's request path ever waits on Meta.
 type MetaService struct {
-	shops  repository.ShopRepository
-	orders repository.OrderRepository
+	shops    repository.ShopRepository
 	metaRepo repository.MetaRepository
 }
 
 func NewMetaService(
 	shops repository.ShopRepository,
-	orders repository.OrderRepository,
 	metaRepo repository.MetaRepository,
 ) *MetaService {
-	return &MetaService{shops: shops, orders: orders, metaRepo: metaRepo}
+	return &MetaService{shops: shops, metaRepo: metaRepo}
 }
 
 // GetSettings returns the shop's Meta configuration.
@@ -121,8 +119,8 @@ func (s *MetaService) PublishOrderEvent(ctx context.Context, order *domain.Order
 
 	orderID := order.ID
 	return s.metaRepo.EnqueueEvent(ctx, &domain.MetaEvent{
-		ShopID:  order.ShopID,
-		OrderID: &orderID,
+		ShopID:    order.ShopID,
+		OrderID:   &orderID,
 		EventName: eventName,
 		// Stable per (order, event kind): makes enqueueing idempotent and lets
 		// a browser pixel dedupe against the same conversion.

@@ -21,14 +21,14 @@ type CourierClient interface {
 // automatic paths converge on the same shipment record.
 type CourierService struct {
 	shops   repository.ShopRepository
-	orders  repository.OrderRepository
+	orders  repository.OrderShipmentRepository
 	courier repository.CourierSettingsRepository
 	client  CourierClient
 }
 
 func NewCourierService(
 	shops repository.ShopRepository,
-	orders repository.OrderRepository,
+	orders repository.OrderShipmentRepository,
 	courierRepo repository.CourierSettingsRepository,
 	client CourierClient,
 ) *CourierService {

@@ -13,14 +13,15 @@ export default async function StorefrontLayout({
   params,
   children,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
   children: ReactNode;
 }) {
+  const { slug } = await params;
   let shop: PublicShop | null = null;
   let delivery: PublicDeliverySettings | null = null;
   try {
-    shop = await getShop(params.slug, { cache: 'no-store' });
-    delivery = await getDeliverySettings(params.slug, {
+    shop = await getShop(slug, { cache: 'no-store' });
+    delivery = await getDeliverySettings(slug, {
       cache: 'no-store',
     }).catch(() => null);
   } catch {

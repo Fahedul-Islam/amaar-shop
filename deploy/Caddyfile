@@ -1,0 +1,17 @@
+# HTTPS for the Amaar Shop API.
+#
+# Caddy requests and renews a free Let's Encrypt certificate for $API_DOMAIN
+# automatically, and redirects http:// to https:// on its own. There is nothing
+# else to configure — that is why this file is three directives long.
+
+{$API_DOMAIN} {
+	encode gzip
+
+	# Sellers upload product photos and payment screenshots up to 5 MB
+	# (backend/internal/storage/local/storage.go). Leave headroom.
+	request_body {
+		max_size 10MB
+	}
+
+	reverse_proxy backend:8080
+}

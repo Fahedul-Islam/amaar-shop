@@ -209,6 +209,7 @@ cd frontend && ./node_modules/.bin/tsc --noEmit   # type-check
 
 ## Docs
 
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — step-by-step hosting guide (Vercel + Oracle Cloud, free tier)
 - [`docs/API.md`](docs/API.md) — endpoint reference
 - [`docs/SCHEMA.md`](docs/SCHEMA.md) — database schema
 - [`docs/META_TRACKING_SETUP.md`](docs/META_TRACKING_SETUP.md) — seller guide for Facebook ad tracking

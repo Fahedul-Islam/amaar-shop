@@ -10,12 +10,12 @@ import (
 // MarketplaceService handles the public marketplace homepage logic.
 type MarketplaceService struct {
 	marketplace repository.MarketplaceRepository
-	orders      repository.OrderRepository
+	orders      repository.OrderItemLoader
 }
 
 func NewMarketplaceService(
 	marketplace repository.MarketplaceRepository,
-	orders repository.OrderRepository,
+	orders repository.OrderItemLoader,
 ) *MarketplaceService {
 	return &MarketplaceService{marketplace: marketplace, orders: orders}
 }

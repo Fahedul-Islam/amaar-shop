@@ -7,25 +7,25 @@ import (
 
 // Order represents a customer order placed on a shop's storefront.
 type Order struct {
-	ID                     string      `json:"id"`
-	ShopID                 string      `json:"shop_id"`
-	CustomerName           string      `json:"customer_name"`
-	CustomerPhone          string      `json:"customer_phone"`
-	DeliveryAddress        string      `json:"delivery_address"`
-	DeliveryDivision       string      `json:"delivery_division"`
-	DeliveryDistrict       string      `json:"delivery_district"`
-	DeliveryArea           string      `json:"delivery_area"`
-	Note                   string      `json:"note"`
-	SubtotalBDT            string      `json:"subtotal_bdt"`
-	DeliveryChargeBDT      string      `json:"delivery_charge_bdt"`
-	TotalBDT               string      `json:"total_bdt"`
-	Status                 string      `json:"status"`
+	ID                string `json:"id"`
+	ShopID            string `json:"shop_id"`
+	CustomerName      string `json:"customer_name"`
+	CustomerPhone     string `json:"customer_phone"`
+	DeliveryAddress   string `json:"delivery_address"`
+	DeliveryDivision  string `json:"delivery_division"`
+	DeliveryDistrict  string `json:"delivery_district"`
+	DeliveryArea      string `json:"delivery_area"`
+	Note              string `json:"note"`
+	SubtotalBDT       string `json:"subtotal_bdt"`
+	DeliveryChargeBDT string `json:"delivery_charge_bdt"`
+	TotalBDT          string `json:"total_bdt"`
+	Status            string `json:"status"`
 	// Shipment record. Populated when the seller hands the parcel to a courier
 	// (manually in Phase 1, or via a courier API later). Empty until shipped.
-	CourierName            string      `json:"courier_name,omitempty"`
-	TrackingID             string      `json:"tracking_id,omitempty"`
-	AdvancePaymentRequired bool        `json:"advance_payment_required"`
-	AdvancePaymentReceived bool        `json:"advance_payment_received"`
+	CourierName            string `json:"courier_name,omitempty"`
+	TrackingID             string `json:"tracking_id,omitempty"`
+	AdvancePaymentRequired bool   `json:"advance_payment_required"`
+	AdvancePaymentReceived bool   `json:"advance_payment_received"`
 	// Buyer-submitted advance-payment proof. Nil/empty until submitted.
 	AdvancePaymentMethodID    *string    `json:"advance_payment_method_id,omitempty"`
 	AdvancePaymentTxnRef      string     `json:"advance_payment_txn_ref,omitempty"`
@@ -34,11 +34,11 @@ type Order struct {
 	// ReservationID, when set, tells PlaceOrder to consume a cart
 	// reservation (skipping the stock decrement, since it was already
 	// done at reserve time). Not persisted on the order row itself.
-	ReservationID *string `json:"-"`
-	CancelledReason           *string    `json:"cancelled_reason"`
-	Items                     []OrderItem `json:"items"`
-	CreatedAt                 time.Time   `json:"created_at"`
-	UpdatedAt                 time.Time   `json:"updated_at"`
+	ReservationID   *string     `json:"-"`
+	CancelledReason *string     `json:"cancelled_reason"`
+	Items           []OrderItem `json:"items"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
 // OrderItem is a single line item within an order. Prices are snapshotted
@@ -53,8 +53,8 @@ type OrderItem struct {
 	// cost edits don't rewrite the profit of past orders. Nil when the product
 	// had no cost price recorded.
 	UnitCostSnapshotBDT *string `json:"unit_cost_snapshot_bdt,omitempty"`
-	Quantity             int    `json:"quantity"`
-	LineTotalBDT         string `json:"line_total_bdt"`
+	Quantity            int     `json:"quantity"`
+	LineTotalBDT        string  `json:"line_total_bdt"`
 }
 
 // MarketplaceOrder is an order with the originating shop's name and slug

@@ -189,7 +189,7 @@ export default function AdminTeamPage() {
                               {m.is_super_admin ? (
                                 <span className="text-xs text-stone-400">Cannot remove</span>
                               ) : isMe ? (
-                                <span className="text-xs text-stone-400">That's you</span>
+                                <span className="text-xs text-stone-400">That&apos;s you</span>
                               ) : (
                                 <Button
                                   size="sm"

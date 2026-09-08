@@ -1063,7 +1063,7 @@ function HoldTimer({
             </>
           ) : (
             <>
-              We're holding your cart for{" "}
+              We&apos;re holding your cart for{" "}
               <b className="font-mono text-[14px]">
                 {mm}:{ss}
               </b>

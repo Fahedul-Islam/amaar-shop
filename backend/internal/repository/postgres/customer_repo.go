@@ -26,9 +26,9 @@ const (
 	// vipMinOrders       = 5
 	// inactiveAfterDays  = 90
 	// newWithinDays      = 30
-	defaultListLimit   = 50
-	maxListLimit       = 200
-	maxNoteLength      = 1000
+	defaultListLimit = 50
+	maxListLimit     = 200
+	maxNoteLength    = 1000
 )
 
 // segmentExpr is the canonical CASE used in every customer-aggregation query.

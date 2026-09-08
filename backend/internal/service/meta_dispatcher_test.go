@@ -113,7 +113,7 @@ func dispatcherFixture(t *testing.T, sendErr error) (*MetaDispatcher, *mockMetaR
 	sender := &fakeMetaSender{err: sendErr}
 	d := NewMetaDispatcher(metaRepo, orderRepo, sender, nil, time.Minute)
 
-	svc := NewMetaService(shopRepo, orderRepo, metaRepo)
+	svc := NewMetaService(shopRepo, metaRepo)
 	if err := svc.PublishOrderEvent(context.Background(), order, meta.EventPurchase); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -198,12 +198,12 @@ func TestDispatcher_SkipsShopWithTrackingDisabled(t *testing.T) {
 }
 
 func TestPublishOrderEvent_SkipsWhenNotConfigured(t *testing.T) {
-	_, shopRepo, deliveryRepo, prodRepo, orderRepo := newTestOrderService(t)
+	_, shopRepo, deliveryRepo, prodRepo, _ := newTestOrderService(t)
 	shop := seedShopWithDelivery(t, shopRepo, deliveryRepo, "user-1", "my-shop")
 	_ = seedProduct(t, prodRepo, shop.ID, "X", "500.00", 10)
 
 	metaRepo := newMockMetaRepo() // no settings → not configured
-	svc := NewMetaService(shopRepo, orderRepo, metaRepo)
+	svc := NewMetaService(shopRepo, metaRepo)
 
 	err := svc.PublishOrderEvent(context.Background(), &domain.Order{
 		ID: "o1", ShopID: shop.ID, SubtotalBDT: "500.00", CustomerPhone: "01712345678",
@@ -217,7 +217,7 @@ func TestPublishOrderEvent_SkipsWhenNotConfigured(t *testing.T) {
 }
 
 func TestPublishOrderEvent_IdempotentPerOrderAndEvent(t *testing.T) {
-	_, shopRepo, deliveryRepo, prodRepo, orderRepo := newTestOrderService(t)
+	_, shopRepo, deliveryRepo, prodRepo, _ := newTestOrderService(t)
 	shop := seedShopWithDelivery(t, shopRepo, deliveryRepo, "user-1", "my-shop")
 	_ = seedProduct(t, prodRepo, shop.ID, "X", "500.00", 10)
 
@@ -225,7 +225,7 @@ func TestPublishOrderEvent_IdempotentPerOrderAndEvent(t *testing.T) {
 	metaRepo.settings[shop.ID] = &domain.MetaSettings{
 		ShopID: shop.ID, PixelID: "P", AccessToken: "T", IsEnabled: true, TrackDelivered: true,
 	}
-	svc := NewMetaService(shopRepo, orderRepo, metaRepo)
+	svc := NewMetaService(shopRepo, metaRepo)
 	order := &domain.Order{ID: "o1", ShopID: shop.ID, SubtotalBDT: "500.00", CustomerPhone: "01712345678"}
 
 	// Firing the same conversion twice must not double-count in Meta.
@@ -243,7 +243,7 @@ func TestPublishOrderEvent_IdempotentPerOrderAndEvent(t *testing.T) {
 }
 
 func TestPublishOrderEvent_RespectsTrackDeliveredToggle(t *testing.T) {
-	_, shopRepo, deliveryRepo, prodRepo, orderRepo := newTestOrderService(t)
+	_, shopRepo, deliveryRepo, prodRepo, _ := newTestOrderService(t)
 	shop := seedShopWithDelivery(t, shopRepo, deliveryRepo, "user-1", "my-shop")
 	_ = seedProduct(t, prodRepo, shop.ID, "X", "500.00", 10)
 
@@ -251,7 +251,7 @@ func TestPublishOrderEvent_RespectsTrackDeliveredToggle(t *testing.T) {
 	metaRepo.settings[shop.ID] = &domain.MetaSettings{
 		ShopID: shop.ID, PixelID: "P", AccessToken: "T", IsEnabled: true, TrackDelivered: false,
 	}
-	svc := NewMetaService(shopRepo, orderRepo, metaRepo)
+	svc := NewMetaService(shopRepo, metaRepo)
 	order := &domain.Order{ID: "o1", ShopID: shop.ID, SubtotalBDT: "500.00"}
 
 	_ = svc.PublishOrderEvent(context.Background(), order, meta.EventDelivered)

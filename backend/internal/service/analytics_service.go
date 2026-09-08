@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
@@ -15,49 +14,32 @@ import (
 // without making the data look stale.
 const cacheTTL = 30 * time.Second
 
-// cacheEntry holds a cached value with its expiration time.
-type cacheEntry struct {
-	value     interface{}
-	expiresAt time.Time
-}
-
-// AnalyticsService provides dashboard statistics with a 5-minute in-memory cache.
+// AnalyticsService provides the seller's sales figures: order counts, revenue,
+// best-sellers and the downloadable report bodies. Storefront traffic lives in
+// VisitAnalyticsService instead.
+//
+// It still reads one visit figure — conversion — because the period summary
+// reports revenue against traffic. That is a genuine cross-cut, so it depends
+// on the single-method VisitConversionReader rather than the whole visit repo.
 type AnalyticsService struct {
 	shops     repository.ShopRepository
 	analytics repository.AnalyticsRepository
-	visits    repository.VisitRepository
+	visits    repository.VisitConversionReader
 
-	mu    sync.RWMutex
-	cache map[string]cacheEntry
+	cache *ttlCache
 }
 
 func NewAnalyticsService(
 	shops repository.ShopRepository,
 	analytics repository.AnalyticsRepository,
-	visits repository.VisitRepository,
+	visits repository.VisitConversionReader,
 ) *AnalyticsService {
 	return &AnalyticsService{
 		shops:     shops,
 		analytics: analytics,
 		visits:    visits,
-		cache:     make(map[string]cacheEntry),
+		cache:     newTTLCache(cacheTTL),
 	}
-}
-
-func (s *AnalyticsService) get(key string) (interface{}, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	entry, ok := s.cache[key]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return nil, false
-	}
-	return entry.value, true
-}
-
-func (s *AnalyticsService) set(key string, value interface{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cache[key] = cacheEntry{value: value, expiresAt: time.Now().Add(cacheTTL)}
 }
 
 // TodayStats returns today's aggregated statistics for the seller's shop.
@@ -66,18 +48,9 @@ func (s *AnalyticsService) TodayStats(ctx context.Context, ownerUserID string) (
 	if err != nil {
 		return nil, err
 	}
-
-	key := "today:" + shop.ID
-	if cached, ok := s.get(key); ok {
-		return cached.(*domain.TodayStats), nil
-	}
-
-	stats, err := s.analytics.TodayStats(ctx, shop.ID)
-	if err != nil {
-		return nil, err
-	}
-	s.set(key, stats)
-	return stats, nil
+	return cachedValue(s.cache, "today:"+shop.ID, func() (*domain.TodayStats, error) {
+		return s.analytics.TodayStats(ctx, shop.ID)
+	})
 }
 
 // RangeStats returns a daily time series for the given date range.
@@ -86,23 +59,14 @@ func (s *AnalyticsService) RangeStats(ctx context.Context, ownerUserID string, f
 	if err != nil {
 		return nil, err
 	}
-
-	// Enforce max 366-day range so "This year" works.
-	if to.Sub(from).Hours() > 366*24 {
-		return nil, fmt.Errorf("date range must not exceed 366 days")
+	if err := checkRangeLimit(from, to); err != nil {
+		return nil, err
 	}
 
 	key := fmt.Sprintf("range:%s:%s:%s", shop.ID, from.Format("2006-01-02"), to.Format("2006-01-02"))
-	if cached, ok := s.get(key); ok {
-		return cached.([]domain.DayStat), nil
-	}
-
-	stats, err := s.analytics.RangeStats(ctx, shop.ID, from, to)
-	if err != nil {
-		return nil, err
-	}
-	s.set(key, stats)
-	return stats, nil
+	return cachedValue(s.cache, key, func() ([]domain.DayStat, error) {
+		return s.analytics.RangeStats(ctx, shop.ID, from, to)
+	})
 }
 
 // TopProducts returns the top-selling products this month for the seller's shop.
@@ -111,64 +75,35 @@ func (s *AnalyticsService) TopProducts(ctx context.Context, ownerUserID string) 
 	if err != nil {
 		return nil, err
 	}
+	return cachedValue(s.cache, "top:"+shop.ID, func() ([]domain.TopProduct, error) {
+		return s.analytics.TopProducts(ctx, shop.ID, 10)
+	})
+}
 
-	key := "top:" + shop.ID
-	if cached, ok := s.get(key); ok {
-		return cached.([]domain.TopProduct), nil
-	}
-
-	products, err := s.analytics.TopProducts(ctx, shop.ID, 10)
+// PopularProducts returns top products for the public storefront (no revenue data).
+func (s *AnalyticsService) PopularProducts(ctx context.Context, slug string) ([]domain.TopProduct, error) {
+	shop, err := s.shops.FindBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
-	s.set(key, products)
-	return products, nil
+	if shop.IsSuspended {
+		return nil, domain.ErrShopNotFound
+	}
+	return cachedValue(s.cache, "popular:"+shop.ID, func() ([]domain.TopProduct, error) {
+		return s.analytics.PopularProducts(ctx, shop.ID, 10)
+	})
 }
 
-// VisitSummary returns a date-bucketed visit time series for the seller's shop.
-// Not cached: today's data updates continuously and a stale cache would
-// confuse sellers who just saw a visit land. The underlying queries hit
-// indexed columns and stay fast even without caching.
-func (s *AnalyticsService) VisitSummary(ctx context.Context, ownerUserID string, period domain.VisitPeriod, days int) ([]domain.VisitBucketStats, time.Time, time.Time, error) {
-	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
-	if err != nil {
-		return nil, time.Time{}, time.Time{}, err
-	}
-
-	to := time.Now().UTC()
-	from := to.AddDate(0, 0, -days+1)
-
-	buckets, err := s.visits.VisitsByPeriod(ctx, shop.ID, period, from, to)
-	if err != nil {
-		return nil, time.Time{}, time.Time{}, err
-	}
-	return buckets, from, to, nil
-}
-
-// TopVisitedProducts returns the most-visited products for the seller's shop
-// over the last 30 days. Not cached (see VisitSummary).
-func (s *AnalyticsService) TopVisitedProducts(ctx context.Context, ownerUserID string) ([]domain.TopVisitedProduct, error) {
+// DashboardSummary returns the seller home page in a single call.
+// Not cached: action counts must reflect the latest order/stock state so
+// the seller sees a freshly-confirmed order disappear from "pending" the
+// moment they tap.
+func (s *AnalyticsService) DashboardSummary(ctx context.Context, ownerUserID string) (*domain.DashboardSummary, error) {
 	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
 	if err != nil {
 		return nil, err
 	}
-
-	to := time.Now().UTC()
-	from := to.AddDate(0, 0, -30)
-	return s.visits.TopVisitedProducts(ctx, shop.ID, from, to, 10)
-}
-
-// VisitConversion returns visit-to-order conversion stats for the last `days` days.
-// Not cached (see VisitSummary).
-func (s *AnalyticsService) VisitConversion(ctx context.Context, ownerUserID string, days int) (*domain.VisitConversion, error) {
-	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
-	if err != nil {
-		return nil, err
-	}
-
-	to := time.Now().UTC()
-	from := to.AddDate(0, 0, -days+1)
-	return s.visits.Conversion(ctx, shop.ID, from, to)
+	return s.analytics.DashboardSummary(ctx, shop.ID)
 }
 
 // StatsSummary returns aggregate metrics for the current window and, when
@@ -202,9 +137,30 @@ func (s *AnalyticsService) StatsSummary(
 	return out, nil
 }
 
+// OrderReport builds the analytics block for the seller's downloadable
+// order report. Not cached: report bodies are scoped to a user-chosen
+// window and the seller expects fresh numbers when they hit "download".
+func (s *AnalyticsService) OrderReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.OrderReport, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.analytics.OrderReport(ctx, shop.ID, from, to)
+}
+
+// ProductReport builds the analytics block for the seller's downloadable
+// product report.
+func (s *AnalyticsService) ProductReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.ProductReport, error) {
+	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.analytics.ProductReport(ctx, shop.ID, from, to)
+}
+
 func (s *AnalyticsService) computeSummary(ctx context.Context, shopID string, from, to time.Time) (*domain.PeriodSummary, error) {
-	if to.Sub(from).Hours() > 366*24 {
-		return nil, fmt.Errorf("date range must not exceed 366 days")
+	if err := checkRangeLimit(from, to); err != nil {
+		return nil, err
 	}
 
 	days, err := s.analytics.RangeStats(ctx, shopID, from, to)
@@ -243,6 +199,17 @@ func (s *AnalyticsService) computeSummary(ctx context.Context, shopID string, fr
 	}, nil
 }
 
+// maxRangeDays caps a query window so "This year" works but an unbounded
+// range can't turn into a table scan.
+const maxRangeDays = 366
+
+func checkRangeLimit(from, to time.Time) error {
+	if to.Sub(from).Hours() > maxRangeDays*24 {
+		return fmt.Errorf("date range must not exceed %d days", maxRangeDays)
+	}
+	return nil
+}
+
 func computeChanges(cur, prev *domain.PeriodSummary) *domain.SummaryChanges {
 	parse := func(s string) float64 {
 		var v float64
@@ -266,60 +233,4 @@ func pctChange(cur, prev float64) *float64 {
 	v := (cur - prev) / prev * 100
 	v = float64(int(v*100)) / 100
 	return &v
-}
-
-// DashboardSummary returns the seller home page in a single call.
-// Not cached: action counts must reflect the latest order/stock state so
-// the seller sees a freshly-confirmed order disappear from "pending" the
-// moment they tap.
-func (s *AnalyticsService) DashboardSummary(ctx context.Context, ownerUserID string) (*domain.DashboardSummary, error) {
-	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
-	if err != nil {
-		return nil, err
-	}
-	return s.analytics.DashboardSummary(ctx, shop.ID)
-}
-
-// OrderReport builds the analytics block for the seller's downloadable
-// order report. Not cached: report bodies are scoped to a user-chosen
-// window and the seller expects fresh numbers when they hit "download".
-func (s *AnalyticsService) OrderReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.OrderReport, error) {
-	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
-	if err != nil {
-		return nil, err
-	}
-	return s.analytics.OrderReport(ctx, shop.ID, from, to)
-}
-
-// ProductReport builds the analytics block for the seller's downloadable
-// product report.
-func (s *AnalyticsService) ProductReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.ProductReport, error) {
-	shop, err := s.shops.FindByOwnerID(ctx, ownerUserID)
-	if err != nil {
-		return nil, err
-	}
-	return s.analytics.ProductReport(ctx, shop.ID, from, to)
-}
-
-// PopularProducts returns top products for the public storefront (no revenue data).
-func (s *AnalyticsService) PopularProducts(ctx context.Context, slug string) ([]domain.TopProduct, error) {
-	shop, err := s.shops.FindBySlug(ctx, slug)
-	if err != nil {
-		return nil, err
-	}
-	if shop.IsSuspended {
-		return nil, domain.ErrShopNotFound
-	}
-
-	key := "popular:" + shop.ID
-	if cached, ok := s.get(key); ok {
-		return cached.([]domain.TopProduct), nil
-	}
-
-	products, err := s.analytics.PopularProducts(ctx, shop.ID, 10)
-	if err != nil {
-		return nil, err
-	}
-	s.set(key, products)
-	return products, nil
 }

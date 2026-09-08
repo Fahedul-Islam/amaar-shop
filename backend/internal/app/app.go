@@ -13,7 +13,6 @@ import (
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	"github.com/fhedul/amaarshop/backend/internal/courier"
-	"github.com/fhedul/amaarshop/backend/internal/meta"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
@@ -22,11 +21,11 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
 	courierhandler "github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	marketinghandler "github.com/fhedul/amaarshop/backend/internal/handler/http/marketing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/marketplace"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/metatracking"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/middleware"
-	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/order"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/paymentmethod"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/product"
@@ -35,6 +34,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/review"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/shop"
 	visithandler "github.com/fhedul/amaarshop/backend/internal/handler/http/visit"
+	"github.com/fhedul/amaarshop/backend/internal/meta"
 	"github.com/fhedul/amaarshop/backend/internal/platform/database"
 	"github.com/fhedul/amaarshop/backend/internal/repository/postgres"
 	"github.com/fhedul/amaarshop/backend/internal/service"
@@ -111,9 +111,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	courierSvc := service.NewCourierService(shopRepo, orderRepo, courierSettingsRepo, steadfastClient)
 	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
 	cartReservationSvc := service.NewCartReservationService(shopRepo, productRepo, cartReservationRepo)
+	// Sales figures and storefront traffic are separate services: the first
+	// caches, the second deliberately doesn't.
 	analyticsSvc := service.NewAnalyticsService(shopRepo, analyticsRepo, visitRepo)
+	visitAnalyticsSvc := service.NewVisitAnalyticsService(shopRepo, visitRepo)
 	marketingSvc := service.NewMarketingService(shopRepo, marketingRepo)
-	metaSvc := service.NewMetaService(shopRepo, orderRepo, metaRepo)
+	metaSvc := service.NewMetaService(shopRepo, metaRepo)
 
 	// Order lifecycle events feed Meta conversion tracking. Attached after
 	// construction so the order service stays usable without it.
@@ -121,7 +124,13 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	marketplaceSvc := service.NewMarketplaceService(marketplaceRepo, orderRepo)
 	reviewSvc := service.NewReviewService(reviewRepo, shopRepo, fileStore)
 	customerSvc := service.NewCustomerService(shopRepo, customerRepo)
-	adminSvc := service.NewAdminService(adminRepo, userRepo, feePaymentRepo, feeRuleRepo)
+	// The admin area is four cohesive services rather than one: access
+	// control, moderation, reporting, and fee settlement. Each takes only the
+	// repository role it needs; adminRepo satisfies all of them.
+	adminAccessSvc := service.NewAdminAccessService(adminRepo, userRepo)
+	adminModerationSvc := service.NewAdminModerationService(adminRepo)
+	adminInsightsSvc := service.NewAdminInsightsService(adminRepo, feeRuleRepo)
+	platformFeeSvc := service.NewPlatformFeeService(feeRuleRepo, feePaymentRepo, adminRepo)
 	reportSvc := service.NewReportService(reportRepo, shopRepo)
 	billingSvc := service.NewBillingService(feeRuleRepo, feeSubmissionRepo, feePaymentRepo, shopRepo, adminRepo)
 
@@ -138,7 +147,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	mw := middleware.NewManager()
 	mw.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	mw.Use(middleware.Logger(log))
-	mw.Use(middleware.BotFilter()) // tag bot UAs so visit-tracking can skip them
+	mw.Use(middleware.BotFilter())         // tag bot UAs so visit-tracking can skip them
 	rl := middleware.NewRateLimiter(20, 5) // 20 req/min, burst 5
 
 	// --- Background workers ---
@@ -176,43 +185,50 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	courierHandler := courierhandler.NewHandler(courierSvc, cfg)
 	paymentMethodHandler := paymentmethod.NewHandler(paymentMethodSvc, cfg)
 	reservationHandler := reservation.NewHandler(cartReservationSvc, cfg)
-	analyticsHandler := analytics.NewHandler(analyticsSvc, cfg)
+	analyticsHandler := analytics.NewHandler(analyticsSvc, visitAnalyticsSvc, cfg)
 	marketingHandler := marketinghandler.NewHandler(marketingSvc, cfg)
 	metaHandler := metatracking.NewHandler(metaSvc, cfg)
 	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 	reviewHandler := review.NewHandler(reviewSvc, cfg)
 	visitHandler := visithandler.NewHandler(visitWorker, visitRepo)
 	customerHandler := customer.NewHandler(customerSvc, cfg)
-	adminHandler := admin.NewHandler(adminSvc, reportSvc, cfg)
+	adminHandler := admin.NewHandler(admin.Deps{
+		Access:     adminAccessSvc,
+		Moderation: adminModerationSvc,
+		Insights:   adminInsightsSvc,
+		Fees:       platformFeeSvc,
+		Reports:    reportSvc,
+		Config:     cfg,
+	})
 	reportHandler := report.NewHandler(reportSvc)
 	invoiceHandler := invoice.NewHandler(orderSvc, shopSvc, productSvc, analyticsSvc, cfg)
-	billingHandler := billing.NewHandler(billingSvc, adminSvc, cfg)
+	billingHandler := billing.NewHandler(billingSvc, adminAccessSvc, cfg)
 
 	// --- Router ---
 	handler := handlerhttp.NewRouter(handlerhttp.RouterDeps{
-		DB:                 db,
-		UploadDir:          cfg.UploadDir,
-		AuthHandler:        authHandler,
-		ShopHandler:        shopHandler,
-		CategoryHandler:    categoryHandler,
-		ProductHandler:     productHandler,
-		OrderHandler:       orderHandler,
-		CourierHandler:     courierHandler,
+		DB:                   db,
+		UploadDir:            cfg.UploadDir,
+		AuthHandler:          authHandler,
+		ShopHandler:          shopHandler,
+		CategoryHandler:      categoryHandler,
+		ProductHandler:       productHandler,
+		OrderHandler:         orderHandler,
+		CourierHandler:       courierHandler,
 		PaymentMethodHandler: paymentMethodHandler,
 		ReservationHandler:   reservationHandler,
-		AnalyticsHandler:   analyticsHandler,
-		MarketingHandler:   marketingHandler,
-		MarketplaceHandler: marketplaceHandler,
-		MetaHandler:        metaHandler,
-		ReviewHandler:      reviewHandler,
-		VisitHandler:       visitHandler,
-		CustomerHandler:    customerHandler,
-		AdminHandler:       adminHandler,
-		ReportHandler:      reportHandler,
-		InvoiceHandler:     invoiceHandler,
-		BillingHandler:     billingHandler,
-		Middleware:         mw,
-		RateLimiter:        rl,
+		AnalyticsHandler:     analyticsHandler,
+		MarketingHandler:     marketingHandler,
+		MarketplaceHandler:   marketplaceHandler,
+		MetaHandler:          metaHandler,
+		ReviewHandler:        reviewHandler,
+		VisitHandler:         visitHandler,
+		CustomerHandler:      customerHandler,
+		AdminHandler:         adminHandler,
+		ReportHandler:        reportHandler,
+		InvoiceHandler:       invoiceHandler,
+		BillingHandler:       billingHandler,
+		Middleware:           mw,
+		RateLimiter:          rl,
 	})
 
 	return &App{

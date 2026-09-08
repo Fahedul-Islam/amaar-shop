@@ -16,23 +16,6 @@ type FeeRuleRepository interface {
 	Update(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
 }
 
-// FeeSubmissionListFilter is the standard filter for the admin review queue
-// and the seller's own submission history.
-type FeeSubmissionListFilter struct {
-	Status   string // optional
-	ShopID   string // optional — caller scope (seller view passes their shop)
-	Page     int
-	PageSize int
-}
-
-// Offset returns the SQL offset for the given page/page_size.
-func (f FeeSubmissionListFilter) Offset() int {
-	if f.Page < 1 {
-		return 0
-	}
-	return (f.Page - 1) * f.PageSize
-}
-
 // FeeSubmissionRepository handles seller-submitted fee payment claims.
 type FeeSubmissionRepository interface {
 	// Create inserts a new pending submission.
@@ -46,7 +29,7 @@ type FeeSubmissionRepository interface {
 	HasPending(ctx context.Context, shopID string) (bool, error)
 
 	// List returns paginated submissions with optional filters.
-	List(ctx context.Context, f FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error)
+	List(ctx context.Context, f domain.FeeSubmissionListFilter) ([]domain.AdminFeeSubmissionRow, int, error)
 
 	// CountByStatus returns counts grouped by status — for tab badges.
 	CountByStatus(ctx context.Context) (map[string]int, error)
