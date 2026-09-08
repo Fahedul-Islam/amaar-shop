@@ -54,7 +54,7 @@ export default function DashboardHomePage() {
       {/* Today's tasks — actionable items */}
       <section className="mb-7">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-500 mb-3">
-          Today's tasks
+          Today&apos;s tasks
         </h2>
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <ActionCard

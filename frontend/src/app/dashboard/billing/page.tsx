@@ -198,8 +198,8 @@ function SubmitForm({
       <Card className="p-5" hover={false}>
         <h3 className="text-base font-semibold">Payment submitted</h3>
         <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-          You have a payment submission awaiting admin review. We'll update your balance
-          as soon as it's approved. Check the timeline on the right for status.
+          You have a payment submission awaiting admin review. We&apos;ll update your balance
+          as soon as it&apos;s approved. Check the timeline on the right for status.
         </p>
       </Card>
     );
@@ -211,7 +211,7 @@ function SubmitForm({
       <Card className="p-5" hover={false}>
         <h3 className="text-base font-semibold">Nothing to pay right now</h3>
         <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-          You're all caught up. As you take new orders, your balance will accumulate
+          You&apos;re all caught up. As you take new orders, your balance will accumulate
           here for the next billing cycle.
         </p>
       </Card>

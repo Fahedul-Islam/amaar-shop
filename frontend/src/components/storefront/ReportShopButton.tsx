@@ -138,7 +138,7 @@ export function ReportShopButton({ shopSlug, shopName }: { shopSlug: string; sho
                     </>
                   ) : (
                     <>
-                      Tell our admin team what's wrong with <strong>{shopName}</strong>.
+                      Tell our admin team what&apos;s wrong with <strong>{shopName}</strong>.
                       You can report anonymously, or share your contact details if you want
                       a follow-up.
                     </>

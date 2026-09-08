@@ -112,7 +112,7 @@ export default function AdminReportsPage() {
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 text-left">
                     <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Shop reported</th>
-                    <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">What's wrong</th>
+                    <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">What&apos;s wrong</th>
                     <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Reporter</th>
                     <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">Status</th>
                     <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider">When</th>

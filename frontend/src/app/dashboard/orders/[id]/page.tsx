@@ -1078,7 +1078,7 @@ function PaymentCard({
         </>
       ) : (
         <div className="px-5 py-4 text-sm text-amber-800 bg-amber-50 border-t border-amber-100">
-          Buyer hasn't submitted advance-payment proof yet. They can update it
+          Buyer hasn&apos;t submitted advance-payment proof yet. They can update it
           from their order tracking link.
         </div>
       )}

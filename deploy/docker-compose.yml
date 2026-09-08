@@ -1,0 +1,80 @@
+# Amaar Shop — production stack for a single Oracle Cloud VM.
+#
+# Runs PostgreSQL, the Go API, and Caddy (which terminates HTTPS and forwards
+# to the API). The Next.js frontend is NOT here — it runs on Vercel and reaches
+# this machine over https://${API_DOMAIN}.
+#
+# Usage (from this directory):
+#   cp .env.example .env && nano .env      # fill in every value
+#   docker compose up -d --build
+#
+# Full walkthrough: ../docs/DEPLOYMENT.md
+
+name: amaarshop
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Deliberately no `ports:` — the database is reachable only from the other
+    # containers on this Docker network, never from the internet.
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      ENV: production
+      PORT: "8080"
+      UPLOAD_DIR: /app/uploads
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+    volumes:
+      - upload_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+    # Also no `ports:` — only Caddy is exposed to the internet.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates live here — never delete this volume
+      - caddy_config:/config
+    depends_on:
+      - backend
+    logging: *logging
+
+volumes:
+  pgdata:
+  upload_data:
+  caddy_data:
+  caddy_config:

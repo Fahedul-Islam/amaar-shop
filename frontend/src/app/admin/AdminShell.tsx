@@ -45,7 +45,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 interface NavItem {
   href: string;
   label: string;
-  Icon: (props: { size?: number }) => JSX.Element;
+  Icon: (props: { size?: number }) => React.JSX.Element;
   exact?: boolean;
 }
 
