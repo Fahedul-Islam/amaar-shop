@@ -13,6 +13,7 @@ import (
 
 	"github.com/fhedul/amaarshop/backend/internal/config"
 	"github.com/fhedul/amaarshop/backend/internal/courier"
+	"github.com/fhedul/amaarshop/backend/internal/email"
 	handlerhttp "github.com/fhedul/amaarshop/backend/internal/handler/http"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/admin"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/analytics"
@@ -103,6 +104,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 
 	// --- Services (depend only on repo + storage interfaces) ---
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	resetSvc := service.NewPasswordResetService(userRepo, postgres.NewPasswordResetRepo(db), &email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom}, cfg.JWTSecret)
 	shopSvc := service.NewShopService(shopRepo, deliveryRepo, reviewRepo, fileStore)
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
@@ -139,7 +141,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPass); err != nil {
 			log.Error("failed to seed admin user", "error", err)
 		} else {
-			log.Info("admin user seeded", "email", cfg.AdminEmail)
+			log.Info("admin bootstrap complete; existing passwords are unchanged", "email", cfg.AdminEmail)
 		}
 	}
 
@@ -177,7 +179,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	metaDispatcher.Start()
 
 	// --- Handlers (depend only on service interfaces) ---
-	authHandler := auth.NewHandler(authSvc, cfg)
+	authHandler := auth.NewHandler(authSvc, cfg).WithPasswordReset(resetSvc)
 	shopHandler := shop.NewHandler(shopSvc, cfg)
 	categoryHandler := category.NewHandler(categorySvc, cfg)
 	productHandler := product.NewHandler(productSvc, cfg, visitWorker)

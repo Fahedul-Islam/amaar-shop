@@ -9,6 +9,10 @@ import (
 // RegisterRoutes mounts all auth endpoints on the given mux.
 // Rate-limited routes wrap signup/login; /me requires a valid access token.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager, rl *middleware.RateLimiter) {
+	if h.reset != nil {
+		mux.HandleFunc("POST /api/auth/forgot-password", mw.With(rl.Limit()).Then(h.ForgotPassword))
+		mux.HandleFunc("POST /api/auth/reset-password", mw.With(rl.Limit()).Then(h.ResetPassword))
+	}
 	rateLimited := mw.With(rl.Limit())
 	authenticated := mw.With(middleware.Auth(h.cfg.JWTSecret))
 

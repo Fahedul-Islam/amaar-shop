@@ -89,6 +89,7 @@ export default function AdminLoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+        <a href="/admin/forgot-password" className="block text-center text-sm text-teal-600 mb-4">Forgot password?</a>
 
         <div className="text-center text-xs text-stone-500">
           Admin access only. Shop owners use the{' '}

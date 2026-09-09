@@ -16,7 +16,8 @@ var ErrInvalidToken = errors.New("invalid or expired token")
 
 // Claims is the JWT payload for both access and refresh tokens.
 type Claims struct {
-	UserID string `json:"user_id"`
+	PasswordVersion string `json:"password_version,omitempty"`
+	UserID          string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -30,7 +31,11 @@ func GenerateRefreshToken(userID, secret string) (string, error) {
 	return generateToken(userID, secret, RefreshTokenDuration, "refresh")
 }
 
-func generateToken(userID, secret string, duration time.Duration, subject string) (string, error) {
+func GenerateVersionedRefreshToken(userID, secret, version string) (string, error) {
+	return generateToken(userID, secret, RefreshTokenDuration, "refresh", version)
+}
+
+func generateToken(userID, secret string, duration time.Duration, subject string, version ...string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID: userID,
@@ -39,6 +44,9 @@ func generateToken(userID, secret string, duration time.Duration, subject string
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(duration)),
 		},
+	}
+	if len(version) > 0 {
+		claims.PasswordVersion = version[0]
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))

@@ -40,10 +40,10 @@ func (r *userRepo) Create(ctx context.Context, user *domain.User) error {
 func (r *userRepo) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	u := &domain.User{}
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, is_admin, created_at, updated_at
+		`SELECT id, email, password_hash, is_admin, created_at, updated_at, password_changed_at
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt, &u.PasswordChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
 	}
@@ -56,10 +56,10 @@ func (r *userRepo) FindByEmail(ctx context.Context, email string) (*domain.User,
 func (r *userRepo) FindByID(ctx context.Context, id string) (*domain.User, error) {
 	u := &domain.User{}
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, is_admin, created_at, updated_at
+		`SELECT id, email, password_hash, is_admin, created_at, updated_at, password_changed_at
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt, &u.PasswordChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
 	}

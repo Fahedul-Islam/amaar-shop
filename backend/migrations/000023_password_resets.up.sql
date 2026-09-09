@@ -1,0 +1,8 @@
+ALTER TABLE users ADD COLUMN password_changed_at TIMESTAMPTZ;
+CREATE TABLE password_resets (
+ user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ code_hash TEXT NOT NULL,
+ expires_at TIMESTAMPTZ NOT NULL,
+ sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ attempts INTEGER NOT NULL DEFAULT 0
+);

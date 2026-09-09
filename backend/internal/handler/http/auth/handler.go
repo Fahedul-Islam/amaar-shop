@@ -15,8 +15,9 @@ const refreshCookieName = "refresh_token"
 
 // Handler implements the /api/auth/* endpoints defined in docs/API.md.
 type Handler struct {
-	svc Service
-	cfg *config.Config
+	svc   Service
+	cfg   *config.Config
+	reset PasswordResetService
 }
 
 // NewHandler constructs a Handler. It accepts any type satisfying the Service

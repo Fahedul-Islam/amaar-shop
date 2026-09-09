@@ -67,6 +67,7 @@ export default function LoginPage() {
             {loading ? t('logging_in') : t('login')}
           </Button>
         </form>
+        <a href="/forgot-password" className="block text-center text-sm text-teal-600 mb-4">Forgot password?</a>
 
         <div className="text-center text-sm text-stone-500">
           {t('no_account')}{' '}

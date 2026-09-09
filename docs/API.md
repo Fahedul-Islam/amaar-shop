@@ -1558,3 +1558,15 @@ shipped     -> cancelled
 ```
 
 **Errors:** `unauthorized`, `forbidden`
+
+### Email password recovery (admin and seller)
+
+- `POST /api/auth/forgot-password` with `{"email":"owner@example.com"}` returns
+  `200` and a generic `data.message` whether or not the account exists.
+- `POST /api/auth/reset-password` with
+  `{"email":"owner@example.com","code":"123456","password":"new-password"}`
+  returns `200` with `data.message` on success, or `400` for invalid input or an
+  invalid, expired, used, or exhausted code.
+
+Both endpoints are public and rate limited. Codes expire in 10 minutes, permit
+five attempts, and have a 60-second resend cooldown. Account roles do not change.
