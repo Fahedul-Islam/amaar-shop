@@ -88,7 +88,7 @@ func (r *analyticsRepo) TopProducts(ctx context.Context, shopID string, limit in
 			oi.product_id,
 			oi.product_name_snapshot                          AS product_name,
 			SUM(oi.quantity)                                  AS total_quantity,
-			SUM(oi.line_total_bdt)                            AS total_revenue_bdt
+			SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0)))                            AS total_revenue_bdt
 		FROM order_items oi
 		JOIN orders o ON o.id = oi.order_id
 		WHERE o.shop_id = $1

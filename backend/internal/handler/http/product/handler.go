@@ -58,6 +58,7 @@ func toProductDTO(p *domain.Product) dto.ProductDTO {
 		DiscountValue:         p.DiscountValue,
 		DeliveryChargeDhaka:   p.DeliveryChargeDhaka,
 		DeliveryChargeOutside: p.DeliveryChargeOutside,
+		AdvanceDeliveryExempt: p.AdvanceDeliveryExempt,
 		Images:                toImageDTOs(p.Images),
 		CreatedAt:             p.CreatedAt,
 		UpdatedAt:             p.UpdatedAt,
@@ -76,6 +77,7 @@ func toPublicProductDTO(p *domain.Product) dto.PublicProductDTO {
 		DiscountValue:         p.DiscountValue,
 		DeliveryChargeDhaka:   p.DeliveryChargeDhaka,
 		DeliveryChargeOutside: p.DeliveryChargeOutside,
+		AdvanceDeliveryExempt: p.AdvanceDeliveryExempt,
 		Images:                toImageDTOs(p.Images),
 	}
 }

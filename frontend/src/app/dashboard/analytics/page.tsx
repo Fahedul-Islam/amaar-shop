@@ -1,397 +1,73 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import { LineChart, type LineChartPoint } from '@/components/ui/LineChart';
-import {
-  getRangeStats,
-  getStatsSummary,
-  getTopProducts,
-  getVisitSummary,
-  getTopVisitedProducts,
-  type VisitPeriod,
-} from '@/lib/analyticsApi';
-import {
-  formatBDT,
-  formatCompactBDT,
-  formatCompactNumber,
-  formatShortDate,
-  formatDate,
-} from '@/lib/format';
+import { LineChart } from '@/components/ui/LineChart';
+import { getSalesReport } from '@/lib/analyticsApi';
+import { formatBDT, formatCompactBDT, formatShortDate } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
-import {
-  type DateRange,
-  daysInRange,
-  formatRangeLabel,
-  getPresetRange,
-  getPreviousPeriod,
-} from '@/lib/dateRange';
+import { type DateRange, getPresetRange, getPreviousPeriod } from '@/lib/dateRange';
+
+const statuses = [
+  ['pending', 'Waiting for confirmation', 'Confirm these orders with your buyers.'],
+  ['confirmed', 'Ready to send', 'Prepare these parcels for the courier.'],
+  ['shipped', 'With the courier', 'Follow up on parcels that have not arrived.'],
+  ['delivered', 'Delivered', 'Check courier settlements separately.'],
+  ['returned', 'Returned', 'Review the reason before taking another order.'],
+  ['cancelled', 'Cancelled', 'Review cancellations to find recurring problems.'],
+] as const;
 
 export default function AnalyticsPage() {
   const { locale } = useI18n();
   const [range, setRange] = useState<DateRange>(() => getPresetRange('last30'));
   const [compare, setCompare] = useState(false);
-  const [visitPeriod, setVisitPeriod] = useState<VisitPeriod>('daily');
-
-  const previous = useMemo(
-    () => (compare ? getPreviousPeriod(range) : null),
-    [compare, range],
-  );
-
-  const summaryQ = useQuery({
-    queryKey: ['stats-summary', range.startDate, range.endDate, previous?.startDate ?? null, previous?.endDate ?? null],
-    queryFn: () =>
-      getStatsSummary(range.startDate, range.endDate, previous?.startDate, previous?.endDate),
-  });
-
-  const rangeQ = useQuery({
-    queryKey: ['stats-range', range.startDate, range.endDate],
-    queryFn: () => getRangeStats(range.startDate, range.endDate),
-  });
-
-  const prevRangeQ = useQuery({
-    queryKey: ['stats-range-prev', previous?.startDate, previous?.endDate],
-    queryFn: () =>
-      getRangeStats(previous!.startDate, previous!.endDate),
-    enabled: !!previous,
-  });
-
-  const topQ = useQuery({ queryKey: ['top-products'], queryFn: getTopProducts });
-
-  const visitSummaryQ = useQuery({
-    queryKey: ['visits-summary', visitPeriod],
-    queryFn: () => getVisitSummary(visitPeriod),
-  });
-  const topVisitedQ = useQuery({
-    queryKey: ['visits-top-products'],
-    queryFn: getTopVisitedProducts,
-  });
-
-  const summary = summaryQ.data?.current;
-  const previousSummary = summaryQ.data?.previous;
-  const changes = summaryQ.data?.changes;
-
-  const revenuePoints: LineChartPoint[] = (rangeQ.data ?? []).map((d) => ({
-    x: d.date,
-    y: parseFloat(d.revenue_bdt),
-  }));
-  const prevRevenuePoints: LineChartPoint[] | undefined = compare && prevRangeQ.data
-    ? prevRangeQ.data.map((d) => ({ x: d.date, y: parseFloat(d.revenue_bdt) }))
-    : undefined;
-
-  const buckets = visitSummaryQ.data?.buckets ?? [];
-  const totalVisitPoints: LineChartPoint[] = buckets.map((b) => ({ x: b.bucket, y: b.total_visits }));
-  const uniqueVisitPoints: LineChartPoint[] = buckets.map((b) => ({ x: b.bucket, y: b.unique_visits }));
-
-  const rangeDays = daysInRange(range);
-
+  const previous = getPreviousPeriod(range);
+  const reportQ = useQuery({ queryKey: ['sales-report', range.startDate, range.endDate], queryFn: () => getSalesReport(range.startDate, range.endDate) });
+  const previousQ = useQuery({ queryKey: ['sales-report', previous.startDate, previous.endDate], queryFn: () => getSalesReport(previous.startDate, previous.endDate), enabled: compare });
+  const report = reportQ.data;
+  const money = (value: string | number) => formatBDT(String(value), locale);
+  const count = (status: string) => report?.status_counts[status] ?? 0;
+  const value = (status: string) => report?.status_values[status] ?? '0';
+  const exportDaily = () => {
+    if (!report) return;
+    const csv = ['Date,Orders including cancelled,Order value BDT excluding cancelled', ...report.daily.map(d => `${d.date},${d.orders},${d.revenue_bdt}`)].join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `sales-${range.startDate}-${range.endDate}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
   return (
-    <div className="px-6 md:px-8 py-6 md:py-7">
-      <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
-        <div>
-          <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Analytics</h1>
-          <p className="text-stone-500 mt-1">
-            <span className="font-medium text-stone-700">{formatRangeLabel(range)}</span>
-            <span className="text-stone-400">
-              {' · '}{formatDate(range.startDate, locale)} – {formatDate(range.endDate, locale)} ({rangeDays} {rangeDays === 1 ? 'day' : 'days'})
-            </span>
-          </p>
-        </div>
-        <DateRangePicker
-          value={range}
-          onChange={setRange}
-          compare={compare}
-          onCompareChange={setCompare}
-        />
+    <div className="px-4 md:px-8 py-6 max-w-6xl space-y-5">
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div><h1 className="text-2xl font-bold">Sales reports</h1><p className="text-sm text-stone-600 mt-1">See what sold and where your orders stand.</p></div>
+        <DateRangePicker value={range} onChange={setRange} compare={compare} onCompareChange={setCompare} />
       </div>
-
-      {compare && previous && (
-        <div className="mb-5 mt-3 p-3 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-600 flex items-center gap-2">
-          <span className="inline-block w-4 border-t-[2px] border-dashed border-stone-400" />
-          <span>
-            Comparing with <span className="font-medium text-stone-800">{formatDate(previous.startDate, locale)} – {formatDate(previous.endDate, locale)}</span> (previous {rangeDays} {rangeDays === 1 ? 'day' : 'days'})
-          </span>
+      <p className="text-sm text-stone-500">Orders placed {range.startDate} to {range.endDate}, using Bangladesh dates. Statuses show where those orders are now. Order values include delivery charges and discounts; they are not cash received.</p>
+      {reportQ.isPending ? <p role="status">Loading sales report…</p> : reportQ.isError ? <Card className="p-5" hover={false}><p role="alert">Could not load your sales report.</p><Button onClick={() => reportQ.refetch()} size="sm">Try again</Button></Card> : report && <>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            ['Orders received', String(report.total_orders), 'Includes cancelled orders'],
+            ['Delivered order value', money(value('delivered')), `${count('delivered')} orders delivered`],
+            ['Still to deliver', money(Number(value('pending')) + Number(value('confirmed')) + Number(value('shipped'))), `${count('pending') + count('confirmed') + count('shipped')} orders`],
+            ['Returned order value', money(value('returned')), `${count('returned')} returns · ${count('cancelled')} cancellations`],
+          ].map(([label, amount, hint]) => <Card key={label} className="p-4" hover={false}><p className="text-sm text-stone-600">{label}</p><p className="text-xl font-semibold mt-2 break-words">{amount}</p><p className="text-xs text-stone-500 mt-1">{hint}</p></Card>)}
         </div>
-      )}
-
-      <div className="grid gap-3.5 mb-5 mt-5 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-        <MetricCard
-          label="Revenue"
-          tooltip="Total money earned from completed and in-progress orders. Cancelled orders are excluded."
-          value={summary ? formatBDT(summary.revenue_bdt, locale) : '—'}
-          previousValue={previousSummary ? formatBDT(previousSummary.revenue_bdt, locale) : null}
-          change={changes?.revenue_pct ?? null}
-          showChange={compare}
-        />
-        <MetricCard
-          label="Orders"
-          tooltip="Number of orders received in this period. Cancelled orders are not counted."
-          value={summary ? String(summary.orders) : '—'}
-          previousValue={previousSummary ? String(previousSummary.orders) : null}
-          change={changes?.orders_pct ?? null}
-          showChange={compare}
-        />
-        <MetricCard
-          label="Average order size"
-          tooltip="Average money spent per order. If this is rising, your buyers are spending more each time."
-          value={summary ? formatBDT(summary.aov_bdt, locale) : '—'}
-          previousValue={previousSummary ? formatBDT(previousSummary.aov_bdt, locale) : null}
-          change={changes?.aov_pct ?? null}
-          showChange={compare}
-        />
-        <MetricCard
-          label="Page views"
-          tooltip="Total number of times your products were viewed. One person can count multiple times if they reload."
-          value={summary ? String(summary.total_visits) : '—'}
-          previousValue={previousSummary ? String(previousSummary.total_visits) : null}
-          change={changes?.total_visits_pct ?? null}
-          showChange={compare}
-        />
-        <MetricCard
-          label="Different shoppers"
-          tooltip="How many separate people browsed your shop. Each device counts once."
-          value={summary ? String(summary.unique_visits) : '—'}
-          previousValue={previousSummary ? String(previousSummary.unique_visits) : null}
-          change={changes?.unique_visits_pct ?? null}
-          showChange={compare}
-        />
-        <MetricCard
-          label="Browsers who bought"
-          tooltip="Out of every 100 different shoppers, how many placed an order. Higher is better — try improving product photos or descriptions if this is low."
-          value={summary ? `${summary.order_rate.toFixed(2)}%` : '—'}
-          previousValue={previousSummary ? `${previousSummary.order_rate.toFixed(2)}%` : null}
-          change={changes?.order_rate_pct ?? null}
-          showChange={compare}
-        />
-      </div>
-
-      <Card className="p-5 mb-5" hover={false}>
-        <div className="flex items-baseline justify-between mb-3.5 gap-3 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">Daily revenue</h3>
-            <p className="text-[11px] text-stone-500 mt-0.5">
-              Hover any point to see the exact amount for that day.
-            </p>
-          </div>
-          {summary && (
-            <div className="text-right">
-              <div className="text-[11px] text-stone-500 uppercase tracking-wider">Total</div>
-              <div className="text-lg font-bold text-stone-900">{formatBDT(summary.revenue_bdt, locale)}</div>
-            </div>
-          )}
-        </div>
-        <LineChart
-          data={revenuePoints}
-          compareData={prevRevenuePoints}
-          formatY={(n) => formatCompactBDT(n, locale)}
-          formatX={(s) => formatShortDate(s, locale)}
-          formatTooltipX={(s) => formatDate(s, locale)}
-          currentLabel={`This ${rangeDays}d`}
-          compareLabel={`Previous ${rangeDays}d`}
-        />
-      </Card>
-
-      <div className="flex items-center justify-between mb-3 mt-8">
-        <h2 className="text-lg font-semibold tracking-tight">Shop visitors</h2>
-        <div className="flex bg-stone-100 rounded-md p-0.5 text-xs">
-          {(['daily', 'weekly', 'monthly'] as VisitPeriod[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setVisitPeriod(p)}
-              className={`px-3 py-1.5 rounded font-medium capitalize transition-colors ${
-                visitPeriod === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Card className="p-5 mb-5" hover={false}>
-        <div className="flex items-baseline justify-between mb-3.5 gap-3 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold text-stone-900">Shoppers per {visitPeriod === 'daily' ? 'day' : visitPeriod === 'weekly' ? 'week' : 'month'}</h3>
-            <p className="text-[11px] text-stone-500 mt-0.5">
-              <span className="inline-flex items-center gap-1.5 mr-3" title="Total times your products were viewed">
-                <span className="w-3 h-0.5 bg-teal-600" /> Page views
-              </span>
-              <span className="inline-flex items-center gap-1.5" title="Different people who browsed">
-                <span className="w-3 h-0.5 bg-coral-500" /> Different shoppers
-              </span>
-            </p>
-          </div>
-        </div>
-        {buckets.length === 0 ? (
-          <div className="text-sm text-stone-500 py-10 text-center">No visits yet.</div>
-        ) : (
-          <DualLineChart
-            primary={totalVisitPoints}
-            secondary={uniqueVisitPoints}
-            primaryLabel="Page views"
-            secondaryLabel="Different shoppers"
-            formatY={(n) => formatCompactNumber(n, locale)}
-            formatX={(s) => formatShortDate(s, locale)}
-          />
-        )}
-      </Card>
-
-      <Card className="p-5 mb-5" hover={false}>
-        <h3 className="text-sm font-semibold mb-3">Most viewed products · 30d</h3>
-        <p className="text-[11px] text-stone-500 mb-3 -mt-2">
-          Products that get attention but may not be selling — try sharpening the photos or price.
-        </p>
-        {(topVisitedQ.data ?? []).length === 0 ? (
-          <div className="text-sm text-stone-500 py-3">No product visits yet.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-stone-500 text-left">
-                <th className="py-2 font-medium">Product</th>
-                <th className="py-2 font-medium">Visits</th>
-                <th className="py-2 font-medium">Unique</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(topVisitedQ.data ?? []).map((p) => (
-                <tr key={p.product_id} className="border-t border-stone-100">
-                  <td className="py-2.5">{p.product_name}</td>
-                  <td className="py-2.5 font-medium">{p.total_visits}</td>
-                  <td className="py-2.5 text-stone-600">{p.unique_visits}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
-
-      <Card className="p-5" hover={false}>
-        <h3 className="text-sm font-semibold mb-3">Best sellers</h3>
-        <p className="text-[11px] text-stone-500 mb-3 -mt-2">
-          Products that earned you the most this month.
-        </p>
-        {(topQ.data ?? []).length === 0 ? (
-          <div className="text-sm text-stone-500 py-3">No sales data yet.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-stone-500 text-left">
-                <th className="py-2 font-medium">Product</th>
-                <th className="py-2 font-medium">Sold</th>
-                <th className="py-2 font-medium">Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(topQ.data ?? []).map((p) => (
-                <tr key={p.product_id} className="border-t border-stone-100">
-                  <td className="py-2.5">{p.product_name}</td>
-                  <td className="py-2.5">{p.total_quantity}</td>
-                  <td className="py-2.5 font-medium">{formatBDT(p.total_revenue_bdt, locale)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
+        {compare && <p className="text-sm text-stone-600" role="status">{previousQ.isPending ? 'Loading previous period…' : previousQ.isError ? 'Could not load the previous period.' : previousQ.data ? `Previous period (${previous.startDate} to ${previous.endDate}): ${previousQ.data.total_orders} orders received · ${money(previousQ.data.status_values.delivered ?? '0')} delivered order value.` : ''}</p>}
+        {report.total_orders === 0 && <Card className="p-5" hover={false}><h2 className="font-semibold">No orders in these dates</h2><p className="text-sm text-stone-600 mt-1">Choose a wider period to review earlier sales.</p></Card>}
+        <Card className="p-5" hover={false}>
+          <h2 className="font-semibold mb-1">Where are these orders now?</h2><p className="text-sm text-stone-500 mb-4">Use the links to open all orders with that status, across every date.</p>
+          <div className="divide-y divide-stone-100">{statuses.map(([status, label, hint]) => <div key={status} className="py-3 flex flex-wrap justify-between gap-2"><div><Link className="font-medium text-teal-700 hover:underline" href={`/dashboard/orders?status=${status}`}>{label} →</Link><p className="text-xs text-stone-500 mt-1">{hint}</p></div><div className="text-right text-sm"><p>{count(status)} orders</p><p className="text-stone-500">{money(value(status))}</p></div></div>)}</div>
+        </Card>
+        <Card className="p-5" hover={false}>
+          <div className="flex justify-between flex-wrap gap-3 mb-4"><div><h2 className="font-semibold">Daily order value</h2><p className="text-xs text-stone-500 mt-1">Excludes cancellations. Includes orders still to deliver and returns.</p></div><Button size="sm" onClick={exportDaily}>Download daily CSV</Button></div>
+          <LineChart data={report.daily.map(d => ({ x: d.date, y: Number(d.revenue_bdt) }))} compareData={compare ? previousQ.data?.daily.map(d => ({ x: d.date, y: Number(d.revenue_bdt) })) : undefined} formatY={n => formatCompactBDT(n, locale)} formatX={d => formatShortDate(d, locale)} currentLabel="Selected dates" compareLabel="Previous period" />
+        </Card>
+        <Card className="p-5" hover={false}><h2 className="font-semibold">Most ordered products</h2><p className="text-sm text-stone-500 mt-1 mb-4">Top 10 by quantity in the selected dates. Review stock before promoting these products. Excludes cancelled orders; includes returns and undelivered orders.</p>
+          {report.products.length === 0 ? <p className="text-sm text-stone-500">No products ordered in this period.</p> : <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr className="text-stone-500"><th className="py-2">Product</th><th className="p-2 text-right">Units ordered</th><th className="p-2 text-right">Product value after coupons</th></tr></thead><tbody>{report.products.map(p => <tr key={p.product_id} className="border-t border-stone-100"><td className="py-3"><Link className="text-teal-700 hover:underline" href={`/dashboard/products/${p.product_id}`}>{p.product_name}</Link></td><td className="p-2 text-right">{p.total_quantity}</td><td className="p-2 text-right whitespace-nowrap">{money(p.total_revenue_bdt)}</td></tr>)}</tbody></table></div>}
+        </Card>
+        <p className="text-sm text-stone-600">Want to check what remains after buying products and running ads? <Link href="/dashboard/marketing" className="text-teal-700 underline">Open profit &amp; ad costs</Link>.</p>
+      </>}
     </div>
-  );
-}
-
-function MetricCard({
-  label,
-  tooltip,
-  value,
-  previousValue,
-  change,
-  showChange,
-}: {
-  label: string;
-  tooltip?: string;
-  value: string;
-  previousValue: string | null;
-  change: number | null;
-  showChange: boolean;
-}) {
-  const noPrev = showChange && (change == null || previousValue == null);
-  const up = change != null && change >= 0;
-  const accent = !showChange || change == null
-    ? ''
-    : up
-      ? 'border-l-4 border-l-emerald-500'
-      : 'border-l-4 border-l-red-500';
-
-  return (
-    <Card className={`p-4 ${accent}`} hover={false}>
-      <div className="flex items-center justify-between gap-1">
-        <div className="text-[11px] text-stone-500 font-medium uppercase tracking-wider">{label}</div>
-        {tooltip && (
-          <span className="text-stone-300 text-xs cursor-help" title={tooltip}>ⓘ</span>
-        )}
-      </div>
-      <div className="text-2xl font-bold tracking-tight mt-1.5 text-stone-900">{value}</div>
-
-      {showChange && !noPrev && change != null && (
-        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-          <span
-            className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${
-              up
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {up ? (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 15 12 9 18 15" />
-              </svg>
-            ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            )}
-            {up ? '+' : ''}{change.toFixed(1)}%
-          </span>
-          <span className="text-[11px] text-stone-500">
-            vs <span className="font-medium text-stone-700">{previousValue}</span>
-          </span>
-        </div>
-      )}
-      {noPrev && (
-        <div className="mt-2.5 text-[11px] text-stone-400">No previous data to compare</div>
-      )}
-    </Card>
-  );
-}
-
-// DualLineChart shows two series on the same axes — used for visits where
-// "Total" and "Unique" naturally share a scale. Reuses LineChart by stacking
-// a transparent overlay; simpler to inline a small variant than to overload
-// LineChart's API.
-function DualLineChart({
-  primary,
-  secondary,
-  primaryLabel,
-  secondaryLabel,
-  formatY,
-  formatX,
-}: {
-  primary: LineChartPoint[];
-  secondary: LineChartPoint[];
-  primaryLabel: string;
-  secondaryLabel: string;
-  formatY: (n: number) => string;
-  formatX: (s: string) => string;
-}) {
-  return (
-    <LineChart
-      data={primary}
-      compareData={secondary}
-      formatY={formatY}
-      formatX={formatX}
-      currentLabel={primaryLabel}
-      compareLabel={secondaryLabel}
-      color="#0D9488"
-      compareColor="#F87171"
-    />
   );
 }

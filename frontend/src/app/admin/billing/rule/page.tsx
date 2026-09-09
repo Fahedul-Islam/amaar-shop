@@ -4,6 +4,7 @@ import {
   getFeeRule, updateFeeRule, FEE_RULE_TYPE_OPTIONS, humanLabelFeeRule,
   type FeeRule, type FeeRuleType,
 } from '@/lib/billingApi';
+import ShopFeeRules from './ShopFeeRules';
 import { formatDate } from '@/lib/format';
 import { PageHeader, PageBody, SectionCard, Spinner } from '../../ui';
 import { Button } from '@/components/ui/Button';
@@ -28,7 +29,7 @@ export default function AdminFeeRulePage() {
         setType(r.rule_type);
         // Show a sensible cleaned value (strip "5.0000" -> "5"). The numeric
         // input still accepts decimals.
-        setValue(r.value.replace(/\.?0+$/, ''));
+        setValue(String(Number(r.value)));
         setDescription(r.description || '');
       })
       .catch((e) => setError(e?.message || 'Failed to load fee rule'))
@@ -64,8 +65,7 @@ export default function AdminFeeRulePage() {
         <div className="bg-teal-50 border border-teal-200 text-teal-900 text-sm rounded-md p-3 mb-4 leading-relaxed">
           <strong>How this works:</strong> Shops collect cash from buyers (COD). Every {' '}
           <strong>14 days</strong> they owe AmaarShop a platform fee. Choose how the fee is
-          calculated below — your change applies <strong>immediately</strong> to all unbilled
-          orders. Past payments are not affected.
+          calculated below. The default applies to shops without an individual rule. Changes apply to new orders; existing orders keep their saved rates. Percentage fees use order totals including delivery and discounts. Cancelled orders are excluded; returned orders remain chargeable.
         </div>
 
         {loading || !rule ? (
@@ -126,7 +126,7 @@ export default function AdminFeeRulePage() {
                     label={
                       type === 'percentage'
                         ? 'Percentage (e.g. 5 = 5%)'
-                        : 'Amount in BDT per order (e.g. 10)'
+                        : `Amount in BDT per ${type === 'fixed_per_item' ? 'item' : 'order'} (e.g. 10)`
                     }
                     type="number"
                     inputMode="decimal"
@@ -166,7 +166,7 @@ export default function AdminFeeRulePage() {
 
                   {saved && (
                     <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md p-2.5">
-                      Saved. New rule applies to all unbilled orders.
+                      Saved. New orders will use this rule unless the shop has an individual rate.
                     </div>
                   )}
 
@@ -180,6 +180,7 @@ export default function AdminFeeRulePage() {
             </div>
           </div>
         )}
+        <ShopFeeRules />
       </PageBody>
     </>
   );

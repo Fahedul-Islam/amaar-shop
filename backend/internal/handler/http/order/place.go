@@ -93,6 +93,7 @@ func (h *Handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.svc.PlaceOrder(r.Context(), slug, service.PlaceOrderInput{
+		CouponCode:             req.CouponCode,
 		CustomerName:           req.CustomerName,
 		CustomerPhone:          phone,
 		DeliveryAddress:        req.DeliveryAddress,

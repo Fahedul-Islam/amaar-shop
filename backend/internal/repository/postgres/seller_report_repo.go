@@ -83,7 +83,7 @@ func (r *analyticsRepo) OrderReport(ctx context.Context, shopID string, from, to
 			oi.product_id,
 			oi.product_name_snapshot,
 			SUM(oi.quantity)::int        AS qty,
-			SUM(oi.line_total_bdt)::text AS revenue
+			SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0)))::text AS revenue
 		FROM order_items oi
 		JOIN orders o ON o.id = oi.order_id
 		WHERE o.shop_id = $1
@@ -210,7 +210,7 @@ func (r *analyticsRepo) ProductReport(ctx context.Context, shopID string, from, 
 				WHERE o.status NOT IN ('cancelled')
 				  AND (o.created_at AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date
 			), 0)::int                                                   AS units_sold,
-			COALESCE(SUM(oi.line_total_bdt) FILTER (
+			COALESCE(SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0))) FILTER (
 				WHERE o.status NOT IN ('cancelled')
 				  AND (o.created_at AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date
 			), 0)::text                                                  AS revenue,

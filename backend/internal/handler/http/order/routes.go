@@ -11,6 +11,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	auth := mw.With(middleware.Auth(h.cfg.JWTSecret))
 
 	// Public endpoints (no auth)
+	quoteLimiter := middleware.NewRateLimiter(60, 10)
+	mux.HandleFunc("POST /api/shops/by-slug/{slug}/checkout-quote", mw.With(quoteLimiter.Limit()).Then(h.Quote))
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders", h.PlaceOrder)
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders/{id}/cancel", h.BuyerCancelOrder)
 	mux.HandleFunc("POST /api/shops/by-slug/{slug}/orders/{id}/lookup", h.CustomerLookupOrder)

@@ -1,0 +1,10 @@
+DROP VIEW shop_fee_balances;
+DROP VIEW order_platform_fees;
+DROP TRIGGER order_platform_fee ON orders;
+DROP FUNCTION snapshot_order_platform_fee();
+ALTER TABLE orders DROP COLUMN platform_fee_type, DROP COLUMN platform_fee_value;
+ALTER TABLE shop_fee_payments DROP COLUMN balance_applicable;
+DROP TABLE shop_fee_rules;
+UPDATE fee_rule SET rule_type='fixed_per_order',value=0 WHERE rule_type='fixed_per_item';
+ALTER TABLE fee_rule DROP CONSTRAINT fee_rule_rule_type_check;
+ALTER TABLE fee_rule ADD CHECK (rule_type IN ('percentage','fixed_per_order'));

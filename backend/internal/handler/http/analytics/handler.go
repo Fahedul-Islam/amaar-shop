@@ -365,3 +365,31 @@ func (h *Handler) PopularProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.WriteJSON(w, http.StatusOK, out)
 }
+
+// SalesReport uses the same shop-scoped date window for outcomes and products.
+func (h *Handler) SalesReport(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := parseRange(w, r.URL.Query().Get("from"), r.URL.Query().Get("to"), "from", "to")
+	if !ok {
+		return
+	}
+	report, err := h.sales.OrderReport(r.Context(), middleware.GetUserID(r.Context()), from, to)
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	products := make([]dto.TopProductDTO, 0, len(report.TopProducts))
+	for _, p := range report.TopProducts {
+		products = append(products, dto.TopProductDTO{ProductID: p.ProductID, ProductName: p.ProductName, TotalQuantity: p.TotalQuantity, TotalRevenueBDT: p.TotalRevenueBDT})
+	}
+	daily := make([]dto.DayStatDTO, 0, len(report.Daily))
+	for _, d := range report.Daily {
+		daily = append(daily, dto.DayStatDTO{Date: d.Date, Orders: d.Orders, RevenueBDT: d.RevenueBDT})
+	}
+	httputil.WriteJSON(w, http.StatusOK, struct {
+		TotalOrders  int                 `json:"total_orders"`
+		StatusCounts map[string]int      `json:"status_counts"`
+		StatusValues map[string]string   `json:"status_values"`
+		Daily        []dto.DayStatDTO    `json:"daily"`
+		Products     []dto.TopProductDTO `json:"products"`
+	}{report.TotalOrders, report.StatusCounts, report.StatusRevenueBDT, daily, products})
+}

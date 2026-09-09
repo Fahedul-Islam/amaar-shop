@@ -242,7 +242,7 @@ func (r *marketingRepo) ProductProfit(ctx context.Context, shopID string, from, 
 		`SELECT oi.product_id,
 		        MAX(oi.product_name_snapshot)                                        AS name,
 		        SUM(oi.quantity)                                                     AS units,
-		        SUM(oi.line_total_bdt)::text                                         AS revenue,
+		        SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0)))::text                                         AS revenue,
 		        SUM(COALESCE(oi.unit_cost_snapshot_bdt,0) * oi.quantity)::text       AS cogs,
 		        BOOL_AND(oi.unit_cost_snapshot_bdt IS NOT NULL)                      AS has_cost
 		 FROM order_items oi
@@ -251,7 +251,7 @@ func (r *marketingRepo) ProductProfit(ctx context.Context, shopID string, from, 
 		   AND o.status = 'delivered'
 		   AND o.created_at >= $2 AND o.created_at < $3
 		 GROUP BY oi.product_id
-		 ORDER BY (SUM(oi.line_total_bdt) - SUM(COALESCE(oi.unit_cost_snapshot_bdt,0) * oi.quantity)) DESC
+		 ORDER BY (SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0))) - SUM(COALESCE(oi.unit_cost_snapshot_bdt,0) * oi.quantity)) DESC
 		 LIMIT $4`,
 		shopID, fromInstant, toInstant, limit,
 	)

@@ -12,6 +12,7 @@ export interface PublicProduct {
   discount_type: string | null;
   discount_value: string | null;
   delivery_charge_dhaka: string | null;
+  advance_delivery_exempt: boolean;
   delivery_charge_outside: string | null;
   images: ProductImage[];
 }
@@ -44,6 +45,8 @@ export interface Order {
   delivery_division: string;
   delivery_district: string;
   note: string;
+  coupon_code: string;
+  coupon_discount_bdt: string;
   subtotal_bdt: string;
   delivery_charge_bdt: string;
   total_bdt: string;
@@ -63,6 +66,7 @@ export interface Order {
 }
 
 export interface PlaceOrderInput {
+  coupon_code?: string;
   customer_name: string;
   customer_phone: string;
   delivery_address: string;

@@ -39,6 +39,8 @@ function todayIso(): string {
 export default function MarketingPage() {
   const { locale } = useI18n();
   const qc = useQueryClient();
+  const [tab, setTab] = useState<'profit' | 'ads'>('profit');
+  const [advanced, setAdvanced] = useState(false);
   const [range, setRange] = useState<DateRange>(() => getPresetRange('last30'));
 
   const params = { from: range.startDate, to: range.endDate };
@@ -62,10 +64,12 @@ export default function MarketingPage() {
   const trackingQ = useQuery({
     queryKey: ['tracking-stats', params.from, params.to],
     queryFn: () => getTrackingStats(params),
+    enabled: advanced,
   });
   const funnelQ = useQuery({
     queryKey: ['funnel-stats', params.from, params.to],
     queryFn: () => getFunnelStats(params),
+    enabled: advanced,
   });
 
   const invalidate = () => {
@@ -75,191 +79,68 @@ export default function MarketingPage() {
   };
 
   const s = profitQ.data;
-  const net = s ? parseFloat(s.net_profit_bdt) : 0;
-  const profitable = net >= 0;
-
-  // Is the campaign clearing the bar it has to clear?
-  const roasVerdict = (() => {
-    if (!s || s.roas == null || s.break_even_roas == null) return null;
-    return s.roas >= s.break_even_roas;
-  })();
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7 max-w-6xl">
       <div className="flex justify-between items-start mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">
-            Profit &amp; Ads
+            Profit &amp; ad costs
           </h1>
           <p className="text-stone-500 mt-1">
-            What you actually earned after product cost and ad spend.
+            Keep track of product costs and advertising in one place.
           </p>
         </div>
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
-      {/* Headline verdict */}
-      <Card
-        className={`p-5 md:p-6 mb-5 ${
-          profitable
-            ? 'bg-gradient-to-br from-teal-50 to-white border-teal-200'
-            : 'bg-gradient-to-br from-red-50 to-white border-red-200'
-        }`}
-        hover={false}
-      >
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-          <div>
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-stone-500 mb-1">
-              Net profit
-            </div>
-            <div
-              className={`text-[34px] leading-none font-bold tracking-tight ${
-                profitable ? 'text-teal-800' : 'text-red-700'
-              }`}
-            >
-              {s ? formatBDT(s.net_profit_bdt, locale) : '—'}
-            </div>
-            <div className="text-xs text-stone-500 mt-1.5">
-              {s
-                ? `${formatBDT(s.delivered_revenue_bdt, locale)} delivered − ${formatBDT(s.cogs_bdt, locale)} cost − ${formatBDT(s.ad_spend_bdt, locale)} ads`
-                : ''}
-            </div>
-          </div>
-
-          {s && s.roas != null && (
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-stone-500 mb-1">
-                ROAS
-              </div>
-              <div className="text-[34px] leading-none font-bold tracking-tight text-stone-900">
-                {s.roas.toFixed(2)}x
-              </div>
-              {s.break_even_roas != null && (
-                <div
-                  className={`text-xs mt-1.5 font-medium ${
-                    roasVerdict ? 'text-teal-700' : 'text-red-700'
-                  }`}
-                >
-                  {roasVerdict ? 'Above' : 'Below'} break-even of{' '}
-                  {s.break_even_roas.toFixed(2)}x
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {s && s.items_missing_cost > 0 && (
-          <div className="mt-4 text-[13px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-2.5">
-            <strong className="font-semibold">Profit is understated.</strong>{' '}
-            {s.items_missing_cost} delivered item
-            {s.items_missing_cost === 1 ? ' has' : 's have'} no buying price
-            recorded, so their cost counts as ৳0.{' '}
-            <Link href="/dashboard/products" className="underline font-medium">
-              Add buying prices
-            </Link>
-          </div>
-        )}
-      </Card>
-
-      {/* Metric grid */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-6">
-        <Metric
-          label="Delivered revenue"
-          value={s ? formatBDT(s.delivered_revenue_bdt, locale) : '—'}
-          sub={s ? `${s.delivered_orders} delivered` : ''}
-          tooltip="Money from delivered orders only. Cash-on-delivery income isn't real until the parcel lands."
-        />
-        <Metric
-          label="Ad spend"
-          value={s ? formatBDT(s.ad_spend_bdt, locale) : '—'}
-          sub={
-            s && parseFloat(s.estimated_spend_bdt) > 0
-              ? `${formatBDT(s.estimated_spend_bdt, locale)} estimated from budget`
-              : s && s.spend_by_platform.length
-                ? s.spend_by_platform.map((p) => platformLabel(p.platform)).join(' · ')
-                : 'No spend logged'
-          }
-          tooltip="Total for this period across all platforms. Amounts auto-filled from your daily budget are estimates until you confirm them."
-        />
-        <Metric
-          label="Cost per order"
-          value={s?.cost_per_order_bdt ? formatBDT(s.cost_per_order_bdt, locale) : '—'}
-          sub={s?.cac_delivered_bdt ? `${formatBDT(s.cac_delivered_bdt, locale)} per delivered` : ''}
-          tooltip="Ad spend divided by orders. The 'per delivered' figure is your true acquisition cost."
-        />
-        <Metric
-          label="Gross margin"
-          value={s?.gross_margin_pct != null ? `${s.gross_margin_pct.toFixed(1)}%` : '—'}
-          sub={s ? `${formatBDT(s.gross_profit_bdt, locale)} before ads` : ''}
-          tooltip="Delivered revenue minus product cost, as a percentage."
-        />
-        <Metric
-          label="Delivery success"
-          value={s?.delivery_success_pct != null ? `${s.delivery_success_pct.toFixed(1)}%` : '—'}
-          sub={s ? `${s.returned_orders} returned` : ''}
-          tooltip="Delivered vs (delivered + returned). Every return costs you courier fees both ways."
-          warn={s?.delivery_success_pct != null && s.delivery_success_pct < 70}
-        />
-        <Metric
-          label="Avg order value"
-          value={s?.aov_bdt ? formatBDT(s.aov_bdt, locale) : '—'}
-          sub={s ? `${s.total_orders} orders total` : ''}
-          tooltip="Average value of a delivered order."
-        />
-        <Metric
-          label="Profit per order"
-          value={s?.profit_per_order_bdt ? formatBDT(s.profit_per_order_bdt, locale) : '—'}
-          sub="after cost + ads"
-          tooltip="Net profit divided by delivered orders."
-          warn={!!s?.profit_per_order_bdt && parseFloat(s.profit_per_order_bdt) < 0}
-        />
-        <Metric
-          label="Still in flight"
-          value={s ? String(s.in_flight_orders) : '—'}
-          sub={s ? `${formatBDT(s.booked_revenue_bdt, locale)} booked` : ''}
-          tooltip="Orders not yet delivered or returned — money still at risk."
-        />
+      <div className="flex gap-2 mb-5" aria-label="Profit and advertising views">
+        <Button variant={tab === 'profit' ? 'primary' : 'secondary'} onClick={() => setTab('profit')} aria-pressed={tab === 'profit'}>Profit estimate</Button>
+        <Button variant={tab === 'ads' ? 'primary' : 'secondary'} onClick={() => setTab('ads')} aria-pressed={tab === 'ads'}>Advertising costs</Button>
       </div>
-
-      {funnelQ.data && <FunnelSection funnel={funnelQ.data} locale={locale} />}
-
-      {trackingQ.data && (
-        <TrackingSection stats={trackingQ.data} locale={locale} />
-      )}
-
-      <div className="grid gap-5 lg:grid-cols-[380px_minmax(0,1fr)] items-start">
-        <div className="grid gap-5">
-          <BudgetPanel
-            budgets={budgetQ.data ?? []}
-            onChanged={invalidate}
-            locale={locale}
-          />
-          <AdSpendPanel
-            entries={spendQ.data ?? []}
-            onChanged={invalidate}
-            locale={locale}
-          />
-        </div>
-
+      {tab === 'ads' ? <div className="grid gap-5 lg:grid-cols-2 items-start">
+        {spendQ.isPending ? <p role="status">Loading advertising costs…</p> : spendQ.isError ? <p role="alert">Could not load advertising costs. <button className="underline" onClick={() => spendQ.refetch()}>Try again</button></p> : <AdSpendPanel entries={spendQ.data ?? []} onChanged={invalidate} locale={locale} />}
+        <div><details className="border border-stone-200 rounded-lg p-4"><summary className="cursor-pointer font-medium">Optional: fill in a daily estimate</summary>
+          <p className="text-sm text-stone-600 my-3">Use this only if you spend a similar amount each day. These figures are estimates until you enter the actual cost.</p>
+          {budgetQ.isPending ? <p>Loading daily estimates…</p> : budgetQ.isError ? <p role="alert">Could not load daily estimates. <button className="underline" onClick={() => budgetQ.refetch()}>Try again</button></p> : <BudgetPanel budgets={budgetQ.data ?? []} onChanged={invalidate} locale={locale} />}
+        </details></div>
+      </div> : <>
+        {profitQ.isPending ? <p role="status" className="mb-5">Loading profit estimate…</p> : profitQ.isError ? <p role="alert" className="mb-5">Could not load profit estimate. <button className="underline" onClick={() => profitQ.refetch()}>Try again</button></p> : s && <Card className="p-5 mb-5" hover={false}>
+          <h2 className="text-lg font-semibold">What remains after product cost and ads?</h2>
+          <p className="text-sm text-stone-600 mt-1 mb-5">For orders placed in these dates that are now delivered. Advertising costs use the dates you recorded them.</p>
+          <dl className="divide-y divide-stone-100">
+            <div className="flex justify-between gap-4 py-3"><dt>Delivered order value <span className="block text-xs text-stone-500">{s.delivered_orders} orders, including delivery charges</span></dt><dd className="font-medium">{formatBDT(s.delivered_revenue_bdt, locale)}</dd></div>
+            <div className="flex justify-between gap-4 py-3"><dt>− Buying cost of those products <span className="block text-xs text-stone-500">Buying prices saved when each order was placed</span></dt><dd>{formatBDT(s.cogs_bdt, locale)}</dd></div>
+            <div className="flex justify-between gap-4 py-3"><dt>− Advertising costs <button className="block text-xs text-teal-700 underline" onClick={() => setTab('ads')}>Record or check ad costs</button></dt><dd>{formatBDT(s.ad_spend_bdt, locale)}</dd></div>
+            <div className="flex justify-between gap-4 py-4"><dt className="font-semibold">Estimated remainder <span className="block text-xs font-normal text-stone-500">Before courier, packaging, platform fees and other expenses</span></dt><dd className="text-xl font-semibold">{s.items_missing_cost > 0 ? 'Incomplete' : formatBDT(s.net_profit_bdt, locale)}</dd></div>
+          </dl>
+          {s.items_missing_cost > 0 && <p className="text-sm text-amber-900 bg-amber-50 rounded-lg p-3 mt-3">Buying costs are missing from {s.items_missing_cost} delivered order item records. Treating them as zero would make profit look too high, so the total is hidden. <Link href="/dashboard/products" className="underline">Add buying prices for future orders</Link>; existing orders keep their original saved costs.</p>}
+          {Number(s.estimated_spend_bdt) > 0 && <p className="text-sm text-amber-900 mt-3">{formatBDT(s.estimated_spend_bdt, locale)} of advertising costs is estimated. Replace estimates with actual costs in Advertising costs.</p>}
+          {Number(s.ad_spend_bdt) === 0 && <p className="text-sm text-stone-600 mt-3">No advertising cost recorded for these dates. If you ran ads, enter their cost before using this estimate.</p>}
+          <p className="text-xs text-stone-500 mt-4">This is not final profit or a cash balance. Delivery does not confirm courier payment. Return costs and other expenses are not recorded here. This report includes all shop sales, so it does not tell you which sales came from ads.</p>
+        </Card>}
         {/* Per-product profit */}
         <Card className="p-0 overflow-hidden" hover={false}>
           <div className="px-5 py-3.5 border-b border-stone-200 flex items-center gap-2">
             <IcChart size={16} className="text-stone-500" />
-            <h2 className="text-base font-semibold">Profit by product</h2>
+            <h2 className="text-base font-semibold">Product earnings before ads</h2>
             <span className="ml-auto text-xs text-stone-500">delivered only</span>
           </div>
+          <p className="px-5 py-3 text-xs text-stone-500">Delivered products from orders placed in the selected dates. After coupon discounts and saved buying costs; excludes delivery charges, ads and other expenses.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-stone-50 text-stone-500 text-left">
                   <Th>Product</Th>
                   <Th>Units</Th>
-                  <Th>Revenue</Th>
-                  <Th>Profit</Th>
-                  <Th>Margin</Th>
+                  <Th>Product sales</Th>
+                  <Th>After buying cost</Th>
+                  <Th>Remaining %</Th>
                 </tr>
               </thead>
               <tbody>
+                {productQ.isPending && <tr><td colSpan={5} className="p-5" role="status">Loading product earnings…</td></tr>}
+                {productQ.isError && <tr><td colSpan={5} className="p-5" role="alert">Could not load product earnings. <button className="underline" onClick={() => productQ.refetch()}>Try again</button></td></tr>}
                 {(productQ.data ?? []).map((p) => (
                   <tr key={p.product_id} className="border-t border-stone-100">
                     <Td>
@@ -282,14 +163,14 @@ export default function MarketingPage() {
                           : 'font-semibold text-red-700'
                       }
                     >
-                      {formatBDT(p.profit_bdt, locale)}
+                      {p.has_cost ? formatBDT(p.profit_bdt, locale) : 'Cost missing'}
                     </Td>
                     <Td className="text-stone-600">
-                      {p.margin_pct != null ? `${p.margin_pct.toFixed(1)}%` : '—'}
+                      {p.has_cost && p.margin_pct != null ? `${p.margin_pct.toFixed(1)}%` : '—'}
                     </Td>
                   </tr>
                 ))}
-                {!productQ.isLoading && (productQ.data?.length ?? 0) === 0 && (
+                {!productQ.isPending && !productQ.isError && (productQ.data?.length ?? 0) === 0 && (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
                       No delivered orders in this period yet.
@@ -300,7 +181,17 @@ export default function MarketingPage() {
             </table>
           </div>
         </Card>
-      </div>
+      </>}
+      <details className="mt-6 border-t border-stone-200 pt-4" onToggle={e => setAdvanced(e.currentTarget.open)}>
+        <summary className="cursor-pointer text-sm font-medium">Advanced: shop traffic and Facebook tracking</summary>
+        <p className="text-sm text-stone-500 my-4">Optional tracking information. It does not change your recorded sales or advertising costs.</p>
+        {advanced && <>
+          {(funnelQ.isPending || trackingQ.isPending) && <p role="status">Loading tracking information…</p>}
+          {(funnelQ.isError || trackingQ.isError) && <p role="alert">Some tracking information could not load. <button className="underline" onClick={() => { funnelQ.refetch(); trackingQ.refetch(); }}>Try again</button></p>}
+          {funnelQ.data && <FunnelSection funnel={funnelQ.data} locale={locale} />}
+          {trackingQ.data && <TrackingSection stats={trackingQ.data} locale={locale} />}
+        </>}
+      </details>
     </div>
   );
 }
@@ -352,13 +243,13 @@ function BudgetPanel({
       });
       onChanged();
     } catch {
-      // list refreshes regardless
+      setError('Could not turn off daily estimates. Please try again.');
     }
   };
 
   return (
-    <Card className="p-5 bg-gradient-to-b from-teal-50/60 to-white border-teal-100" hover={false}>
-      <h2 className="text-base font-semibold mb-1">Daily ad budget</h2>
+    <Card className="p-5" hover={false}>
+      <h2 className="text-base font-semibold mb-1">Daily ad estimate</h2>
       <p className="text-xs text-stone-600 mb-4 leading-relaxed">
         Spend about the same every day? Set it once and we&rsquo;ll fill in each
         day&rsquo;s spend automatically — no daily typing. Change any single day
@@ -396,10 +287,11 @@ function BudgetPanel({
       <form onSubmit={save} className="grid gap-2.5">
         <div className="grid grid-cols-2 gap-2.5">
           <div>
-            <label className="block text-xs font-medium text-stone-700 mb-1">
+            <label htmlFor="estimate-platform" className="block text-xs font-medium text-stone-700 mb-1">
               Platform
             </label>
             <select
+              id="estimate-platform"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
               className="w-full h-10 px-2.5 bg-white border border-stone-300 rounded-md text-sm text-stone-900 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -412,10 +304,12 @@ function BudgetPanel({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-stone-700 mb-1">
+            <label htmlFor="estimate-amount" className="block text-xs font-medium text-stone-700 mb-1">
               ৳ per day
             </label>
             <input
+              id="estimate-amount"
+              type="number" min="0" step="0.01" required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="500"
@@ -426,7 +320,7 @@ function BudgetPanel({
         </div>
         {error && <div className="text-sm text-red-600">{error}</div>}
         <Button type="submit" variant="primary" size="sm" disabled={saving}>
-          {saving ? 'Saving…' : active.length ? 'Update budget' : 'Set it and forget it'}
+          {saving ? 'Saving…' : active.length ? 'Update daily estimate' : 'Start daily estimates'}
         </Button>
       </form>
     </Card>
@@ -478,17 +372,15 @@ function AdSpendPanel({
       await deleteAdSpend(id);
       onChanged();
     } catch {
-      // ignore — the list refreshes either way
+      setError('Could not delete this cost. Please try again.');
     }
   };
 
   return (
     <Card className="p-5" hover={false}>
-      <h2 className="text-base font-semibold mb-1">Correct a single day</h2>
+      <h2 className="text-base font-semibold mb-1">Record advertising cost</h2>
       <p className="text-xs text-stone-500 mb-4">
-        Spent something different on one day — or don&rsquo;t use a daily budget?
-        Enter the exact amount here. It replaces that day&rsquo;s figure and marks
-        it confirmed.
+        Enter the total spent on one platform for one date, using your advertising bill or dashboard. Saving again for the same date and platform replaces the old total; it does not add to it.
       </p>
 
       <form onSubmit={submit} className="grid gap-3">
@@ -500,10 +392,11 @@ function AdSpendPanel({
           required
         />
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">
+          <label htmlFor="actual-platform" className="block text-sm font-medium text-stone-700 mb-1">
             Platform
           </label>
           <select
+            id="actual-platform"
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             className="w-full h-10 px-3 bg-white border border-stone-300 rounded-md text-sm text-stone-900 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -517,6 +410,7 @@ function AdSpendPanel({
         </div>
         <Input
           label="Amount (৳)"
+          type="number" min="0" step="0.01"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="5000"
@@ -525,7 +419,7 @@ function AdSpendPanel({
         />
         {error && <div className="text-sm text-red-600">{error}</div>}
         <Button type="submit" variant="primary" disabled={saving}>
-          {saving ? 'Saving…' : saved ? (<><IcCheck size={14} /> Saved</>) : 'Save spend'}
+          {saving ? 'Saving…' : saved ? (<><IcCheck size={14} /> Saved</>) : 'Save actual cost'}
         </Button>
       </form>
 
@@ -547,7 +441,7 @@ function AdSpendPanel({
                         className="text-[9px] uppercase tracking-wide font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded"
                         title="Auto-filled from your daily budget. Enter the real amount above to confirm it."
                       >
-                        est
+                        Estimated
                       </span>
                     )}
                   </div>
@@ -640,7 +534,7 @@ function FunnelSection({
   void locale;
   const steps = [
     { label: 'Shoppers', value: funnel.unique_visitors, hint: `${funnel.product_views} product views` },
-    { label: 'Ordered', value: funnel.orders_placed, hint: pctLabel(funnel.view_to_order_pct, 'of shoppers') },
+    { label: 'Ordered', value: funnel.orders_placed, hint: pctLabel(funnel.view_to_order_pct, 'orders / visitors') },
     { label: 'Delivered', value: funnel.orders_delivered, hint: pctLabel(funnel.order_to_delivered_pct, 'of orders') },
   ];
   const max = Math.max(funnel.unique_visitors, funnel.orders_placed, 1);
@@ -648,10 +542,10 @@ function FunnelSection({
   return (
     <Card className="p-5 mb-6" hover={false}>
       <div className="flex items-baseline justify-between gap-3 mb-4 flex-wrap">
-        <h2 className="text-base font-semibold">Your funnel</h2>
+        <h2 className="text-base font-semibold">Shop visits and order outcomes</h2>
         <span className="text-xs text-stone-500">
           {funnel.view_to_delivered_pct != null
-            ? `${funnel.view_to_delivered_pct}% of shoppers end up paying`
+            ? `${funnel.view_to_delivered_pct}% delivered orders / visitors`
             : 'Not enough traffic yet'}
         </span>
       </div>
@@ -669,7 +563,7 @@ function FunnelSection({
                 style={{ width: `${Math.max((s.value / max) * 100, s.value > 0 ? 4 : 0)}%` }}
               />
             </div>
-            <div className="w-[132px] text-right flex-shrink-0">
+            <div className="w-[100px] text-right flex-shrink-0">
               <div className="text-sm font-bold text-stone-900">{s.value}</div>
               <div className="text-[11px] text-stone-500 truncate">{s.hint}</div>
             </div>
@@ -698,17 +592,15 @@ function TrackingSection({
     return (
       <Card className="p-5 mb-6 border-dashed" hover={false}>
         <div className="flex items-start gap-3 flex-wrap">
-          <div className="flex-1 min-w-[260px]">
+          <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold mb-1">
-              Facebook isn&rsquo;t learning from your sales yet
+              Facebook tracking is not connected
             </h2>
             <p className="text-sm text-stone-600 leading-relaxed">
-              Connect Meta and we&rsquo;ll report every order — and every successful
-              delivery — back to Facebook, so your ads start finding more people who
-              actually pay.
+              Connect Meta to send order and delivery events to Facebook for ad measurement.
             </p>
           </div>
-          <Link href="/dashboard/settings">
+          <Link href="/dashboard/settings/tracking">
             <Button variant="primary" size="sm">Connect Facebook</Button>
           </Link>
         </div>
@@ -783,7 +675,7 @@ function TrackingSection({
         <div className="mt-4 text-[13px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5">
           <strong className="font-semibold">Meta said:</strong> {stats.last_error}
           {' — '}
-          <Link href="/dashboard/settings" className="underline font-medium">
+          <Link href="/dashboard/settings/tracking" className="underline font-medium">
             check your token
           </Link>
         </div>

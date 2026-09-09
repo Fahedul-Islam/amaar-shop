@@ -92,6 +92,9 @@ func BuildOrderInvoice(in InvoiceData) ([]byte, error) {
 		{"Delivery", "BDT " + in.Order.DeliveryChargeBDT},
 		{"Total", "BDT " + in.Order.TotalBDT},
 	}
+	if in.Order.CouponCode != "" {
+		totals = append(totals[:1], append([][]string{{"Coupon (" + in.Order.CouponCode + ")", "- BDT " + in.Order.CouponDiscountBDT}}, totals[1:]...)...)
+	}
 	d.TotalsBlock(totals)
 
 	d.Footer(

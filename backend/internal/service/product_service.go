@@ -25,6 +25,7 @@ type CreateProductInput struct {
 	DiscountType          *string
 	DiscountValue         *string
 	DeliveryChargeDhaka   *string
+	AdvanceDeliveryExempt bool
 	DeliveryChargeOutside *string
 }
 
@@ -44,6 +45,7 @@ type UpdateProductInput struct {
 	DiscountValue         *string
 	ClearDiscount         bool
 	DeliveryChargeDhaka   *string
+	AdvanceDeliveryExempt *bool
 	DeliveryChargeOutside *string
 	ClearDeliveryCharges  bool
 }
@@ -192,6 +194,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, ownerUserID string, 
 		DiscountValue:         in.DiscountValue,
 		DeliveryChargeDhaka:   in.DeliveryChargeDhaka,
 		DeliveryChargeOutside: in.DeliveryChargeOutside,
+		AdvanceDeliveryExempt: in.AdvanceDeliveryExempt,
 	}
 	if err := s.products.Create(ctx, p); err != nil {
 		return nil, err
@@ -251,6 +254,9 @@ func (s *ProductService) UpdateProduct(ctx context.Context, ownerUserID, product
 		if in.DiscountValue != nil {
 			p.DiscountValue = in.DiscountValue
 		}
+	}
+	if in.AdvanceDeliveryExempt != nil {
+		p.AdvanceDeliveryExempt = *in.AdvanceDeliveryExempt
 	}
 	if in.ClearDeliveryCharges {
 		p.DeliveryChargeDhaka = nil

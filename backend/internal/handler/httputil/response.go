@@ -26,6 +26,9 @@ var domainErrorMap = []struct {
 	status int
 	code   string
 }{
+	// Coupons
+	{domain.ErrCouponInvalid, http.StatusBadRequest, "coupon_invalid"},
+	{domain.ErrCouponInput, http.StatusBadRequest, "validation_error"},
 	// Auth
 	{domain.ErrUserNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrEmailAlreadyExists, http.StatusConflict, "email_already_exists"},

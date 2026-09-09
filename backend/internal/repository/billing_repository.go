@@ -10,6 +10,10 @@ import (
 type FeeRuleRepository interface {
 	// Get returns the current platform-wide fee rule. Always seeded by
 	// migration so this never returns ErrNotFound under normal conditions.
+	ForShop(ctx context.Context, shopID string) (*domain.FeeRule, error)
+	SetShop(ctx context.Context, shopID string, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
+	ResetShop(ctx context.Context, shopID string) error
+	Balance(ctx context.Context, shopID string) (*domain.FeeBalance, error)
 	Get(ctx context.Context) (*domain.FeeRule, error)
 
 	// Update overwrites the singleton rule and stamps updated_by/updated_at.
@@ -19,6 +23,7 @@ type FeeRuleRepository interface {
 // FeeSubmissionRepository handles seller-submitted fee payment claims.
 type FeeSubmissionRepository interface {
 	// Create inserts a new pending submission.
+	Approve(ctx context.Context, submissionID, feedback, adminID string) error
 	Create(ctx context.Context, sub *domain.FeeSubmission) error
 
 	// FindByID returns one submission joined with shop info.

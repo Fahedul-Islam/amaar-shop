@@ -25,12 +25,12 @@ func (r *productRepo) Create(ctx context.Context, p *domain.Product) error {
 	err := r.db.QueryRowContext(ctx,
 		`INSERT INTO products
 		   (shop_id, category_id, name, description, price_bdt, cost_price_bdt, stock, is_active,
-		    discount_type, discount_value, delivery_charge_dhaka, delivery_charge_outside)
+		    discount_type, discount_value, delivery_charge_dhaka, delivery_charge_outside, advance_delivery_exempt)
 		 VALUES ($1, $2, $3, NULLIF($4, ''), $5::numeric, $6::numeric, $7, $8,
-		         $9, $10::numeric, $11::numeric, $12::numeric)
+		         $9, $10::numeric, $11::numeric, $12::numeric, $13)
 		 RETURNING id, is_archived, created_at, updated_at`,
 		p.ShopID, p.CategoryID, p.Name, p.Description, p.PriceBDT, p.CostPriceBDT, p.Stock, p.IsActive,
-		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside,
+		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside, p.AdvanceDeliveryExempt,
 	).Scan(&p.ID, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return err
@@ -52,11 +52,11 @@ func (r *productRepo) Update(ctx context.Context, p *domain.Product) error {
 		     discount_type = $8,
 		     discount_value = $9::numeric,
 		     delivery_charge_dhaka = $10::numeric,
-		     delivery_charge_outside = $11::numeric
-		 WHERE id = $12 AND shop_id = $13
+		     delivery_charge_outside = $11::numeric, advance_delivery_exempt = $12
+		 WHERE id = $13 AND shop_id = $14
 		 RETURNING updated_at`,
 		p.CategoryID, p.Name, p.Description, p.PriceBDT, p.CostPriceBDT, p.Stock, p.IsActive,
-		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside,
+		p.DiscountType, p.DiscountValue, p.DeliveryChargeDhaka, p.DeliveryChargeOutside, p.AdvanceDeliveryExempt,
 		p.ID, p.ShopID,
 	).Scan(&p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -107,7 +107,7 @@ func (r *productRepo) FindByID(ctx context.Context, id, shopID string) (*domain.
 	err := r.db.QueryRowContext(ctx,
 		`SELECT id, shop_id, category_id, name, COALESCE(description, ''), price_bdt::text,
 		        cost_price_bdt::text, stock, is_active, is_archived,
-		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text,
+		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text, advance_delivery_exempt,
 		        created_at, updated_at
 		 FROM products
 		 WHERE id = $1 AND shop_id = $2`,
@@ -115,7 +115,7 @@ func (r *productRepo) FindByID(ctx context.Context, id, shopID string) (*domain.
 	).Scan(
 		&p.ID, &p.ShopID, &categoryID, &p.Name, &description, &p.PriceBDT,
 		&costPrice, &p.Stock, &p.IsActive, &p.IsArchived,
-		&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
+		&discountType, &discountValue, &deliveryDhaka, &deliveryOutside, &p.AdvanceDeliveryExempt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -193,7 +193,7 @@ func (r *productRepo) ListByShop(ctx context.Context, shopID string, filter doma
 	query := fmt.Sprintf(
 		`SELECT id, shop_id, category_id, name, COALESCE(description, ''), price_bdt::text,
 		        cost_price_bdt::text, stock, is_active, is_archived,
-		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text,
+		        discount_type, discount_value::text, delivery_charge_dhaka::text, delivery_charge_outside::text, advance_delivery_exempt,
 		        created_at, updated_at
 		 FROM products
 		 WHERE %s
@@ -216,7 +216,7 @@ func (r *productRepo) ListByShop(ctx context.Context, shopID string, filter doma
 		if err := rows.Scan(
 			&p.ID, &p.ShopID, &categoryID, &p.Name, &description, &p.PriceBDT,
 			&costPrice, &p.Stock, &p.IsActive, &p.IsArchived,
-			&discountType, &discountValue, &deliveryDhaka, &deliveryOutside,
+			&discountType, &discountValue, &deliveryDhaka, &deliveryOutside, &p.AdvanceDeliveryExempt,
 			&p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err

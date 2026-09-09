@@ -1570,3 +1570,51 @@ shipped     -> cancelled
 
 Both endpoints are public and rate limited. Codes expire in 10 minutes, permit
 five attempts, and have a 60-second resend cooldown. Account roles do not change.
+
+### Product delivery payment and private coupons
+
+Products now expose `advance_delivery_exempt` (boolean, default `false`) in seller
+and storefront product responses. Set it on product create/update to let buyers
+pay the delivery fee on arrival. Shop-wide advance payment applies only when the
+order has a nonzero delivery fee and at least one non-exempt product. Exempt and
+free-delivery orders accept checkout without payment method, transaction ID, or
+receipt. Mixed carts still require the full delivery fee in advance.
+
+Authenticated seller endpoints (scoped to the seller's shop):
+
+- `GET /api/shops/me/coupons`: latest 200 coupons, newest first.
+- `POST /api/shops/me/coupons`: body `{"amount_bdt":"100.00","buyer_phone":"01712345678","expires_at":"2026-12-01T00:00:00Z"}`.
+  The phone is optional; expiry must be in the future, within one year. Returns a
+  generated private code. Discount amounts support two decimal places.
+- `DELETE /api/shops/me/coupons/{id}`: disables the code without deleting history.
+
+Public checkout:
+
+- `POST /api/shops/by-slug/{slug}/checkout-quote`: accepts `items`,
+  `delivery_division`, optional `customer_phone`, `coupon_code`, and
+  `reservation_id`. Returns server-calculated `subtotal_bdt`,
+  `delivery_charge_bdt`, `coupon_discount_bdt`, `total_bdt`, `coupon_code`, and
+  `advance_payment_required`. Does not consume inventory or redeem a coupon.
+- Order placement accepts optional `coupon_code` and rechecks eligibility.
+  Order responses include the snapshotted coupon code and discount.
+
+Codes are case-insensitive, single-use, shop-specific, and optionally restricted
+to the phone entered at checkout (this is a number match, not SMS verification).
+Coupons reduce merchandise totals, capped at that total; delivery charges and
+free-delivery eligibility use the pre-coupon subtotal. Redemption, stock changes,
+and order creation commit together. Failed orders do not use the code; cancelled
+orders do not reactivate it. Generate a new code when needed. Product revenue
+reports allocate order-level coupon discounts proportionally across items.
+
+### Seller sales report
+
+`GET /api/shops/me/stats/report?from=YYYY-MM-DD&to=YYYY-MM-DD`
+requires seller authentication and resolves the shop from the authenticated
+owner. Uses the existing report date validation (maximum 366-day difference).
+Returns `total_orders`, `status_counts`, `status_values`, `daily` and `products`
+in the standard data envelope. All sales use order placement dates in
+Asia/Dhaka; status totals reflect current status. `daily` contains `date`,
+`orders` (including cancellations), `revenue_bdt` (excluding cancellations).
+`products` is the top ten by ordered quantity, excluding cancelled orders,
+with coupon-adjusted merchandise values and no delivery fees. Returns and
+undelivered orders remain included. Empty product/daily arrays are `[]`.

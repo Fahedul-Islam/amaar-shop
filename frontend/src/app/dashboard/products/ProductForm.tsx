@@ -65,6 +65,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
   const [isActive, setIsActive] = useState(true);
   const [discountType, setDiscountType] = useState<'' | 'percentage' | 'flat'>('');
   const [discountValue, setDiscountValue] = useState('');
+  const [advanceExempt, setAdvanceExempt] = useState(false);
   const [chargeDhaka, setChargeDhaka] = useState('');
   const [chargeOutside, setChargeOutside] = useState('');
   const [images, setImages] = useState<ProductImageT[]>([]);
@@ -85,6 +86,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
       setChargeDhaka(product.delivery_charge_dhaka ?? '');
       setChargeOutside(product.delivery_charge_outside ?? '');
       setImages(product.images ?? []);
+ setAdvanceExempt(product.advance_delivery_exempt);
     }
   }, [product]);
 
@@ -124,6 +126,7 @@ export default function ProductFormPage({ mode, productId }: Props) {
       discount_value: discountType ? discountValue || null : null,
       delivery_charge_dhaka: chargeDhaka || null,
       delivery_charge_outside: chargeOutside || null,
+ advance_delivery_exempt: advanceExempt,
     };
     try {
       if (!isEdit) {
@@ -292,42 +295,10 @@ export default function ProductFormPage({ mode, productId }: Props) {
             <p className="text-xs text-stone-500 mb-3">
               All products use your shop&apos;s delivery settings.
             </p>
-            {delivery ? (
-              <ul className="text-sm grid gap-1.5">
-                {(delivery.delivery_zones ?? []).map((z) => (
-                  <li
-                    key={`${z.division}-${z.id ?? ''}`}
-                    className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-stone-50 border border-stone-100"
-                  >
-                    <span className="text-stone-700">{z.division}</span>
-                    <span className="font-semibold text-stone-900">
-                      ৳{Number(z.delivery_charge).toFixed(0)}
-                    </span>
-                  </li>
-                ))}
-                <li className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-stone-50 border border-stone-100">
-                  <span className="text-stone-600">All other areas</span>
-                  <span className="font-semibold text-stone-900">
-                    {parseFloat(delivery.delivery_charge) > 0
-                      ? `৳${Number(delivery.delivery_charge).toFixed(0)}`
-                      : 'Free'}
-                  </span>
-                </li>
-                {delivery.free_delivery_threshold && (
-                  <li className="text-xs text-stone-500 px-1 pt-1">
-                    Free delivery on orders above ৳
-                    {Number(delivery.free_delivery_threshold).toFixed(0)}
-                  </li>
-                )}
-                {delivery.advance_payment_required && (
-                  <li className="text-xs text-stone-500 px-1">
-                    Advance payment required at checkout
-                  </li>
-                )}
-              </ul>
-            ) : (
-              <div className="text-xs text-stone-400">Loading…</div>
-            )}
+            <label className="mt-4 pt-4 border-t border-stone-200 flex gap-3 text-sm cursor-pointer">
+              <input type="checkbox" className="mt-1 self-start accent-teal-700" checked={advanceExempt} onChange={e => setAdvanceExempt(e.target.checked)} />
+              <span><span className="font-medium block">Pay delivery charge on arrival</span><span className="text-stone-500 block mt-1">Do not ask for advance delivery payment for this product. If the buyer also orders a product that requires advance payment, the order’s delivery fee must still be paid in advance.</span></span>
+            </label>
           </Card>
         </div>
 

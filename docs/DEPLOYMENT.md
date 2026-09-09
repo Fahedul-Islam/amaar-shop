@@ -1405,3 +1405,18 @@ code. The endpoints also use the authentication IP rate limiter. A successful
 reset revokes existing refresh tokens; already issued access tokens expire within
 15 minutes. Passwords must contain at least eight characters and fit within
 bcrypt's 72-byte limit.
+
+### Delivery payment exceptions and discount codes
+
+Deploy backend and frontend together for migration `000024_delivery_coupons`.
+The migration preserves existing delivery settings and makes existing products
+follow their shop's payment rule. In **Products → Edit → Delivery**, select
+**Pay delivery charge on arrival** to exempt a product from advance collection.
+For shop-wide payment on arrival, choose **Collect everything on delivery** in
+**Shop settings → Delivery & payments** and save.
+
+**Discount codes** in the seller navigation provides private discount codes. Enter a taka amount,
+expiry duration, and optionally the buyer's phone, then generate and copy the
+code. Buyers apply it in checkout. Codes work once; disabling a code takes effect
+on the next quote/order request. Discounts never make an order total negative
+and do not reduce the delivery fee. No email or SMTP setup is needed for coupons.

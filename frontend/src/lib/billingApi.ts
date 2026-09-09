@@ -2,7 +2,7 @@ import { apiFetch, apiFetchEnvelope } from './api';
 
 // ----- Fee rule (admin) -----------------------------------------------------
 
-export type FeeRuleType = 'percentage' | 'fixed_per_order';
+export type FeeRuleType = 'percentage' | 'fixed_per_order' | 'fixed_per_item';
 
 export interface FeeRule {
   rule_type: FeeRuleType;
@@ -14,6 +14,7 @@ export interface FeeRule {
 }
 
 export const FEE_RULE_TYPE_OPTIONS: { id: FeeRuleType; label: string; help: string }[] = [
+ {id: 'fixed_per_item', label: 'Fixed amount per item', help: 'Charge per unit ordered: quantity 3 means three fees. Cancelled orders are excluded.'},
   {
     id: 'percentage',
     label: 'Percentage of sales',
@@ -30,7 +31,7 @@ export const FEE_RULE_TYPE_OPTIONS: { id: FeeRuleType; label: string; help: stri
 // sellers see the rule worded the same way in every place.
 export function humanLabelFeeRule(r: FeeRule): string {
   if (r.rule_type === 'percentage') return `${stripTrailingZeros(r.value)}% of sales`;
-  return `BDT ${r.value} per order`;
+  return `BDT ${r.value} per ${r.rule_type === 'fixed_per_item' ? 'item (quantity)' : 'order'}`;
 }
 
 function stripTrailingZeros(s: string): string {
@@ -120,6 +121,10 @@ export type FeeStatus = 'paid_up' | 'due' | 'overdue';
 
 export interface ShopBillingSnapshot {
   rule: FeeRule;
+  charged_bdt: string;
+  paid_bdt: string;
+  credit_bdt: string;
+  items: number;
   unbilled_orders: number;
   unbilled_gmv_bdt: string;
   outstanding_fee_bdt: string;
@@ -146,3 +151,7 @@ export const submitMyPayment = (body: {
 
 export const getMySubmissions = (limit = 25) =>
   apiFetch<FeeSubmission[]>(`/api/shops/me/billing/submissions?limit=${limit}`);
+
+export const getShopFeeRule = (id: string) => apiFetch<FeeRule>(`/api/admin/shops/${id}/fee-rule`);
+export const updateShopFeeRule = (id: string, body: {rule_type: FeeRuleType; value: string; description?: string}) => apiFetch<FeeRule>(`/api/admin/shops/${id}/fee-rule`, {method: 'PUT', body: JSON.stringify(body)});
+export const resetShopFeeRule = (id: string) => apiFetch<FeeRule>(`/api/admin/shops/${id}/fee-rule`, {method: 'DELETE'});

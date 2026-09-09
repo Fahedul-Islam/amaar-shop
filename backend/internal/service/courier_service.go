@@ -131,6 +131,10 @@ func codAmount(o *domain.Order) float64 {
 		raw = o.SubtotalBDT
 	}
 	v, _ := strconv.ParseFloat(raw, 64)
+	if o.AdvancePaymentRequired {
+		discount, _ := strconv.ParseFloat(o.CouponDiscountBDT, 64)
+		v -= discount
+	}
 	return v
 }
 

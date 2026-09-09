@@ -181,7 +181,7 @@ function SubmissionDrawer({
   const [error, setError] = useState<string | null>(null);
 
   const approve = async () => {
-    if (!confirm('Mark this submission as received? This will settle the shop\'s outstanding fee balance.')) return;
+    if (!confirm('Mark this submission as received? Only this submission\'s amount will be deducted from the shop\'s balance.')) return;
     setBusy('approve');
     setError(null);
     try {

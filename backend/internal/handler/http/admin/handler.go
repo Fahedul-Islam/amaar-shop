@@ -47,6 +47,9 @@ type InsightsService interface {
 
 // FeeService backs the platform fee rule and admin-recorded settlements.
 type FeeService interface {
+	ShopFeeRule(ctx context.Context, shopID string) (*domain.FeeRule, error)
+	UpdateShopFeeRule(ctx context.Context, shopID string, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
+	ResetShopFeeRule(ctx context.Context, shopID string) (*domain.FeeRule, error)
 	FeeRule(ctx context.Context) (*domain.FeeRule, error)
 	UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error)
 	RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error)
@@ -129,6 +132,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, mw *middleware.Manager) {
 	mux.HandleFunc("GET /api/admin/shops/{id}/fee-payments", gated.Then(h.GetFeePaymentHistory))
 
 	// Configurable platform fee rule.
+	mux.HandleFunc("GET /api/admin/shops/{id}/fee-rule", gated.Then(h.ShopFeeRule))
+	mux.HandleFunc("PUT /api/admin/shops/{id}/fee-rule", gated.Then(h.ShopFeeRule))
+	mux.HandleFunc("DELETE /api/admin/shops/{id}/fee-rule", gated.Then(h.ShopFeeRule))
 	mux.HandleFunc("GET /api/admin/fee-rule", gated.Then(h.GetFeeRule))
 	mux.HandleFunc("PUT /api/admin/fee-rule", gated.Then(h.UpdateFeeRule))
 }

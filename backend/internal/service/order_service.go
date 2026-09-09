@@ -15,6 +15,7 @@ import (
 
 // PlaceOrderInput carries the validated customer submission from the handler.
 type PlaceOrderInput struct {
+	CouponCode       string
 	CustomerName     string
 	CustomerPhone    string
 	DeliveryAddress  string
@@ -92,6 +93,7 @@ type OrderService struct {
 	orders   repository.OrderRepository
 	methods  repository.PaymentMethodRepository
 	reserves repository.CartReservationRepository
+	coupons  repository.CouponRepository
 
 	events OrderEventPublisher
 	log    *slog.Logger
@@ -144,59 +146,13 @@ func NewOrderService(
 // pricing, delivery charge — each live in their own function below so they can
 // be read and tested on their own.
 func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrderInput) (*domain.Order, error) {
-	// Resolve the shop (404 if suspended or missing).
-	shop, err := s.shops.FindBySlug(ctx, slug)
+	order, err := s.Quote(ctx, slug, in)
 	if err != nil {
 		return nil, err
 	}
-	if shop.IsSuspended {
-		return nil, domain.ErrShopNotFound
-	}
-
-	// Load delivery settings to check COD and compute delivery charge.
-	ds, err := s.delivery.Get(ctx, shop.ID)
+	verifiedMethodID, err := s.verifyAdvancePayment(ctx, order.ShopID, &domain.DeliverySettings{AdvancePaymentRequired: order.AdvancePaymentRequired}, in)
 	if err != nil {
 		return nil, err
-	}
-	if !ds.CODEnabled {
-		return nil, domain.ErrCheckoutDisabled
-	}
-
-	verifiedMethodID, err := s.verifyAdvancePayment(ctx, shop.ID, ds, in)
-	if err != nil {
-		return nil, err
-	}
-
-	itemInputs, err := s.resolveItemInputs(ctx, shop.ID, in)
-	if err != nil {
-		return nil, err
-	}
-
-	// Stock was already debited at reserve time, so only a non-reservation
-	// checkout re-checks it.
-	items, subtotal, err := s.buildOrderItems(ctx, shop.ID, itemInputs, in.ReservationID == "")
-	if err != nil {
-		return nil, err
-	}
-
-	division := strings.TrimSpace(in.DeliveryDivision)
-	district := strings.TrimSpace(in.DeliveryDistrict)
-	deliveryCharge := ds.DeliveryChargeFor(division, subtotal)
-
-	order := &domain.Order{
-		ShopID:                 shop.ID,
-		CustomerName:           in.CustomerName,
-		CustomerPhone:          normalizePhone(in.CustomerPhone),
-		DeliveryAddress:        in.DeliveryAddress,
-		DeliveryDivision:       division,
-		DeliveryDistrict:       district,
-		DeliveryArea:           legacyDeliveryArea(district, division),
-		Note:                   in.Note,
-		SubtotalBDT:            fmt.Sprintf("%.2f", subtotal),
-		DeliveryChargeBDT:      fmt.Sprintf("%.2f", deliveryCharge),
-		TotalBDT:               fmt.Sprintf("%.2f", subtotal+deliveryCharge),
-		AdvancePaymentRequired: ds.AdvancePaymentRequired,
-		Items:                  items,
 	}
 	if verifiedMethodID != nil {
 		order.AdvancePaymentMethodID = verifiedMethodID
@@ -218,6 +174,96 @@ func (s *OrderService) PlaceOrder(ctx context.Context, slug string, in PlaceOrde
 	// Tell Meta a purchase happened so ad targeting learns from it.
 	s.publish(ctx, order, "Purchase")
 
+	return order, nil
+}
+
+// SetCoupons enables seller-issued coupon pricing. Redemption is atomic in PlaceOrder's repository transaction.
+func (s *OrderService) SetCoupons(c repository.CouponRepository) { s.coupons = c }
+
+// Quote resolves current products and prices without consuming stock or a coupon.
+func (s *OrderService) Quote(ctx context.Context, slug string, in PlaceOrderInput) (*domain.Order, error) {
+	// Resolve the shop (404 if suspended or missing).
+	shop, err := s.shops.FindBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	if shop.IsSuspended {
+		return nil, domain.ErrShopNotFound
+	}
+
+	// Load delivery settings to check COD and compute delivery charge.
+	ds, err := s.delivery.Get(ctx, shop.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ds.CODEnabled {
+		return nil, domain.ErrCheckoutDisabled
+	}
+
+	itemInputs, err := s.resolveItemInputs(ctx, shop.ID, in)
+	if err != nil {
+		return nil, err
+	}
+
+	// Stock was already debited at reserve time, so only a non-reservation
+	// checkout re-checks it.
+	items, subtotal, err := s.buildOrderItems(ctx, shop.ID, itemInputs, in.ReservationID == "")
+	if err != nil {
+		return nil, err
+	}
+
+	division := strings.TrimSpace(in.DeliveryDivision)
+	district := strings.TrimSpace(in.DeliveryDistrict)
+	deliveryCharge := ds.DeliveryChargeFor(division, subtotal)
+
+	advanceRequired := false
+	if ds.AdvancePaymentRequired && deliveryCharge > 0 {
+		for _, item := range itemInputs {
+			product, err := s.products.FindByID(ctx, item.ProductID, shop.ID)
+			if err != nil {
+				return nil, err
+			}
+			if !product.AdvanceDeliveryExempt {
+				advanceRequired = true
+				break
+			}
+		}
+	}
+	var couponID *string
+	couponCode := strings.ToUpper(strings.TrimSpace(in.CouponCode))
+	discount := 0.0
+	if couponCode != "" {
+		if s.coupons == nil || len(couponCode) > 64 {
+			return nil, domain.ErrCouponInvalid
+		}
+		coupon, err := s.coupons.Find(ctx, shop.ID, couponCode)
+		if err != nil {
+			return nil, err
+		}
+		discount, err = coupon.Discount(subtotal, normalizePhone(in.CustomerPhone), time.Now())
+		if err != nil {
+			return nil, err
+		}
+		couponID = &coupon.ID
+	}
+	order := &domain.Order{
+		ShopID:                 shop.ID,
+		CustomerName:           in.CustomerName,
+		CustomerPhone:          normalizePhone(in.CustomerPhone),
+		DeliveryAddress:        in.DeliveryAddress,
+		DeliveryDivision:       division,
+		DeliveryDistrict:       district,
+		DeliveryArea:           legacyDeliveryArea(district, division),
+		Note:                   in.Note,
+		SubtotalBDT:            fmt.Sprintf("%.2f", subtotal),
+		DeliveryChargeBDT:      fmt.Sprintf("%.2f", deliveryCharge),
+		TotalBDT:               fmt.Sprintf("%.2f", subtotal+deliveryCharge-discount),
+		AdvancePaymentRequired: advanceRequired,
+		CouponID:               couponID,
+		CouponCode:             couponCode,
+		CouponDiscountBDT:      fmt.Sprintf("%.2f", discount),
+		Items:                  items,
+	}
 	return order, nil
 }
 

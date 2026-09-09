@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useStorefront } from "../StorefrontShell";
 import { formatBDT } from "@/lib/format";
 import { placeOrder } from "@/lib/storefrontApi";
-import { ApiRequestError } from "@/lib/api";
+import { publicFetch, ApiRequestError } from "@/lib/api";
 import { useI18n } from "@/hooks/useI18n";
 import { BD_DIVISIONS, BD_DISTRICTS, type Division } from "@/lib/bdGeo";
 import {
@@ -32,6 +32,7 @@ import {
 
 // Reservation duration mirrors the backend constant. Used by the
 // progress-bar % calculation so the bar matches the timer 1:1.
+type CheckoutQuote = { subtotal_bdt: string; delivery_charge_bdt: string; total_bdt: string; coupon_code: string; coupon_discount_bdt: string; advance_payment_required: boolean };
 const HOLD_DURATION_SEC = 15 * 60;
 
 export default function CheckoutPage() {
@@ -126,6 +127,27 @@ export default function CheckoutPage() {
   );
   const cartItemsRef = useRef(cartReservationItems);
   cartItemsRef.current = cartReservationItems;
+
+  const [couponInput, setCouponInput] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [quoteResult, setQuoteResult] = useState<{ key: string; data: CheckoutQuote } | null>(null);
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteRetry, setQuoteRetry] = useState(0);
+  const quoteKey = JSON.stringify([shop.slug, cartFingerprint, division, phone, couponCode, reservation?.id, quoteRetry]);
+  const quote = quoteResult?.key === quoteKey ? quoteResult.data : null;
+  useEffect(() => {
+    let cancelled = false;
+    setQuoteError("");
+    if (!cartItemsRef.current.length) return;
+    const timer = setTimeout(() => {
+      publicFetch<CheckoutQuote>(`/api/shops/by-slug/${shop.slug}/checkout-quote`, {
+        method: 'POST',
+        body: JSON.stringify({ items: cartItemsRef.current, delivery_division: division, customer_phone: phone, coupon_code: couponCode, reservation_id: reservation?.id }),
+      }).then(data => { if (!cancelled) setQuoteResult({ key: quoteKey, data }); })
+        .catch(e => { if (!cancelled) setQuoteError(e instanceof Error ? e.message : 'Could not check order total.'); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [quoteKey, shop.slug, division, phone, couponCode, reservation?.id]);
 
   // ── Load payment methods once ─────────────────────────────────
   useEffect(() => {
@@ -259,22 +281,9 @@ export default function CheckoutPage() {
   const deliveryFilled =
     !!division && !!district && address.trim().length >= 8;
 
-  const deliveryCharge = useMemo(() => {
-    if (!delivery) return 0;
-    let fee = parseFloat(delivery.delivery_charge);
-    if (division) {
-      const zone = deliveryZones.find((z) => z.division === division);
-      if (zone) {
-        const zf = parseFloat(zone.delivery_charge);
-        if (Number.isFinite(zf)) fee = zf;
-      }
-    }
-    if (delivery.free_delivery_threshold) {
-      const th = parseFloat(delivery.free_delivery_threshold);
-      if (cart.subtotal >= th) return 0;
-    }
-    return Number.isFinite(fee) ? fee : 0;
-  }, [delivery, deliveryZones, division, cart.subtotal]);
+  const deliveryCharge = quote ? Number(quote.delivery_charge_bdt) : 0;
+  const subtotal = quote ? Number(quote.subtotal_bdt) : cart.subtotal;
+  const couponDiscount = quote ? Number(quote.coupon_discount_bdt) : 0;
 
   const matchedZone = division
     ? deliveryZones.find((z) => z.division === division)
@@ -282,13 +291,13 @@ export default function CheckoutPage() {
   const freeFromThreshold =
     !!delivery?.free_delivery_threshold &&
     cart.subtotal >= parseFloat(delivery.free_delivery_threshold ?? "0");
-  const total = cart.subtotal + deliveryCharge;
+  const total = quote ? Number(quote.total_bdt) : cart.subtotal;
 
-  const advanceRequired = !!delivery?.advance_payment_required;
+  const advanceRequired = quote?.advance_payment_required ?? false;
   const proofComplete =
     !!methodId && txnRef.trim().length > 0 && !!receiptUrl && confirmed;
   const disabled =
-    cart.items.length === 0 ||
+    !quote || cart.items.length === 0 ||
     (advanceRequired &&
       (phase !== "payment" || !proofComplete || expired || !reservation));
 
@@ -305,7 +314,7 @@ export default function CheckoutPage() {
 
   // ── Phase transitions ─────────────────────────────────────────
   async function startPayment() {
-    if (!validate()) return;
+    if (!quote || !validate()) return;
     if (methods.length === 0) {
       setReservationError({
         code: "no_methods",
@@ -358,11 +367,12 @@ export default function CheckoutPage() {
   // ── Submit ─────────────────────────────────────────────────────
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!quote || disabled || !validate()) return;
     setSubmitting(true);
     setError(null);
     try {
       const order = await placeOrder(shop.slug, {
+        coupon_code: couponCode || undefined,
         customer_name: name.trim(),
         customer_phone: phone.trim(),
         delivery_address: address.trim(),
@@ -483,7 +493,7 @@ export default function CheckoutPage() {
   else if (detailsFilled && deliveryFilled) currentStep = 3;
 
   const totalPayNow = advanceRequired ? deliveryCharge : total;
-  const codAmount = advanceRequired ? cart.subtotal : 0;
+  const codAmount = advanceRequired ? subtotal - couponDiscount : total;
 
   return (
     <section className="max-w-[1180px] mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-20">
@@ -812,11 +822,21 @@ export default function CheckoutPage() {
               ))}
             </ul>
 
+            <div className="px-[22px] py-4 border-t border-stone-100">
+              <label htmlFor="coupon-code" className="block text-sm font-medium mb-2">{locale === 'bn' ? 'ডিসকাউন্ট কোড' : 'Discount code'}</label>
+              <div className="flex gap-2">
+                <input id="coupon-code" value={couponInput} onChange={e => setCouponInput(e.target.value.toUpperCase())} maxLength={64} autoCapitalize="characters" placeholder={locale === 'bn' ? 'কোড লিখুন' : 'Enter code'} className="min-w-0 flex-1 border border-stone-300 rounded-md px-3 py-2 text-sm" disabled={submitting} />
+                <button type="button" disabled={!couponInput.trim() || submitting} onClick={() => { setCouponCode(couponInput.trim()); setQuoteRetry(n => n + 1); }} className="px-3 py-2 rounded-md border border-stone-300 text-sm disabled:opacity-50">{locale === 'bn' ? 'প্রয়োগ' : 'Apply'}</button>
+              </div>
+              {couponCode && <button type="button" disabled={submitting} onClick={() => { setCouponCode(''); setCouponInput(''); }} className="mt-2 text-xs underline text-stone-500">{locale === 'bn' ? 'কোড সরান' : 'Remove code'}</button>}
+              {quoteError ? <p role="alert" className="text-sm text-red-700 mt-2">{quoteError} <button type="button" className="underline" onClick={() => setQuoteRetry(n => n + 1)}>{locale === 'bn' ? 'আবার চেষ্টা করুন' : 'Retry'}</button></p> : !quote ? <p role="status" className="mt-2 text-sm text-stone-500">{locale === 'bn' ? 'অর্ডারের মূল্য যাচাই হচ্ছে…' : 'Checking order total…'}</p> : couponDiscount > 0 ? <p role="status" className="mt-2 text-sm text-teal-700">{locale === 'bn' ? 'ডিসকাউন্ট প্রয়োগ হয়েছে' : 'Discount applied'}</p> : null}
+            </div>
             <div className="px-[22px] py-3.5 border-t border-stone-100 grid gap-1.5 text-[13.5px]">
+              {couponDiscount > 0 && <div className="flex justify-between text-teal-700"><span>{locale === 'bn' ? 'কুপন ছাড়' : 'Coupon discount'}</span><strong>−{formatBDT(couponDiscount, locale)}</strong></div>}
               <div className="flex justify-between text-stone-700">
                 <span>{locale === "bn" ? "উপমোট" : "Subtotal"}</span>
                 <strong className="text-stone-900 font-semibold">
-                  {formatBDT(cart.subtotal, locale)}
+                  {quote ? formatBDT(subtotal, locale) : "—"}
                 </strong>
               </div>
               <div className="flex justify-between text-stone-700">
@@ -1549,8 +1569,7 @@ function PaymentSection({
       {/* Receipt upload */}
       <Field
         label={locale === "bn" ? "পেমেন্ট রসিদ" : "Payment receipt screenshot"}
-        optional
-        optionalLabel={locale === "bn" ? "সুপারিশকৃত" : "Recommended"}
+        required
       >
         {receiptUrl ? (
           <div className="flex items-center gap-3 px-4 py-3.5 bg-white border-[1.5px] border-teal-200 rounded-[12px]">

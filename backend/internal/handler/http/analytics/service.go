@@ -13,6 +13,7 @@ import (
 
 // SalesService covers order counts, revenue and best-sellers.
 type SalesService interface {
+	OrderReport(ctx context.Context, ownerUserID string, from, to time.Time) (*domain.OrderReport, error)
 	TodayStats(ctx context.Context, ownerUserID string) (*domain.TodayStats, error)
 	RangeStats(ctx context.Context, ownerUserID string, from, to time.Time) ([]domain.DayStat, error)
 	StatsSummary(ctx context.Context, ownerUserID string, curFrom, curTo, prevFrom, prevTo time.Time) (*domain.StatsSummaryResult, error)

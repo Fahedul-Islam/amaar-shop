@@ -18,13 +18,14 @@ import (
 type FeeRuleType string
 
 const (
+	FeeRuleTypeFixedPerItem  FeeRuleType = "fixed_per_item"
 	FeeRuleTypePercentage    FeeRuleType = "percentage"
 	FeeRuleTypeFixedPerOrder FeeRuleType = "fixed_per_order"
 )
 
 // IsValidFeeRuleType returns true if t is a known rule type.
 func IsValidFeeRuleType(t string) bool {
-	return FeeRuleType(t) == FeeRuleTypePercentage || FeeRuleType(t) == FeeRuleTypeFixedPerOrder
+	return FeeRuleType(t) == FeeRuleTypeFixedPerItem || FeeRuleType(t) == FeeRuleTypePercentage || FeeRuleType(t) == FeeRuleTypeFixedPerOrder
 }
 
 // FeeSubmissionListFilter is the standard filter for the admin review queue
@@ -64,6 +65,8 @@ func (r FeeRule) HumanLabel() string {
 	switch r.RuleType {
 	case FeeRuleTypePercentage:
 		return v + "% of sales"
+	case FeeRuleTypeFixedPerItem:
+		return "BDT " + v + " per item (quantity)"
 	case FeeRuleTypeFixedPerOrder:
 		return "BDT " + v + " per order"
 	}
@@ -198,6 +201,10 @@ type ReviewFeeSubmissionInput struct {
 // ShopBillingSnapshot is what a seller sees on their billing page: the
 // current rule, what they owe right now, and the last few payments.
 type ShopBillingSnapshot struct {
+	ChargedBDT           string          `json:"charged_bdt"`
+	PaidBDT              string          `json:"paid_bdt"`
+	CreditBDT            string          `json:"credit_bdt"`
+	Items                int             `json:"items"`
 	Rule                 FeeRule         `json:"rule"`
 	UnbilledOrders       int             `json:"unbilled_orders"`
 	UnbilledGMVBDT       string          `json:"unbilled_gmv_bdt"`
@@ -210,7 +217,7 @@ type ShopBillingSnapshot struct {
 }
 
 var (
-	ErrFeeRuleInvalidType        = errors.New("fee rule type must be 'percentage' or 'fixed_per_order'")
+	ErrFeeRuleInvalidType        = errors.New("fee rule type must be 'percentage', 'fixed_per_order' or 'fixed_per_item'")
 	ErrFeeRuleInvalidValue       = errors.New("fee rule value must be a number greater than or equal to zero")
 	ErrFeeRulePercentTooBig      = errors.New("percentage value must be between 0 and 100")
 	ErrSubmissionNotFound        = errors.New("payment submission not found")
@@ -220,3 +227,9 @@ var (
 	ErrSubmissionAlreadyReviewed = errors.New("this submission has already been reviewed")
 	ErrPendingSubmissionExists   = errors.New("you already have a pending submission — wait for admin review")
 )
+
+// FeeBalance uses decimal database arithmetic for charges minus confirmed payments.
+type FeeBalance struct {
+	Orders, Items                   int
+	GMV, Charged, Paid, Due, Credit string
+}
