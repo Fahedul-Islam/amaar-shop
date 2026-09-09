@@ -358,3 +358,30 @@ func (h *Handler) UpdateFeeRule(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, rule)
 }
+
+func (h *Handler) ShopFeeRule(w http.ResponseWriter, r *http.Request) {
+	var rule *domain.FeeRule
+	var err error
+	switch r.Method {
+	case "GET":
+		rule, err = h.fees.ShopFeeRule(r.Context(), r.PathValue("id"))
+	case "DELETE":
+		rule, err = h.fees.ResetShopFeeRule(r.Context(), r.PathValue("id"))
+	case "PUT":
+		var body struct {
+			RuleType    string `json:"rule_type"`
+			Value       string `json:"value"`
+			Description string `json:"description"`
+		}
+		if err := httputil.DecodeJSONBody(r, &body); err != nil {
+			httputil.WriteValidationError(w, "invalid request body")
+			return
+		}
+		rule, err = h.fees.UpdateShopFeeRule(r.Context(), r.PathValue("id"), domain.UpdateFeeRuleInput{RuleType: body.RuleType, Value: body.Value, Description: body.Description, UpdatedBy: middleware.GetUserID(r.Context())})
+	}
+	if err != nil {
+		httputil.WriteError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, rule)
+}

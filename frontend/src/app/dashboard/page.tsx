@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusTone } from '@/components/ui/Badge';
-import { IcChevR, IcFacebook, IcPlus } from '@/components/icons/Icons';
+import { IcChevR, IcPlus } from '@/components/icons/Icons';
 import { getDashboardSummary } from '@/lib/analyticsApi';
 import { listOrders, prettyOrderStatus } from '@/lib/orderApi';
 import { formatBDT, formatDateTime } from '@/lib/format';
@@ -26,12 +26,7 @@ export default function DashboardHomePage() {
   })();
 
   const s = summaryQ.data;
-  const totalActions =
-    (s?.pending_orders_count ?? 0) +
-    (s?.awaiting_advance_count ?? 0) +
-    (s?.out_of_stock_count ?? 0) +
-    (s?.low_stock_count ?? 0) +
-    (s?.unanswered_reviews_count ?? 0);
+  const hasTasks = !!s && (s.pending_orders_count > 0 || s.awaiting_advance_count > 0 || s.out_of_stock_count > 0 || s.low_stock_count > 0 || s.unanswered_reviews_count > 0);
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7 max-w-6xl">
@@ -41,9 +36,7 @@ export default function DashboardHomePage() {
             {greeting}{shop ? `, ${shop.name}` : ''}
           </h1>
           <p className="text-stone-500 mt-1">
-            {totalActions === 0 && s
-              ? "You're all caught up — nothing needs your attention right now."
-              : `You have ${totalActions} thing${totalActions === 1 ? '' : 's'} to take care of today.`}
+            Review orders, keep products in stock, and check your sales.
           </p>
         </div>
         <Link href="/dashboard/products/new">
@@ -54,28 +47,19 @@ export default function DashboardHomePage() {
       {/* Today's tasks — actionable items */}
       <section className="mb-7">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-500 mb-3">
-          Today&apos;s tasks
+          Needs attention
         </h2>
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          <ActionCard
-            href="/dashboard/orders?status=pending"
-            count={s?.pending_orders_count}
-            urgent={(s?.pending_orders_count ?? 0) > 0}
-            title="Confirm new orders"
-            description="Buyers waiting for you to confirm"
-            cta="Review"
-            icon="📦"
-          />
-          <ActionCard
-            href="/dashboard/orders"
-            count={s?.awaiting_advance_count}
-            urgent={(s?.awaiting_advance_count ?? 0) > 0}
-            title="Advance payment due"
-            description="Orders waiting on customer payment"
-            cta="View"
-            icon="💸"
-            hideIfZero
-          />
+        {summaryQ.isLoading && <p className="text-sm text-stone-500">Loading your overview…</p>}
+        {summaryQ.isError && <p role="alert" className="text-sm text-red-700">Could not load your overview. <button onClick={() => summaryQ.refetch()} className="underline">Try again</button></p>}
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+          {s && (s.pending_orders_count > 0 || s.awaiting_advance_count > 0) && (
+            <Link href={s.awaiting_advance_count > 0 ? '/dashboard/orders' : '/dashboard/orders?status=pending'} className="block group">
+              <Card className="p-4 group-hover:border-teal-600 transition-colors" hover={false}>
+                <div className="flex justify-between items-center gap-3"><h3 className="font-medium text-sm">Review orders</h3><span className="text-xs text-teal-700">Review →</span></div>
+                <p className="mt-2 text-sm text-stone-600">{s.pending_orders_count} awaiting confirmation · {s.awaiting_advance_count} payments to check</p>
+              </Card>
+            </Link>
+          )}
           <ActionCard
             href="/dashboard/products?stock=out"
             count={s?.out_of_stock_count}
@@ -83,7 +67,6 @@ export default function DashboardHomePage() {
             title="Out of stock"
             description="Products buyers can't order"
             cta="Restock"
-            icon="🚫"
             hideIfZero
           />
           <ActionCard
@@ -93,7 +76,6 @@ export default function DashboardHomePage() {
             title="Running low (≤ 5)"
             description="Reorder before they run out"
             cta="Review"
-            icon="⚠️"
             hideIfZero
           />
           <ActionCard
@@ -103,21 +85,10 @@ export default function DashboardHomePage() {
             title="New reviews to reply"
             description="Customers who left feedback"
             cta="Reply"
-            icon="⭐"
             hideIfZero
           />
-          {totalActions === 0 && s && (
-            <Card className="p-5 sm:col-span-2 lg:col-span-3 bg-emerald-50 border-emerald-200" hover={false}>
-              <div className="flex items-center gap-3">
-                <div className="text-2xl">🎉</div>
-                <div>
-                  <div className="font-semibold text-emerald-900">All caught up</div>
-                  <div className="text-sm text-emerald-700">
-                    No pending orders, low stock, or unanswered reviews. Great work!
-                  </div>
-                </div>
-              </div>
-            </Card>
+          {!hasTasks && s && (
+            <p className="text-sm text-stone-500 sm:col-span-2 py-3">No orders, stock issues, or reviews need your attention.</p>
           )}
         </div>
       </section>
@@ -125,11 +96,11 @@ export default function DashboardHomePage() {
       {/* Today's money */}
       <section className="mb-7">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-500 mb-3">
-          Money flow
+          Sales snapshot
         </h2>
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
           <MoneyCard
-            title="Today's earnings"
+            title="Today's sales"
             primary={s ? formatBDT(s.today_revenue_bdt, locale) : '—'}
             secondary={s ? `from ${s.today_orders} order${s.today_orders === 1 ? '' : 's'}` : ''}
             accent="text-stone-900"
@@ -152,7 +123,7 @@ export default function DashboardHomePage() {
         </div>
       </section>
 
-      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="space-y-5">
         {/* Recent orders */}
         <Card className="p-0 overflow-hidden" hover={false}>
           <div className="px-5 py-3.5 border-b border-stone-200 flex items-center">
@@ -167,6 +138,8 @@ export default function DashboardHomePage() {
                 </tr>
               </thead>
               <tbody>
+                {ordersQ.isLoading && <tr><td colSpan={5} className="px-4 py-6 text-stone-500">Loading orders…</td></tr>}
+                {ordersQ.isError && <tr><td colSpan={5} className="px-4 py-6 text-red-700">Could not load orders. <button onClick={() => ordersQ.refetch()} className="underline">Try again</button></td></tr>}
                 {(ordersQ.data ?? []).map((o) => (
                   <tr key={o.id} className="border-t border-stone-100">
                     <Td>
@@ -180,7 +153,7 @@ export default function DashboardHomePage() {
                     <Td className="text-stone-500">{formatDateTime(o.created_at, locale)}</Td>
                   </tr>
                 ))}
-                {!ordersQ.isLoading && (ordersQ.data?.length ?? 0) === 0 && (
+                {!ordersQ.isLoading && !ordersQ.isError && (ordersQ.data?.length ?? 0) === 0 && (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
                       No orders yet. Once customers check out, they&rsquo;ll show up here.
@@ -192,55 +165,7 @@ export default function DashboardHomePage() {
           </div>
         </Card>
 
-        <div className="flex flex-col gap-4">
-          {/* Low-stock list */}
-          {s && s.low_stock_products.length > 0 && (
-            <Card className="p-5" hover={false}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Reorder these soon</h3>
-                <Link href="/dashboard/products" className="text-xs text-teal-600 font-medium">All →</Link>
-              </div>
-              <div className="flex flex-col gap-1">
-                {s.low_stock_products.map((p) => (
-                  <Link
-                    key={p.id}
-                    href={`/dashboard/products/${p.id}`}
-                    className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded-md hover:bg-stone-50"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-stone-900 truncate">{p.name}</div>
-                      <div className="text-[11px] text-stone-500">{formatBDT(p.price_bdt, locale)}</div>
-                    </div>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                      p.stock === 0
-                        ? 'bg-red-50 text-red-700'
-                        : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {p.stock === 0 ? 'Out' : `${p.stock} left`}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </Card>
-          )}
 
-          {/* Facebook setup nudge */}
-          {shop && (
-            <Card className="p-5 bg-gradient-to-b from-teal-50 to-white" hover={false}>
-              <div className="flex items-center gap-2 text-teal-700 mb-2">
-                <IcFacebook size={18} />
-                <span className="text-xs font-medium uppercase tracking-wider">Tip</span>
-              </div>
-              <h3 className="text-base font-semibold mb-1.5">Connect your Facebook page</h3>
-              <p className="text-sm text-stone-600 mb-3 leading-relaxed">
-                Turn your page&rsquo;s &ldquo;Shop Now&rdquo; button into a link to your AmaarShop.
-              </p>
-              <Link href="/dashboard/facebook">
-                <Button variant="primary" size="sm">Start guide →</Button>
-              </Link>
-            </Card>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -252,7 +177,6 @@ function ActionCard({
   title,
   description,
   cta,
-  icon,
   urgent = false,
   warn = false,
   hideIfZero = false,
@@ -262,22 +186,15 @@ function ActionCard({
   title: string;
   description: string;
   cta: string;
-  icon: string;
   urgent?: boolean;
   warn?: boolean;
   hideIfZero?: boolean;
 }) {
   if (hideIfZero && (count ?? 0) === 0) return null;
-  const ring = urgent
-    ? 'border-l-4 border-l-red-500'
-    : warn
-      ? 'border-l-4 border-l-amber-500'
-      : 'border-l-4 border-l-stone-200';
   return (
     <Link href={href} className="block group">
-      <Card className={`p-4 group-hover:shadow-sm transition-shadow ${ring}`} hover={false}>
+      <Card className="p-4 group-hover:border-teal-600 transition-colors" hover={false}>
         <div className="flex items-start gap-3">
-          <div className="text-2xl leading-none mt-0.5">{icon}</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl font-bold ${urgent ? 'text-red-700' : warn ? 'text-amber-700' : 'text-stone-900'}`}>

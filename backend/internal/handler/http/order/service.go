@@ -10,6 +10,7 @@ import (
 
 // Service is the interface the order handler depends on.
 type Service interface {
+	Quote(context.Context, string, service.PlaceOrderInput) (*domain.Order, error)
 	// PlaceOrder places an order for a shop identified by slug.
 	PlaceOrder(ctx context.Context, slug string, in service.PlaceOrderInput) (*domain.Order, error)
 

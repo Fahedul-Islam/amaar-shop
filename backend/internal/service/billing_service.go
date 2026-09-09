@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -47,11 +48,11 @@ func (s *BillingService) MyBillingSnapshot(ctx context.Context, ownerUserID stri
 	if err != nil {
 		return nil, err
 	}
-	rule, err := s.rules.Get(ctx)
+	rule, err := s.rules.ForShop(ctx, shop.ID)
 	if err != nil {
 		return nil, err
 	}
-	unbilledCount, unbilledGMV, err := s.unbilled.UnbilledForShop(ctx, shop.ID)
+	balance, err := s.rules.Balance(ctx, shop.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +70,11 @@ func (s *BillingService) MyBillingSnapshot(ctx context.Context, ownerUserID stri
 	}
 
 	snap := &domain.ShopBillingSnapshot{
-		Rule:                 *rule,
-		UnbilledOrders:       unbilledCount,
-		UnbilledGMVBDT:       unbilledGMV,
-		OutstandingFeeBDT:    rule.Apply(unbilledGMV, unbilledCount),
+		Rule:              *rule,
+		UnbilledOrders:    balance.Orders,
+		UnbilledGMVBDT:    balance.GMV,
+		OutstandingFeeBDT: balance.Due,
+		ChargedBDT:        balance.Charged, PaidBDT: balance.Paid, CreditBDT: balance.Credit, Items: balance.Items,
 		HasPendingSubmission: hasPending,
 		RecentSubmissions:    recent,
 	}
@@ -83,15 +85,15 @@ func (s *BillingService) MyBillingSnapshot(ctx context.Context, ownerUserID stri
 	switch {
 	case owed < 0.005:
 		snap.Status = domain.FeeStatusPaidUp
-	case lastPay != nil && now.Sub(lastPay.CoversUntil) > cycle:
+	case lastPay != nil && now.Sub(lastPay.CreatedAt) > cycle:
 		snap.Status = domain.FeeStatusOverdue
 	default:
 		snap.Status = domain.FeeStatusDue
 	}
 	if lastPay != nil {
-		ts := lastPay.CoversUntil.Format(time.RFC3339)
+		ts := lastPay.CreatedAt.Format(time.RFC3339)
 		snap.LastPaidAt = &ts
-		days := int(now.Sub(lastPay.CoversUntil).Hours() / 24)
+		days := int(now.Sub(lastPay.CreatedAt).Hours() / 24)
 		snap.DaysSinceLastPaid = &days
 	}
 	return snap, nil
@@ -114,7 +116,7 @@ func (s *BillingService) SubmitPayment(ctx context.Context, ownerUserID string, 
 		return nil, domain.ErrTransactionIDRequired
 	}
 	amt, err := strconv.ParseFloat(in.AmountBDT, 64)
-	if err != nil || amt <= 0 {
+	if err != nil || amt < 0.01 || math.IsNaN(amt) || math.IsInf(amt, 0) || amt > 9999999999.99 {
 		return nil, domain.ErrInvalidPaymentAmount
 	}
 
@@ -128,7 +130,7 @@ func (s *BillingService) SubmitPayment(ctx context.Context, ownerUserID string, 
 
 	sub := &domain.FeeSubmission{
 		ShopID:        shop.ID,
-		AmountBDT:     in.AmountBDT,
+		AmountBDT:     strconv.FormatFloat(amt, 'f', 2, 64),
 		PaymentMethod: domain.PaymentMethod(in.PaymentMethod),
 		TransactionID: strings.TrimSpace(in.TransactionID),
 		SenderAccount: strings.TrimSpace(in.SenderAccount),
@@ -181,39 +183,10 @@ func (s *BillingService) FindSubmission(ctx context.Context, id string) (*domain
 // CoversUntil defaults to "now" so the payment immediately settles all
 // currently-unbilled orders.
 func (s *BillingService) ApproveSubmission(ctx context.Context, in domain.ReviewFeeSubmissionInput) (*domain.AdminFeeSubmissionRow, error) {
-	row, err := s.subs.FindByID(ctx, in.SubmissionID)
-	if err != nil {
-		return nil, err
-	}
-	if row.Status != domain.FeeSubmissionStatusPending {
-		return nil, domain.ErrSubmissionAlreadyReviewed
-	}
-
-	covers := in.CoversUntil
-	if covers.IsZero() {
-		covers = time.Now()
-	}
-
-	// Create the fee_payment row first — without it the seller's outstanding
-	// balance won't drop, even though the submission is "approved".
-	var recordedBy *string
-	if in.AdminUserID != "" {
-		recordedBy = &in.AdminUserID
-	}
-	payment := &domain.ShopFeePayment{
-		ShopID:      row.ShopID,
-		AmountBDT:   row.AmountBDT,
-		CoversUntil: covers,
-		RecordedBy:  recordedBy,
-		Note:        "Approved fee submission " + row.ID,
-	}
-	if err := s.feePays.RecordPayment(ctx, payment); err != nil {
+	if err := s.subs.Approve(ctx, in.SubmissionID, in.AdminFeedback, in.AdminUserID); err != nil {
 		return nil, err
 	}
 
-	if err := s.subs.MarkApproved(ctx, in.SubmissionID, payment.ID, in.AdminFeedback, in.AdminUserID); err != nil {
-		return nil, err
-	}
 	return s.subs.FindByID(ctx, in.SubmissionID)
 }
 

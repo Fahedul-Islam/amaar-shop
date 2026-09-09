@@ -1,6 +1,7 @@
 package dto
 
 type PlaceOrderRequest struct {
+	CouponCode       string             `json:"coupon_code"`
 	CustomerName     string             `json:"customer_name"`
 	CustomerPhone    string             `json:"customer_phone"`
 	DeliveryAddress  string             `json:"delivery_address"`
@@ -35,6 +36,9 @@ type OrderItemDTO struct {
 }
 
 type OrderDTO struct {
+	CouponID                  *string        `json:"-"`
+	CouponCode                string         `json:"coupon_code"`
+	CouponDiscountBDT         string         `json:"coupon_discount_bdt"`
 	ID                        string         `json:"id"`
 	ShopID                    string         `json:"shop_id"`
 	CustomerName              string         `json:"customer_name"`

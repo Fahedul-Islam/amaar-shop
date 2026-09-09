@@ -1153,3 +1153,47 @@ func TestLegacyDeliveryArea(t *testing.T) {
 		})
 	}
 }
+
+func TestPlaceOrder_AdvanceDeliveryExceptions(t *testing.T) {
+	for _, tc := range []struct {
+		name                string
+		exempt, free, mixed bool
+		wantProof           bool
+	}{
+		{"ordinary product", false, false, false, true},
+		{"exempt product", true, false, false, false},
+		{"free delivery", false, true, false, false},
+		{"mixed cart", true, false, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newOrderTestDeps(t)
+			shop := seedShopWithDelivery(t, d.shops, d.delivery, "user-1", "my-shop")
+			seedAdvancePayment(t, d, shop.ID)
+			p := seedProduct(t, d.products, shop.ID, "Item", "100.00", 10)
+			p.AdvanceDeliveryExempt = tc.exempt
+			if tc.free {
+				d.delivery.settings[shop.ID].DeliveryCharge = "0.00"
+			}
+			in := PlaceOrderInput{CustomerName: "Buyer", CustomerPhone: "01712345678", DeliveryAddress: "123 Street", Items: []OrderItemInput{{ProductID: p.ID, Quantity: 1}}}
+			if tc.mixed {
+				other := seedProduct(t, d.products, shop.ID, "Other", "100.00", 10)
+				in.Items = append(in.Items, OrderItemInput{ProductID: other.ID, Quantity: 1})
+			}
+			quote, err := d.svc.Quote(context.Background(), "my-shop", in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if quote.AdvancePaymentRequired != tc.wantProof {
+				t.Fatal("incorrect quote payment rule")
+			}
+			order, err := d.svc.PlaceOrder(context.Background(), "my-shop", in)
+			if tc.wantProof {
+				if err != domain.ErrAdvancePaymentRequired {
+					t.Fatal("proof was not enforced", err)
+				}
+			} else if err != nil || order.AdvancePaymentRequired || order.AdvancePaymentMethodID != nil {
+				t.Fatal("exempt checkout must succeed without proof", err)
+			}
+		})
+	}
+}

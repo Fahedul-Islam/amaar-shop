@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -36,15 +37,8 @@ func (s *PlatformFeeService) FeeRule(ctx context.Context) (*domain.FeeRule, erro
 // UpdateFeeRule writes a new rule. Validates type + value before persisting.
 // Percentage values are clamped to [0, 100] for sanity.
 func (s *PlatformFeeService) UpdateFeeRule(ctx context.Context, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error) {
-	if !domain.IsValidFeeRuleType(in.RuleType) {
-		return nil, domain.ErrFeeRuleInvalidType
-	}
-	v, err := strconv.ParseFloat(in.Value, 64)
-	if err != nil || v < 0 {
-		return nil, domain.ErrFeeRuleInvalidValue
-	}
-	if domain.FeeRuleType(in.RuleType) == domain.FeeRuleTypePercentage && v > 100 {
-		return nil, domain.ErrFeeRulePercentTooBig
+	if err := validateFeeRule(in); err != nil {
+		return nil, err
 	}
 	return s.rules.Update(ctx, in)
 }
@@ -59,7 +53,7 @@ func (s *PlatformFeeService) UpdateFeeRule(ctx context.Context, in domain.Update
 // orders as paid.
 func (s *PlatformFeeService) RecordFeePayment(ctx context.Context, in domain.RecordFeePaymentInput) (*domain.ShopFeePayment, error) {
 	amount, err := strconv.ParseFloat(in.AmountBDT, 64)
-	if err != nil || amount <= 0 {
+	if err != nil || amount < 0.01 || math.IsNaN(amount) || math.IsInf(amount, 0) || amount > 9999999999.99 {
 		return nil, domain.ErrInvalidPaymentAmount
 	}
 	if in.CoversUntil.IsZero() {
@@ -93,4 +87,43 @@ func (s *PlatformFeeService) RecordFeePayment(ctx context.Context, in domain.Rec
 // FeePaymentHistory returns the most recent payments for a shop.
 func (s *PlatformFeeService) FeePaymentHistory(ctx context.Context, shopID string, limit int) ([]domain.ShopFeePayment, error) {
 	return s.fees.History(ctx, shopID, limit)
+}
+
+func validateFeeRule(in domain.UpdateFeeRuleInput) error {
+	if !domain.IsValidFeeRuleType(in.RuleType) {
+		return domain.ErrFeeRuleInvalidType
+	}
+	v, err := strconv.ParseFloat(in.Value, 64)
+	if err != nil || v < 0 || math.IsNaN(v) || math.IsInf(v, 0) || v > 99999999.9999 {
+		return domain.ErrFeeRuleInvalidValue
+	}
+	if domain.FeeRuleType(in.RuleType) == domain.FeeRuleTypePercentage && v > 100 {
+		return domain.ErrFeeRulePercentTooBig
+	}
+	return nil
+}
+
+func (s *PlatformFeeService) ShopFeeRule(ctx context.Context, shopID string) (*domain.FeeRule, error) {
+	if _, err := s.shops.ShopByID(ctx, shopID); err != nil {
+		return nil, err
+	}
+	return s.rules.ForShop(ctx, shopID)
+}
+func (s *PlatformFeeService) UpdateShopFeeRule(ctx context.Context, shopID string, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error) {
+	if err := validateFeeRule(in); err != nil {
+		return nil, err
+	}
+	if _, err := s.shops.ShopByID(ctx, shopID); err != nil {
+		return nil, err
+	}
+	return s.rules.SetShop(ctx, shopID, in)
+}
+func (s *PlatformFeeService) ResetShopFeeRule(ctx context.Context, shopID string) (*domain.FeeRule, error) {
+	if _, err := s.shops.ShopByID(ctx, shopID); err != nil {
+		return nil, err
+	}
+	if err := s.rules.ResetShop(ctx, shopID); err != nil {
+		return nil, err
+	}
+	return s.rules.Get(ctx)
 }

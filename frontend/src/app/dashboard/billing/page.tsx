@@ -5,7 +5,7 @@ import {
   PAYMENT_METHOD_OPTIONS, PAYMENT_METHOD_LABEL, humanLabelFeeRule,
   type ShopBillingSnapshot, type FeeStatus, type FeeSubmissionStatus, type PaymentMethod,
 } from '@/lib/billingApi';
-import { formatBDT, formatNumber, formatDate, formatDateTime } from '@/lib/format';
+import { formatBDT, formatDate, formatDateTime } from '@/lib/format';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -53,7 +53,7 @@ export default function SellerBillingPage() {
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7 max-w-[1100px]">
-      <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Billing</h1>
+      <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Platform fees</h1>
       <p className="text-stone-500 mt-1 mb-5">
         Track what you owe AmaarShop and submit your payment.
       </p>
@@ -64,9 +64,9 @@ export default function SellerBillingPage() {
         </div>
       )}
 
-      {loading || !snap ? (
+      {loading ? (
         <Card className="p-8 text-center text-stone-500" hover={false}>Loading…</Card>
-      ) : (
+      ) : snap ? (
         <>
           {/* Headline status */}
           <Card className="p-5 mb-4" hover={false}>
@@ -83,8 +83,8 @@ export default function SellerBillingPage() {
                   {formatBDT(snap.outstanding_fee_bdt)}
                 </div>
                 <div className="text-sm text-stone-500 mt-1">
-                  Across <strong>{formatNumber(snap.unbilled_orders)}</strong> unbilled orders ·{' '}
-                  total sales {formatBDT(snap.unbilled_gmv_bdt)}
+                  Fees charged {formatBDT(snap.charged_bdt)} − confirmed payments {formatBDT(snap.paid_bdt)}
+                  {Number(snap.credit_bdt) > 0 && <p className="text-teal-700 mt-1">Credit toward future fees: {formatBDT(snap.credit_bdt)}</p>}
                 </div>
               </div>
               <span
@@ -98,7 +98,7 @@ export default function SellerBillingPage() {
 
             <div className="mt-4 pt-4 border-t border-stone-100 grid sm:grid-cols-3 gap-3 text-sm">
               <div>
-                <div className="text-stone-500 text-xs">Current fee rule</div>
+                <div className="text-stone-500 text-xs">Your fee rule for new orders</div>
                 <div className="font-semibold mt-0.5">{humanLabelFeeRule(snap.rule)}</div>
               </div>
               <div>
@@ -130,8 +130,8 @@ export default function SellerBillingPage() {
             <strong>How payment works:</strong> AmaarShop is cash-on-delivery first.
             You collect cash directly from buyers. The platform fee shown above is what
             you owe AmaarShop. Send it via bKash, Nagad, Rocket, or bank transfer to
-            our company account, then submit the transaction details below — admin will
-            confirm receipt and your balance updates.
+            the account provided by the platform admin, then submit the transaction details below — admin will
+            confirm receipt. Only the amount approved is deducted. Partial payments are welcome.
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
@@ -143,7 +143,7 @@ export default function SellerBillingPage() {
             <SubmissionsHistory submissions={snap.recent_submissions} />
           </div>
         </>
-      )}
+      ) : <Button onClick={refresh}>Try again</Button>}
     </div>
   );
 }
@@ -205,24 +205,11 @@ function SubmitForm({
     );
   }
 
-  const owed = parseFloat(snap.outstanding_fee_bdt);
-  if (!isFinite(owed) || owed < 0.005) {
-    return (
-      <Card className="p-5" hover={false}>
-        <h3 className="text-base font-semibold">Nothing to pay right now</h3>
-        <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-          You&apos;re all caught up. As you take new orders, your balance will accumulate
-          here for the next billing cycle.
-        </p>
-      </Card>
-    );
-  }
-
   return (
     <Card className="p-5" hover={false}>
       <h3 className="text-base font-semibold">Submit your payment</h3>
       <p className="text-sm text-stone-500 mt-1 mb-4">
-        After sending the fee, fill in the transaction details below.
+        After sending the fee, enter the amount you actually paid — it can be less than your due. A ৳150 payment against ৳300 due leaves ৳150 after approval.
       </p>
       <form onSubmit={submit} className="grid gap-3.5">
         <Input
@@ -230,15 +217,16 @@ function SubmitForm({
           type="number"
           inputMode="decimal"
           step="0.01"
-          min="0"
+          min="0.01"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0.00"
           required
         />
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Payment method</label>
+          <label htmlFor="fee-method" className="block text-sm font-medium text-stone-700 mb-1">Payment method</label>
           <select
+            id="fee-method"
             value={method}
             onChange={(e) => setMethod(e.target.value as PaymentMethod)}
             required
@@ -263,8 +251,9 @@ function SubmitForm({
           placeholder="01XXXXXXXXX"
         />
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1.5">Note (optional)</label>
+          <label htmlFor="fee-note" className="block text-sm font-medium text-stone-700 mb-1.5">Note (optional)</label>
           <textarea
+            id="fee-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}

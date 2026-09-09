@@ -7,19 +7,22 @@ import (
 
 // Order represents a customer order placed on a shop's storefront.
 type Order struct {
-	ID                string `json:"id"`
-	ShopID            string `json:"shop_id"`
-	CustomerName      string `json:"customer_name"`
-	CustomerPhone     string `json:"customer_phone"`
-	DeliveryAddress   string `json:"delivery_address"`
-	DeliveryDivision  string `json:"delivery_division"`
-	DeliveryDistrict  string `json:"delivery_district"`
-	DeliveryArea      string `json:"delivery_area"`
-	Note              string `json:"note"`
-	SubtotalBDT       string `json:"subtotal_bdt"`
-	DeliveryChargeBDT string `json:"delivery_charge_bdt"`
-	TotalBDT          string `json:"total_bdt"`
-	Status            string `json:"status"`
+	CouponID          *string `json:"-"`
+	CouponCode        string  `json:"coupon_code"`
+	CouponDiscountBDT string  `json:"coupon_discount_bdt"`
+	ID                string  `json:"id"`
+	ShopID            string  `json:"shop_id"`
+	CustomerName      string  `json:"customer_name"`
+	CustomerPhone     string  `json:"customer_phone"`
+	DeliveryAddress   string  `json:"delivery_address"`
+	DeliveryDivision  string  `json:"delivery_division"`
+	DeliveryDistrict  string  `json:"delivery_district"`
+	DeliveryArea      string  `json:"delivery_area"`
+	Note              string  `json:"note"`
+	SubtotalBDT       string  `json:"subtotal_bdt"`
+	DeliveryChargeBDT string  `json:"delivery_charge_bdt"`
+	TotalBDT          string  `json:"total_bdt"`
+	Status            string  `json:"status"`
 	// Shipment record. Populated when the seller hands the parcel to a courier
 	// (manually in Phase 1, or via a courier API later). Empty until shipped.
 	CourierName            string `json:"courier_name,omitempty"`

@@ -38,6 +38,7 @@ type CreateProductRequest struct {
 	DiscountType          *string `json:"discount_type"`
 	DiscountValue         *string `json:"discount_value"`
 	DeliveryChargeDhaka   *string `json:"delivery_charge_dhaka"`
+	AdvanceDeliveryExempt bool    `json:"advance_delivery_exempt"`
 	DeliveryChargeOutside *string `json:"delivery_charge_outside"`
 }
 
@@ -83,6 +84,7 @@ type ProductDTO struct {
 	DiscountType          *string           `json:"discount_type"`
 	DiscountValue         *string           `json:"discount_value"`
 	DeliveryChargeDhaka   *string           `json:"delivery_charge_dhaka"`
+	AdvanceDeliveryExempt bool              `json:"advance_delivery_exempt"`
 	DeliveryChargeOutside *string           `json:"delivery_charge_outside"`
 	Images                []ProductImageDTO `json:"images"`
 	CreatedAt             time.Time         `json:"created_at"`
@@ -99,6 +101,7 @@ type PublicProductDTO struct {
 	DiscountType          *string           `json:"discount_type"`
 	DiscountValue         *string           `json:"discount_value"`
 	DeliveryChargeDhaka   *string           `json:"delivery_charge_dhaka"`
+	AdvanceDeliveryExempt bool              `json:"advance_delivery_exempt"`
 	DeliveryChargeOutside *string           `json:"delivery_charge_outside"`
 	Images                []ProductImageDTO `json:"images"`
 }

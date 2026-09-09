@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fhedul/amaarshop/backend/internal/domain"
 	"github.com/fhedul/amaarshop/backend/internal/repository"
@@ -28,7 +30,7 @@ const orderColumns = `o.id, o.shop_id, o.customer_name, o.customer_phone, o.deli
 	o.advance_payment_received,
 	o.advance_payment_method_id, COALESCE(o.advance_payment_txn_ref,''), COALESCE(o.advance_payment_receipt,''),
 	o.advance_payment_submitted_at,
-	o.cancelled_reason, o.created_at, o.updated_at`
+	o.cancelled_reason, o.created_at, o.updated_at, o.coupon_id, o.coupon_code, o.coupon_discount_bdt`
 
 // scanOrder scans a row into a domain.Order matching orderColumns.
 func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
@@ -43,7 +45,7 @@ func scanOrder(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
 		&o.AdvancePaymentReceived,
 		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
 		&submittedAt,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt, &o.CouponID, &o.CouponCode, &o.CouponDiscountBDT,
 	)
 	if methodID.Valid {
 		s := methodID.String
@@ -86,7 +88,7 @@ const orderReturning = `orders.id, orders.shop_id, orders.customer_name, orders.
 	orders.advance_payment_required, orders.advance_payment_received,
 	orders.advance_payment_method_id, COALESCE(orders.advance_payment_txn_ref,''), COALESCE(orders.advance_payment_receipt,''),
 	orders.advance_payment_submitted_at,
-	orders.cancelled_reason, orders.created_at, orders.updated_at`
+	orders.cancelled_reason, orders.created_at, orders.updated_at, orders.coupon_id, orders.coupon_code, orders.coupon_discount_bdt`
 
 // scanOrderUpdate scans an UPDATE..RETURNING row matching orderReturning.
 func scanOrderUpdate(scanner interface{ Scan(...any) error }) (*domain.Order, error) {
@@ -101,7 +103,7 @@ func scanOrderUpdate(scanner interface{ Scan(...any) error }) (*domain.Order, er
 		&o.AdvancePaymentRequired, &o.AdvancePaymentReceived,
 		&methodID, &o.AdvancePaymentTxnRef, &o.AdvancePaymentReceipt,
 		&submittedAt,
-		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt,
+		&o.CancelledReason, &o.CreatedAt, &o.UpdatedAt, &o.CouponID, &o.CouponCode, &o.CouponDiscountBDT,
 	)
 	if methodID.Valid {
 		s := methodID.String
@@ -118,12 +120,37 @@ func scanOrderUpdate(scanner interface{ Scan(...any) error }) (*domain.Order, er
 // atomically in a single transaction. If any product lacks sufficient stock
 // the whole transaction rolls back.
 func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
+	if order.CouponDiscountBDT == "" {
+		order.CouponDiscountBDT = "0.00"
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
+	// Lock the coupon in the same transaction as stock and order insertion.
+	// Failed checkout rolls back redemption; concurrent attempts cannot reuse it.
+	if order.CouponID != nil {
+		c, err := scanCoupon(tx.QueryRowContext(ctx, `SELECT `+couponColumns+` FROM coupons WHERE id=$1 AND shop_id=$2 FOR UPDATE`, *order.CouponID, order.ShopID))
+		if err != nil {
+			return err
+		}
+		subtotal, err := strconv.ParseFloat(order.SubtotalBDT, 64)
+		if err != nil {
+			return err
+		}
+		discount, err := c.Discount(subtotal, order.CustomerPhone, time.Now())
+		if err != nil {
+			return err
+		}
+		if c.Code != order.CouponCode || fmt.Sprintf("%.2f", discount) != order.CouponDiscountBDT {
+			return domain.ErrCouponInvalid
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE coupons SET redeemed_at=now() WHERE id=$1`, c.ID); err != nil {
+			return err
+		}
+	}
 	// Insert order header. When advance-payment proof is included on the
 	// initial submission, persist it atomically so we never have a window
 	// where the order exists without proof.
@@ -140,16 +167,16 @@ func (r *orderRepo) PlaceOrder(ctx context.Context, order *domain.Order) error {
 		    delivery_division, delivery_district, delivery_area,
 		    note, subtotal_bdt, delivery_charge_bdt, total_bdt, advance_payment_required,
 		    advance_payment_method_id, advance_payment_txn_ref, advance_payment_receipt,
-		    advance_payment_submitted_at)
+		    advance_payment_submitted_at, coupon_id, coupon_code, coupon_discount_bdt)
 		 VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),$9::numeric,$10::numeric,$11::numeric,$12,
 		         $13::uuid, NULLIF($14,''), NULLIF($15,''),
-		         CASE WHEN NULLIF($14,'') IS NOT NULL OR $13::uuid IS NOT NULL THEN now() ELSE NULL END)
+		         CASE WHEN NULLIF($14,'') IS NOT NULL OR $13::uuid IS NOT NULL THEN now() ELSE NULL END, $16::uuid, $17, $18::numeric)
 		 RETURNING id, status, advance_payment_received, created_at, updated_at`,
 		order.ShopID, order.CustomerName, order.CustomerPhone, order.DeliveryAddress,
 		order.DeliveryDivision, order.DeliveryDistrict, order.DeliveryArea,
 		order.Note, order.SubtotalBDT, order.DeliveryChargeBDT,
 		order.TotalBDT, order.AdvancePaymentRequired,
-		methodID, order.AdvancePaymentTxnRef, order.AdvancePaymentReceipt,
+		methodID, order.AdvancePaymentTxnRef, order.AdvancePaymentReceipt, order.CouponID, order.CouponCode, order.CouponDiscountBDT,
 	).Scan(&order.ID, &order.Status, &order.AdvancePaymentReceived, &order.CreatedAt, &order.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)

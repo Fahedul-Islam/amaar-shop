@@ -20,6 +20,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/billing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/coupon"
 	courierhandler "github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
@@ -109,6 +110,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	categorySvc := service.NewCategoryService(shopRepo, categoryRepo)
 	productSvc := service.NewProductService(shopRepo, categoryRepo, productRepo, deliveryRepo, fileStore)
 	orderSvc := service.NewOrderService(shopRepo, deliveryRepo, productRepo, orderRepo, paymentMethodRepo, cartReservationRepo)
+	couponRepo := postgres.NewCouponRepo(db)
+	orderSvc.SetCoupons(couponRepo)
+	couponSvc := service.NewCouponService(shopRepo, couponRepo)
 	steadfastClient := courier.NewSteadfast(nil, cfg.SteadfastBaseURL)
 	courierSvc := service.NewCourierService(shopRepo, orderRepo, courierSettingsRepo, steadfastClient)
 	paymentMethodSvc := service.NewPaymentMethodService(shopRepo, deliveryRepo, paymentMethodRepo)
@@ -214,6 +218,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		ShopHandler:          shopHandler,
 		CategoryHandler:      categoryHandler,
 		ProductHandler:       productHandler,
+		CouponHandler:        coupon.NewHandler(couponSvc, cfg.JWTSecret),
 		OrderHandler:         orderHandler,
 		CourierHandler:       courierHandler,
 		PaymentMethodHandler: paymentMethodHandler,

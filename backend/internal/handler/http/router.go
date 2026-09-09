@@ -15,6 +15,7 @@ import (
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/auth"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/billing"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/category"
+	"github.com/fhedul/amaarshop/backend/internal/handler/http/coupon"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/courier"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/customer"
 	"github.com/fhedul/amaarshop/backend/internal/handler/http/invoice"
@@ -34,6 +35,7 @@ import (
 
 // RouterDeps holds everything the router needs to register all routes.
 type RouterDeps struct {
+	CouponHandler        *coupon.Handler
 	DB                   *sql.DB
 	UploadDir            string
 	AuthHandler          *auth.Handler
@@ -71,6 +73,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	deps.ShopHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.CategoryHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.ProductHandler.RegisterRoutes(mux, deps.Middleware)
+	deps.CouponHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.OrderHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.CourierHandler.RegisterRoutes(mux, deps.Middleware)
 	deps.PaymentMethodHandler.RegisterRoutes(mux, deps.Middleware)

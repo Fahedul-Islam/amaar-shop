@@ -31,15 +31,13 @@ export default function FacebookConnectPage() {
         <h3 className="text-base font-semibold mb-1.5">{title}</h3>
         <p className="text-sm text-stone-600 leading-relaxed">{desc}</p>
       </div>
-      <div className="w-[180px] aspect-[16/10] bg-stone-100 rounded-md hidden md:grid place-items-center text-stone-400 text-xs">
-        <IcFacebook size={32} />
-      </div>
+
     </Card>
   );
 
   return (
     <div className="px-6 md:px-8 py-6 md:py-7 max-w-4xl">
-      <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Connect your Facebook page</h1>
+      <h1 className="text-2xl md:text-[26px] font-bold tracking-tight">Share your shop on Facebook</h1>
       <p className="text-stone-500 mt-1 mb-6">
         Turn your page&rsquo;s <strong className="text-stone-700 font-medium">Shop Now</strong> button into a link to your AmaarShop.
       </p>

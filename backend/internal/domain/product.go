@@ -26,6 +26,7 @@ type Product struct {
 	DiscountType          *string        `json:"discount_type"`
 	DiscountValue         *string        `json:"discount_value"`
 	DeliveryChargeDhaka   *string        `json:"delivery_charge_dhaka"`
+	AdvanceDeliveryExempt bool           `json:"advance_delivery_exempt"`
 	DeliveryChargeOutside *string        `json:"delivery_charge_outside"`
 	Images                []ProductImage `json:"images"`
 	CreatedAt             time.Time      `json:"created_at"`

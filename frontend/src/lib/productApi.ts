@@ -30,6 +30,7 @@ export interface Product {
   discount_type: string | null;
   discount_value: string | null;
   delivery_charge_dhaka: string | null;
+  advance_delivery_exempt: boolean;
   delivery_charge_outside: string | null;
   images: ProductImage[];
   created_at: string;
@@ -94,6 +95,7 @@ export interface CreateProductInput {
   discount_type?: string | null;
   discount_value?: string | null;
   delivery_charge_dhaka?: string | null;
+  advance_delivery_exempt?: boolean;
   delivery_charge_outside?: string | null;
 }
 

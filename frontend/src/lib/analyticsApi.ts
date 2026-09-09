@@ -166,3 +166,13 @@ export async function trackProductView(shopSlug: string, productId: string): Pro
     // ignore — best-effort beacon
   }
 }
+
+export interface SalesReport {
+  total_orders: number;
+  status_counts: Record<string, number>;
+  status_values: Record<string, string>;
+  daily: DayStat[];
+  products: TopProduct[];
+}
+export const getSalesReport = (from: string, to: string) =>
+  apiFetch<SalesReport>(`/api/shops/me/stats/report?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

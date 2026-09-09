@@ -198,6 +198,7 @@ function StorefrontOrderLookup() {
               ))}
             </div>
             <div className="border-t border-stone-200 pt-3 text-sm grid gap-1">
+              {Number(order.coupon_discount_bdt) > 0 && <div className="flex justify-between text-teal-700"><span>{locale === 'bn' ? 'কুপন ছাড়' : 'Coupon discount'}</span><span>−{formatBDT(order.coupon_discount_bdt, locale)}</span></div>}
               <div className="flex justify-between text-stone-500">
                 <span>{locale === "bn" ? "উপমোট" : "Subtotal"}</span>
                 <span>{formatBDT(order.subtotal_bdt, locale)}</span>

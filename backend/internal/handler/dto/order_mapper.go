@@ -38,6 +38,8 @@ func ToOrderDTO(o *domain.Order) OrderDTO {
 		SubtotalBDT:            o.SubtotalBDT,
 		DeliveryChargeBDT:      o.DeliveryChargeBDT,
 		TotalBDT:               o.TotalBDT,
+		CouponCode:             o.CouponCode,
+		CouponDiscountBDT:      o.CouponDiscountBDT,
 		Status:                 o.Status,
 		CourierName:            o.CourierName,
 		TrackingID:             o.TrackingID,

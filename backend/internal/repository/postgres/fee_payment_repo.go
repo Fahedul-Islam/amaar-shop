@@ -60,7 +60,7 @@ func (r *feePaymentRepo) LastPaymentForShop(ctx context.Context, shopID string) 
 		SELECT id, shop_id, amount_bdt::text, covers_until, recorded_by, note, created_at
 		FROM shop_fee_payments
 		WHERE shop_id = $1
-		ORDER BY covers_until DESC
+		ORDER BY created_at DESC
 		LIMIT 1`, shopID)
 	out, err := scanFeePayment(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -78,7 +78,7 @@ func (r *feePaymentRepo) LastPaymentsForAllShops(ctx context.Context) (map[strin
 		SELECT DISTINCT ON (shop_id)
 		       id, shop_id, amount_bdt::text, covers_until, recorded_by, note, created_at
 		FROM shop_fee_payments
-		ORDER BY shop_id, covers_until DESC`,
+		ORDER BY shop_id, created_at DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("last payments all shops: %w", err)
@@ -118,7 +118,7 @@ func (r *feePaymentRepo) History(ctx context.Context, shopID string, limit int) 
 		SELECT id, shop_id, amount_bdt::text, covers_until, recorded_by, note, created_at
 		FROM shop_fee_payments
 		WHERE shop_id = $1
-		ORDER BY covers_until DESC
+		ORDER BY created_at DESC
 		LIMIT $2`, shopID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("fee payment history: %w", err)

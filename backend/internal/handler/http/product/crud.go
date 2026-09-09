@@ -81,6 +81,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		DiscountValue:         req.DiscountValue,
 		DeliveryChargeDhaka:   req.DeliveryChargeDhaka,
 		DeliveryChargeOutside: req.DeliveryChargeOutside,
+		AdvanceDeliveryExempt: req.AdvanceDeliveryExempt,
 	}
 
 	p, err := h.svc.CreateProduct(r.Context(), userID, in)
@@ -120,6 +121,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := service.UpdateProductInput{}
+	if v, ok := raw["advance_delivery_exempt"]; ok {
+		var b *bool
+		if err := json.Unmarshal(v, &b); err != nil || b == nil {
+			httputil.WriteValidationError(w, "advance_delivery_exempt must be a boolean")
+			return
+		}
+		in.AdvanceDeliveryExempt = b
+	}
 
 	if v, ok := raw["name"]; ok {
 		var s string

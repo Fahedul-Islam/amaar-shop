@@ -493,7 +493,7 @@ export default function ProductDetailPage() {
                 )
               }
             />
-            {delivery?.advance_payment_required && (
+            {delivery?.advance_payment_required && !product.advance_delivery_exempt && (
               <InfoRow
                 icon={<IcInfo size={18} />}
                 iconClass="bg-amber-50 text-amber-700"
@@ -567,6 +567,7 @@ export default function ProductDetailPage() {
           )}
           {tab === "delivery" && (
             <DeliveryPanel
+              advanceExempt={product.advance_delivery_exempt}
               delivery={delivery}
               locale={locale === "bn" ? "bn" : "en"}
             />
@@ -768,9 +769,11 @@ function DescriptionPanel({
 }
 
 function DeliveryPanel({
+  advanceExempt,
   delivery,
   locale,
 }: {
+  advanceExempt: boolean;
   delivery: ReturnType<typeof useStorefront>["delivery"];
   locale: "en" | "bn";
 }) {
@@ -811,7 +814,7 @@ function DeliveryPanel({
         <DeliveryLi
           title={locale === "bn" ? "পেমেন্ট" : "Payment"}
           value={
-            delivery?.advance_payment_required
+            delivery?.advance_payment_required && !advanceExempt
               ? locale === "bn"
                 ? "অগ্রিম ডেলিভারি ফি + ক্যাশ অন ডেলিভারি"
                 : "Advance delivery fee + Cash on delivery"

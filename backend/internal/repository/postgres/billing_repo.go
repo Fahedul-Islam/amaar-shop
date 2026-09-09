@@ -136,7 +136,24 @@ func scanAdminSubmission(s interface{ Scan(...any) error }) (*domain.AdminFeeSub
 }
 
 func (r *feeSubmissionRepo) Create(ctx context.Context, sub *domain.FeeSubmission) error {
-	err := r.db.QueryRowContext(ctx, `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Serialize submissions per shop without altering existing historical claims.
+	var locked string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM shops WHERE id=$1 FOR UPDATE`, sub.ShopID).Scan(&locked); err != nil {
+		return err
+	}
+	var pending bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM shop_fee_submissions WHERE shop_id=$1 AND status='pending')`, sub.ShopID).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return domain.ErrPendingSubmissionExists
+	}
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO shop_fee_submissions
 		    (shop_id, amount_bdt, payment_method, transaction_id, sender_account, note)
 		VALUES ($1, $2::numeric, $3, $4, NULLIF($5,''), NULLIF($6,''))
@@ -147,7 +164,7 @@ func (r *feeSubmissionRepo) Create(ctx context.Context, sub *domain.FeeSubmissio
 	if err != nil {
 		return fmt.Errorf("create submission: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (r *feeSubmissionRepo) FindByID(ctx context.Context, id string) (*domain.AdminFeeSubmissionRow, error) {
@@ -337,4 +354,60 @@ func (r *feeSubmissionRepo) RecentForShop(ctx context.Context, shopID string, li
 		out = append(out, *sub)
 	}
 	return out, rows.Err()
+}
+
+func (r *feeRuleRepo) ForShop(ctx context.Context, shopID string) (*domain.FeeRule, error) {
+	rule := &domain.FeeRule{}
+	err := r.db.QueryRowContext(ctx, `SELECT rule_type,value::text,COALESCE(description,''),updated_at,updated_by FROM shop_fee_rules WHERE shop_id=$1`, shopID).Scan(&rule.RuleType, &rule.Value, &rule.Description, &rule.UpdatedAt, &rule.UpdatedBy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r.Get(ctx)
+	}
+	return rule, err
+}
+func (r *feeRuleRepo) SetShop(ctx context.Context, shopID string, in domain.UpdateFeeRuleInput) (*domain.FeeRule, error) {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO shop_fee_rules(shop_id,rule_type,value,description,updated_by) VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid) ON CONFLICT(shop_id) DO UPDATE SET rule_type=EXCLUDED.rule_type,value=EXCLUDED.value,description=EXCLUDED.description,updated_by=EXCLUDED.updated_by,updated_at=now()`, shopID, in.RuleType, in.Value, in.Description, in.UpdatedBy)
+	if err != nil {
+		return nil, err
+	}
+	return r.ForShop(ctx, shopID)
+}
+func (r *feeRuleRepo) ResetShop(ctx context.Context, shopID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM shop_fee_rules WHERE shop_id=$1`, shopID)
+	return err
+}
+func (r *feeRuleRepo) Balance(ctx context.Context, shopID string) (*domain.FeeBalance, error) {
+	b := &domain.FeeBalance{}
+	err := r.db.QueryRowContext(ctx, `SELECT orders,units,gmv::text,charged::text,paid::text,due::text,credit::text FROM shop_fee_balances WHERE shop_id=$1`, shopID).Scan(&b.Orders, &b.Items, &b.GMV, &b.Charged, &b.Paid, &b.Due, &b.Credit)
+	return b, err
+}
+
+// Approve locks the claim and records its exact amount in one transaction.
+// Concurrent approvals, retries, or rejection cannot create duplicate credits.
+func (r *feeSubmissionRepo) Approve(ctx context.Context, id, feedback, adminID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var status, shopID, amount string
+	err = tx.QueryRowContext(ctx, `SELECT status,shop_id,amount_bdt::text FROM shop_fee_submissions WHERE id=$1 FOR UPDATE`, id).Scan(&status, &shopID, &amount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ErrSubmissionNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status != "pending" {
+		return domain.ErrSubmissionAlreadyReviewed
+	}
+	var paymentID string
+	err = tx.QueryRowContext(ctx, `INSERT INTO shop_fee_payments(shop_id,amount_bdt,covers_until,recorded_by,note) VALUES($1,$2,now(),NULLIF($3,'')::uuid,$4) RETURNING id`, shopID, amount, adminID, "Approved fee submission "+id).Scan(&paymentID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE shop_fee_submissions SET status='approved',admin_feedback=NULLIF($2,''),reviewed_by=NULLIF($3,'')::uuid,reviewed_at=now(),fee_payment_id=$4 WHERE id=$1`, id, feedback, adminID, paymentID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }

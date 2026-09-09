@@ -201,7 +201,7 @@ export default function OrderDetailPage() {
     ? order.delivery_charge_bdt
     : "0.00";
   const balanceDue = order.advance_payment_required
-    ? order.subtotal_bdt
+    ? String(Number(order.subtotal_bdt) - Number(order.coupon_discount_bdt || 0))
     : order.total_bdt;
 
   return (
@@ -331,6 +331,7 @@ export default function OrderDetailPage() {
               ))}
 
               <div className="pt-3.5 text-sm">
+                {Number(order.coupon_discount_bdt) > 0 && <SummaryLine label={`Coupon (${order.coupon_code})`} value={`−${formatBDT(order.coupon_discount_bdt, locale)}`} />}
                 <SummaryLine
                   label="Subtotal"
                   value={formatBDT(order.subtotal_bdt, locale)}

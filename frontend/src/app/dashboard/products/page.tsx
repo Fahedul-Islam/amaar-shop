@@ -82,12 +82,7 @@ export default function ProductsPage() {
               Customers need a delivery charge to place an order. It only takes a minute.
             </div>
           </div>
-          <Link
-            href="/dashboard/settings/delivery"
-            className="self-center text-sm font-semibold text-teal-700 hover:text-teal-800 whitespace-nowrap"
-          >
-            Set up delivery →
-          </Link>
+
         </div>
       )}
 

@@ -183,14 +183,14 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 	// against products.name when Postgres resolves GROUP BY identifiers.
 	catRows, err := r.db.QueryContext(ctx, `
 		SELECT COALESCE(c.name, 'Uncategorized') AS category_name,
-		       COALESCE(SUM(oi.line_total_bdt), 0)::text AS gmv
+		       COALESCE(SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0))), 0)::text AS gmv
 		FROM order_items oi
 		JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
 		JOIN products p ON p.id = oi.product_id
 		LEFT JOIN categories c ON c.id = p.category_id
 		WHERE o.created_at >= now() - ($1 || ' days')::interval
 		GROUP BY category_name
-		ORDER BY SUM(oi.line_total_bdt) DESC NULLS LAST
+		ORDER BY SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0))) DESC NULLS LAST
 		LIMIT 8`,
 		daysStr,
 	)
@@ -224,7 +224,7 @@ func (r *adminRepo) fillAnalyticsBreakdowns(ctx context.Context, days int, out *
 		       COALESCE(NULLIF(oi.product_name_snapshot, ''), p.name) AS name,
 		       s.name AS shop_name,
 		       SUM(oi.quantity)::int AS units,
-		       SUM(oi.line_total_bdt)::text AS gmv,
+		       SUM(oi.line_total_bdt * (1 - COALESCE(o.coupon_discount_bdt / NULLIF(o.subtotal_bdt, 0), 0)))::text AS gmv,
 		       COALESCE((SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort_order LIMIT 1), '')
 		FROM order_items oi
 		JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
@@ -343,7 +343,11 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 	}
 
 	report.GMV = makeMoneyMetric(gmvCur, gmvPrev)
-	report.PlatformFee = makeRuleFeeMetric(rule, gmvCur, gmvPrev, ordersCur, ordersPrev)
+	var feesCur, feesPrev string
+	if err := r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(fee_bdt) FILTER(WHERE created_at >= now()-($1 || ' days')::interval),0)::text,COALESCE(SUM(fee_bdt) FILTER(WHERE created_at < now()-($1 || ' days')::interval),0)::text FROM order_platform_fees WHERE created_at >= now()-($2 || ' days')::interval AND created_at < now()`, strconv.Itoa(days), strconv.Itoa(days*2)).Scan(&feesCur, &feesPrev); err != nil {
+		return nil, err
+	}
+	report.PlatformFee = makeMoneyMetric(feesCur, feesPrev)
 	report.Refunds = makeMoneyMetric(refundCur, refundPrev)
 	report.FeesCollected = makeMoneyMetric(collectedCur, collectedPrev)
 
@@ -414,27 +418,11 @@ func (r *adminRepo) FinancialReport(ctx context.Context, days int, rule *domain.
 //     ago (or never paid AND has unbilled GMV), else due.
 func (r *adminRepo) shopFeeStatuses(ctx context.Context, rule *domain.FeeRule) ([]domain.ShopFeeStatus, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		WITH last_payment AS (
-			SELECT DISTINCT ON (shop_id) shop_id, covers_until, amount_bdt, created_at
-			FROM shop_fee_payments
-			ORDER BY shop_id, covers_until DESC
-		)
-		SELECT
-			s.id, s.name, s.slug,
-			lp.covers_until,
-			lp.amount_bdt::text,
-			COUNT(o.id)::int,
-			COALESCE(SUM(o.total_bdt), 0)::text
-		FROM shops s
-		LEFT JOIN last_payment lp ON lp.shop_id = s.id
-		LEFT JOIN orders o
-			ON o.shop_id = s.id
-			AND o.status != 'cancelled'
-			AND (lp.covers_until IS NULL OR o.created_at >= lp.covers_until)
-		GROUP BY s.id, s.name, s.slug, lp.covers_until, lp.amount_bdt
-		ORDER BY COALESCE(SUM(o.total_bdt), 0) DESC, s.created_at DESC
-		LIMIT 50`,
-	)
+ SELECT s.id,s.name,s.slug,lp.created_at,lp.amount_bdt::text,b.orders,b.gmv::text,b.due::text
+ FROM shops s JOIN shop_fee_balances b ON b.shop_id=s.id
+ LEFT JOIN LATERAL (SELECT created_at,amount_bdt FROM shop_fee_payments WHERE shop_id=s.id ORDER BY created_at DESC LIMIT 1) lp ON true
+ ORDER BY b.due DESC,s.created_at DESC LIMIT 50`)
+
 	if err != nil {
 		return nil, fmt.Errorf("shop fee statuses: %w", err)
 	}
@@ -451,13 +439,13 @@ func (r *adminRepo) shopFeeStatuses(ctx context.Context, rule *domain.FeeRule) (
 		if err := rows.Scan(
 			&s.ShopID, &s.ShopName, &s.ShopSlug,
 			&lastPaid, &lastAmount,
-			&s.UnbilledOrders, &s.UnbilledGMVBDT,
+			&s.UnbilledOrders, &s.UnbilledGMVBDT, &s.OutstandingFeeBDT,
 		); err != nil {
 			return nil, fmt.Errorf("shop fee status scan: %w", err)
 		}
 
 		// Rule-driven: percentage of unbilled GMV, or fixed × order count.
-		s.OutstandingFeeBDT = rule.Apply(s.UnbilledGMVBDT, s.UnbilledOrders)
+		// Balance already subtracts only confirmed payment amounts.
 
 		if lastPaid.Valid {
 			ts := lastPaid.Time.Format("2006-01-02T15:04:05Z07:00")
