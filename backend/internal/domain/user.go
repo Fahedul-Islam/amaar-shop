@@ -7,12 +7,13 @@ import (
 
 // User represents a registered seller or admin account.
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	IsAdmin      bool      `json:"is_admin"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	PasswordChangedAt *time.Time `json:"-"`
+	ID                string     `json:"id"`
+	Email             string     `json:"email"`
+	PasswordHash      string     `json:"-"`
+	IsAdmin           bool       `json:"is_admin"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // TokenPair holds the access and refresh tokens returned after authentication.

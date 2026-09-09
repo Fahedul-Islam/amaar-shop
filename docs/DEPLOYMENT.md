@@ -1345,3 +1345,63 @@ curl https://<your-api-domain>/ready    # {"status":"ready"} — API + DB
 | API domain DNS | duckdns.org (or your registrar) |
 | Firewall layer 1 | Oracle console → Networking → VCN → Security Lists |
 | Firewall layer 2 | `sudo iptables -L INPUT -n --line-numbers` on the VM |
+
+## Admin login and password recovery
+
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` are bootstrap settings, read when the backend
+starts. They create an admin only when that exact email is absent from `users`.
+Changing the password in an environment file does **not** change an existing
+account's password. Creating a shop does not grant admin access. If a seller
+already has `ADMIN_EMAIL`, startup now logs an explicit collision instead of
+silently treating that seller as an admin.
+
+For the production stack in `deploy/`, edit **`deploy/.env` on the server**;
+editing the repository-root `.env` or a local IDE file does not change that stack.
+After editing, run `cd deploy && docker compose up -d --build backend`.
+A plain container restart does not reload changed Compose environment values.
+Use `docker compose logs --tail=100 backend` to check for seed errors.
+
+To recover an existing admin, use `/admin/forgot-password` with the email stored
+in the database. Sellers use `/forgot-password`. Resetting a password preserves
+account roles and shop ownership. To bootstrap a separate admin, configure an
+email not already registered and recreate the backend. Previous admin accounts
+are not deleted when the bootstrap email changes; review access in Admin team.
+If the intended admin is an existing seller, an existing administrator can grant
+access through Admin team. With no working admin, inspect and explicitly promote
+only your verified account through the production database console:
+
+```sql
+SELECT id, email, is_admin FROM users WHERE email = 'your-account@example.com';
+UPDATE users SET is_admin = true, updated_at = now()
+WHERE email = 'your-account@example.com' AND is_admin = false;
+```
+
+Replace the example email with your own verified account. This changes the role,
+not the password; recover the password through email if needed. Do not delete the
+production database or volumes to recover an account.
+
+### Configure password reset email
+
+Set these values in the environment file used by your deployment:
+
+```dotenv
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM=AmaarShop <no-reply@your-domain.com>
+```
+
+Use a verified sender and your provider's SMTP credentials. Delivery requires
+STARTTLS, normally on port 587; implicit TLS on port 465 is not supported.
+Rebuild/recreate the backend after configuration. Migration 000023 runs on startup.
+Deploy the updated frontend too, then test email delivery with an account you own.
+SMTP credentials are never sent to the browser. Delivery failures appear in backend
+logs; the public response stays generic to avoid disclosing registered accounts.
+
+Codes expire after 10 minutes, allow five attempts, and can only be used once.
+Resending is limited to once per minute per account and invalidates the previous
+code. The endpoints also use the authentication IP rate limiter. A successful
+reset revokes existing refresh tokens; already issued access tokens expire within
+15 minutes. Passwords must contain at least eight characters and fit within
+bcrypt's 72-byte limit.

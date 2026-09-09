@@ -8,16 +8,17 @@ import (
 )
 
 type Config struct {
-	Port               int
-	Env                string
-	DatabaseURL        string
-	JWTSecret          string
-	UploadDir          string
-	AdminEmail         string
-	AdminPass          string
-	CORSAllowedOrigins []string
-	SteadfastBaseURL   string
-	MetaGraphBaseURL   string
+	SMTPHost, SMTPPort, SMTPUsername, SMTPPassword, SMTPFrom string
+	Port                                                     int
+	Env                                                      string
+	DatabaseURL                                              string
+	JWTSecret                                                string
+	UploadDir                                                string
+	AdminEmail                                               string
+	AdminPass                                                string
+	CORSAllowedOrigins                                       []string
+	SteadfastBaseURL                                         string
+	MetaGraphBaseURL                                         string
 }
 
 // IsProduction reports whether the app is running in a production environment.
@@ -62,6 +63,7 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
+		SMTPHost: os.Getenv("SMTP_HOST"), SMTPPort: os.Getenv("SMTP_PORT"), SMTPUsername: os.Getenv("SMTP_USERNAME"), SMTPPassword: os.Getenv("SMTP_PASSWORD"), SMTPFrom: os.Getenv("SMTP_FROM"),
 		Port:               port,
 		Env:                env,
 		DatabaseURL:        dbURL,
